@@ -202,11 +202,15 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 - Build and run the adapter unit tests with
   `./native/android/gradlew -p native/android testDebugUnitTest`. The module
   targets the documented Android API 34 minimum and regenerates UniFFI Kotlin
-  bindings under its build directory. CI also cross-compiles the Rust core for
-  Android `arm64-v8a` and `x86_64`.
-- The source module does not yet package Android-target Rust shared libraries
-  into a distributable AAR; Apple/Windows target builds, device-level flow
-  validation, and release artifact packaging remain.
+  bindings under its build directory.
+- Build the release AAR with
+  `ANDROID_NDK_HOME=/path/to/ndk ./native/android/gradlew -p native/android assembleRelease`.
+  The AAR includes Rust shared libraries for `arm64-v8a` and `x86_64`; CI
+  verifies both entries and uploads the AAR as a workflow artifact. The
+  versioned GitHub Release asset, checksums, and transitive dependency
+  installation instructions remain release-preparation work.
+- The Android authorization flow has unit coverage but has not yet been
+  exercised end-to-end on an emulator or device.
 
 ## Platform plan
 

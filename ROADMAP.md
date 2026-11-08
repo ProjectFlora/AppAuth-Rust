@@ -113,7 +113,8 @@ are in place. Initial iOS/iPadOS and macOS authorization adapters are
 implemented and covered by SDK type-checking and a macOS loopback smoke test.
 The Android authorization adapter is implemented with App Links/custom-scheme
 selection and unit-tested redirect handling. CI cross-compiles all documented
-Apple, Android, and Windows Rust targets. End-to-end platform flows and release
+Apple, Android, and Windows Rust targets and verifies Rust libraries are
+packaged in the Android release AAR. End-to-end platform flows and release
 validation remain.
 
 ## Initial validation checkpoints

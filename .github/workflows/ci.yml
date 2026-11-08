@@ -70,14 +70,26 @@ jobs:
           packages: platform-tools
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
       - uses: dtolnay/rust-toolchain@stable
-      - name: Build Android Rust targets
+      - name: Configure Android NDK
         env:
           ANDROID_API_LEVEL: '34'
         run: |
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
-          scripts/check-android-targets.sh
+          echo "ANDROID_API_LEVEL=$ANDROID_API_LEVEL" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./native/android/gradlew -p native/android testDebugUnitTest
+      - run: ./native/android/gradlew -p native/android assembleRelease
+      - name: Verify Android native libraries in AAR
+        run: |
+          aar=native/android/build/outputs/aar/appauth-rust-android-release.aar
+          unzip -Z1 "$aar" | grep -Fx jni/arm64-v8a/libappauth_rust.so
+          unzip -Z1 "$aar" | grep -Fx jni/x86_64/libappauth_rust.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-aar
+          path: native/android/build/outputs/aar/appauth-rust-android-release.aar
+          if-no-files-found: error
+          retention-days: 14
 
   lint:
     name: Formatting and Clippy

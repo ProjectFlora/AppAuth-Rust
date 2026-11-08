@@ -5,6 +5,7 @@ plugins {
 
 val repositoryRoot = rootDir.resolve("../..").canonicalFile
 val generatedBindings = layout.buildDirectory.dir("generated/uniffi")
+val androidRustLibraries = layout.buildDirectory.dir("generated/rust/jniLibs")
 val generateUniFfiBindings by tasks.registering(Exec::class) {
     workingDir(repositoryRoot)
     commandLine(
@@ -19,6 +20,22 @@ val generateUniFfiBindings by tasks.registering(Exec::class) {
         fileTree(repositoryRoot.resolve("src")),
     )
     outputs.dir(generatedBindings)
+}
+
+val buildAndroidRustLibraries by tasks.registering(Exec::class) {
+    workingDir(repositoryRoot)
+    commandLine(
+        "bash",
+        repositoryRoot.resolve("scripts/check-android-targets.sh").absolutePath,
+        androidRustLibraries.get().asFile.absolutePath,
+    )
+    inputs.files(
+        repositoryRoot.resolve("Cargo.toml"),
+        repositoryRoot.resolve("Cargo.lock"),
+        repositoryRoot.resolve("scripts/check-android-targets.sh"),
+        fileTree(repositoryRoot.resolve("src")),
+    )
+    outputs.dir(androidRustLibraries)
 }
 
 android {
@@ -40,6 +57,7 @@ android {
     }
 
     sourceSets.getByName("main").java.srcDir(generatedBindings.map { it.dir("kotlin") })
+    sourceSets.getByName("main").jniLibs.srcDir(androidRustLibraries)
 
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -48,6 +66,10 @@ android {
 
 tasks.named("preBuild").configure {
     dependsOn(generateUniFfiBindings)
+}
+
+tasks.named("mergeReleaseJniLibFolders").configure {
+    dependsOn(buildAndroidRustLibraries)
 }
 
 dependencies {
