@@ -1,0 +1,181 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  validate_version:
+    name: Validate release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - id: version
+        name: Match SemVer tag to Cargo package version
+        run: |
+          tag="$GITHUB_REF_NAME"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must use vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release tags must point to a commit on main" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          package_version=$(cargo metadata --locked --no-deps --format-version 1 |
+            jq -r '.packages[] | select(.name == "appauth-rust") | .version')
+          if [[ "$version" != "$package_version" ]]; then
+            echo "Tag version $version does not match Cargo package version $package_version" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+  apple:
+    name: Build Apple release package
+    needs: validate_version
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/check-apple-targets.sh
+      - run: scripts/check-apple-adapters.sh
+      - run: scripts/package-apple-xcframework.sh "${{ needs.validate_version.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apple
+          path: target/apple/release-package/AppAuthRust-Apple-${{ needs.validate_version.outputs.version }}.zip
+          if-no-files-found: error
+
+  android:
+    name: Build Android release package
+    needs: validate_version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Configure Android NDK
+        env:
+          ANDROID_API_LEVEL: '34'
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "ANDROID_API_LEVEL=$ANDROID_API_LEVEL" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./native/android/gradlew -p native/android testDebugUnitTest
+      - name: Enable Android emulator hardware acceleration
+        run: sudo chmod a+rw /dev/kvm
+      - name: Run Android callback tests on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-linux-hw-accel: false
+          disable-animations: true
+          script: ./native/android/gradlew -p native/android connectedDebugAndroidTest
+      - run: ./native/android/gradlew -p native/android assembleRelease
+      - name: Verify and stage Android AAR
+        env:
+          RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+        run: |
+          aar=native/android/build/outputs/aar/appauth-rust-android-release.aar
+          unzip -Z1 "$aar" | grep -Fx jni/arm64-v8a/libappauth_rust.so
+          unzip -Z1 "$aar" | grep -Fx jni/x86_64/libappauth_rust.so
+          mkdir -p dist
+          cp "$aar" "dist/appauth-rust-android-$RELEASE_VERSION.aar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/appauth-rust-android-${{ needs.validate_version.outputs.version }}.aar
+          if-no-files-found: error
+
+  api_docs:
+    name: Build API reference
+    needs: validate_version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked --workspace --all-targets --all-features
+      - run: cargo doc --locked --no-deps
+      - name: Package Rust API reference
+        env:
+          RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+        run: |
+          mkdir -p dist
+          cd target/doc
+          zip -rq "$GITHUB_WORKSPACE/dist/AppAuthRust-API-Docs-$RELEASE_VERSION.zip" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-api-docs
+          path: dist/AppAuthRust-API-Docs-${{ needs.validate_version.outputs.version }}.zip
+          if-no-files-found: error
+
+  windows:
+    name: Validate Windows core target
+    needs: validate_version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --lib --target x86_64-pc-windows-msvc
+
+  publish:
+    name: Publish GitHub Release
+    needs: [validate_version, apple, android, api_docs, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apple
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-android
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-api-docs
+          path: dist
+      - name: Generate checksums and publish assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+        run: |
+          cd dist
+          shasum -a 256 \
+            "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
+            "appauth-rust-android-$RELEASE_VERSION.aar" \
+            "AppAuthRust-API-Docs-$RELEASE_VERSION.zip" \
+            > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" \
+            "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
+            "appauth-rust-android-$RELEASE_VERSION.aar" \
+            "AppAuthRust-API-Docs-$RELEASE_VERSION.zip" \
+            SHA256SUMS \
+            --verify-tag \
+            --title "AppAuth-Rust $GITHUB_REF_NAME" \
+            --generate-notes
