@@ -37,6 +37,15 @@ jobs:
       - name: Generate native bindings
         run: scripts/generate-bindings.sh
 
+  apple_adapters:
+    name: Apple adapters validation
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/check-apple-adapters.sh
+
   lint:
     name: Formatting and Clippy
     runs-on: ubuntu-latest
@@ -87,7 +96,7 @@ jobs:
   report:
     name: PR report
     if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    needs: [test, lint, coverage]
+    needs: [test, apple_adapters, lint, coverage]
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -98,6 +107,7 @@ jobs:
             const marker = '<!-- appauth-rust-ci-report -->';
             const checks = [
               ['Tests', '${{ needs.test.result }}'],
+              ['Apple adapters validation', '${{ needs.apple_adapters.result }}'],
               ['Formatting and Clippy', '${{ needs.lint.result }}'],
             ];
             const resultLabel = result =>

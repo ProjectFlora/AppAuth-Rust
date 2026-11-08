@@ -94,9 +94,9 @@ This roadmap tracks work remaining for the initial scope in
    OIDC ID Token signature and claim validation, end-session, and dynamic client
    registration for public clients. Enforce exact redirect and state checks,
    with explicit cancellation for in-flight operations.
-4. **Integrate initial native platforms:** Add external-browser and redirect
-   integrations for iOS/iPadOS, macOS, and Android while keeping UI and OS
-   lifecycle concerns outside the shared protocol core.
+4. **Integrate initial native platforms (in progress):** Add external-browser
+   and redirect integrations for iOS/iPadOS, macOS, and Android while keeping
+   UI and OS lifecycle concerns outside the shared protocol core.
 5. **Add Windows desktop integration (later phase):** This is not required for
    the initial release. When scheduled, add external-browser launch and
    redirect handling, then define and document the minimum Windows version.
@@ -108,9 +108,11 @@ The Rust core provides endpoint configuration and discovery, Authorization
 Code + PKCE, callback validation, cancellable HTTP, code exchange and token
 parsing, explicit refresh with serializable authentication state, additional
 token parameters, RP-Initiated Logout, public-client dynamic registration, and
-OIDC ID Token validation. Remaining implementation work is UniFFI integration
-and native platform adapters; cross-target and protocol/platform release
-validation also remains.
+OIDC ID Token validation. The UniFFI facade and reproducible binding generation
+are in place. Initial iOS/iPadOS and macOS authorization adapters are
+implemented and covered by SDK type-checking and a macOS loopback smoke test.
+Android integration, cross-target builds, end-to-end platform flows, and
+release validation remain.
 
 ## Initial validation checkpoints
 
