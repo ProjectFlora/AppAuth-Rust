@@ -24,11 +24,13 @@ import java.io.Closeable
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Base64
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -152,6 +154,7 @@ private class MockAuthorizationServer : Closeable {
         ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
     private val stopped = AtomicBoolean(false)
     private val failure = AtomicReference<Throwable?>()
+    private val connectionExecutor = Executors.newCachedThreadPool()
     private val serverThread =
         Thread({ serve() }, "mock-oauth-provider").apply {
             isDaemon = true
@@ -165,6 +168,7 @@ private class MockAuthorizationServer : Closeable {
     override fun close() {
         stopped.set(true)
         serverSocket.close()
+        connectionExecutor.shutdownNow()
         serverThread.join(1_000)
     }
 
@@ -175,14 +179,28 @@ private class MockAuthorizationServer : Closeable {
     private fun serve() {
         while (!stopped.get()) {
             try {
-                serverSocket.accept().use { handle(it) }
+                val socket = serverSocket.accept()
+                connectionExecutor.execute {
+                    try {
+                        socket.use { handle(it) }
+                    } catch (_: SocketTimeoutException) {
+                        // Browsers can open speculative connections before sending a request.
+                    } catch (error: Exception) {
+                        recordFailure(error)
+                    }
+                }
             } catch (error: Exception) {
                 if (!stopped.get()) {
-                    failure.compareAndSet(null, error)
-                    authorizationRequest.completeExceptionally(error)
-                    tokenRequest.completeExceptionally(error)
+                    recordFailure(error)
                 }
             }
+        }
+    }
+
+    private fun recordFailure(error: Exception) {
+        if (failure.compareAndSet(null, error)) {
+            authorizationRequest.completeExceptionally(error)
+            tokenRequest.completeExceptionally(error)
         }
     }
 
