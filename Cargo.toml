@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.88"
 
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[features]
+uniffi-cli = ["uniffi/cli"]
+
 [dependencies]
 async-trait = "0.1"
 base64 = "0.22"
@@ -17,8 +23,14 @@ sha2 = { version = "0.10", features = ["oid"] }
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["rt"] }
+uniffi = { version = "=0.32.2", default-features = false }
 url = "2"
 
 [dev-dependencies]
 ring = "0.17"
 rsa = { version = "0.9", features = ["sha2"] }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+required-features = ["uniffi-cli"]
