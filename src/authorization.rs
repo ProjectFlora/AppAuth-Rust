@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use http::{header, HeaderMap, HeaderValue, Method};
 use serde::{Deserialize, Serialize};
@@ -291,41 +292,7 @@ impl AuthorizationSession {
             .append_pair("code_verifier", self.pkce.verifier())
             .finish()
             .into_bytes();
-        let mut headers = HeaderMap::new();
-        headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
-        headers.insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/x-www-form-urlencoded"),
-        );
-
-        let token_response = transport
-            .execute(
-                HttpRequest {
-                    method: Method::POST,
-                    url: self.token_endpoint.clone(),
-                    headers,
-                    body,
-                },
-                cancellation,
-            )
-            .await?;
-
-        if !token_response.status.is_success() {
-            if let Ok(value) = serde_json::from_slice::<Value>(&token_response.body) {
-                if let Some(code) = value.get("error").and_then(Value::as_str) {
-                    return Err(AuthError::AuthorizationServer {
-                        code: code.to_owned(),
-                        description: value
-                            .get("error_description")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned),
-                    });
-                }
-            }
-            return Err(AuthError::HttpStatus(token_response.status));
-        }
-
-        parse_token_response(&token_response.body)
+        send_token_request(&self.token_endpoint, body, transport, cancellation).await
     }
 }
 
@@ -358,6 +325,144 @@ pub struct TokenResponse {
     pub additional_parameters: BTreeMap<String, Value>,
 }
 
+/// Serializable token state. The host application remains responsible for secure storage.
+#[derive(Serialize, Deserialize)]
+pub struct AuthenticationState {
+    token_response: TokenResponse,
+    expires_at: Option<u64>,
+}
+
+impl AuthenticationState {
+    /// Creates state and records expiry relative to the current system time.
+    pub fn new(token_response: TokenResponse) -> Result<Self> {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| AuthError::Clock)?;
+        Self::new_at(token_response, now.as_secs())
+    }
+
+    fn new_at(token_response: TokenResponse, now: u64) -> Result<Self> {
+        let expires_at = token_response
+            .expires_in
+            .map(|expires_in| {
+                now.checked_add(expires_in)
+                    .ok_or(AuthError::InvalidTokenResponse(
+                        "expires_in exceeds the supported range",
+                    ))
+            })
+            .transpose()?;
+        Ok(Self {
+            token_response,
+            expires_at,
+        })
+    }
+
+    pub fn token_response(&self) -> &TokenResponse {
+        &self.token_response
+    }
+
+    /// Returns the access-token expiration as seconds since the Unix epoch.
+    pub fn expires_at(&self) -> Option<u64> {
+        self.expires_at
+    }
+
+    /// Returns `None` when the token response did not include `expires_in`.
+    pub fn is_expired_at(&self, unix_time_seconds: u64) -> Option<bool> {
+        self.expires_at
+            .map(|expires_at| unix_time_seconds >= expires_at)
+    }
+
+    /// Refreshes explicitly and only updates this state after a successful response.
+    pub async fn refresh(
+        &mut self,
+        configuration: &ServiceConfiguration,
+        client_id: &str,
+        transport: &dyn HttpTransport,
+        cancellation: CancellationHandle,
+    ) -> Result<()> {
+        if client_id.trim().is_empty() {
+            return Err(AuthError::InvalidConfiguration(
+                "client ID must not be empty",
+            ));
+        }
+        let refresh_token = self
+            .token_response
+            .refresh_token
+            .as_deref()
+            .filter(|refresh_token| !refresh_token.trim().is_empty())
+            .ok_or(AuthError::InvalidConfiguration(
+                "authentication state has no refresh token",
+            ))?;
+
+        let body = form_urlencoded::Serializer::new(String::new())
+            .append_pair("grant_type", "refresh_token")
+            .append_pair("refresh_token", refresh_token)
+            .append_pair("client_id", client_id)
+            .finish()
+            .into_bytes();
+        let mut refreshed =
+            send_token_request(&configuration.token_endpoint, body, transport, cancellation)
+                .await?;
+
+        if refreshed.refresh_token.is_none() {
+            refreshed.refresh_token = Some(refresh_token.to_owned());
+        }
+        if refreshed.scope.is_none() {
+            refreshed.scope = self.token_response.scope.clone();
+        }
+        if refreshed.id_token.is_none() {
+            refreshed.id_token = self.token_response.id_token.clone();
+        }
+
+        let updated_state = Self::new(refreshed)?;
+        *self = updated_state;
+        Ok(())
+    }
+}
+
+async fn send_token_request(
+    token_endpoint: &Url,
+    body: Vec<u8>,
+    transport: &dyn HttpTransport,
+    cancellation: CancellationHandle,
+) -> Result<TokenResponse> {
+    let mut headers = HeaderMap::new();
+    headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/x-www-form-urlencoded"),
+    );
+
+    let response = transport
+        .execute(
+            HttpRequest {
+                method: Method::POST,
+                url: token_endpoint.clone(),
+                headers,
+                body,
+            },
+            cancellation,
+        )
+        .await?;
+
+    if !response.status.is_success() {
+        if let Ok(value) = serde_json::from_slice::<Value>(&response.body) {
+            if let Some(code) = value.get("error").and_then(Value::as_str) {
+                return Err(AuthError::AuthorizationServer {
+                    code: code.to_owned(),
+                    description: value
+                        .get("error_description")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
+                });
+            }
+        }
+        return Err(AuthError::HttpStatus(response.status));
+    }
+
+    parse_token_response(&response.body)
+}
+
 fn parse_token_response(body: &[u8]) -> Result<TokenResponse> {
     let mut object: Map<String, Value> = serde_json::from_slice(body)
         .map_err(|_| AuthError::InvalidTokenResponse("response is not a JSON object"))?;
@@ -372,6 +477,11 @@ fn parse_token_response(body: &[u8]) -> Result<TokenResponse> {
 
     let expires_in = take_optional_u64(&mut object, "expires_in")?;
     let refresh_token = take_optional_string(&mut object, "refresh_token")?;
+    if matches!(refresh_token.as_deref(), Some("")) {
+        return Err(AuthError::InvalidTokenResponse(
+            "refresh_token must not be empty",
+        ));
+    }
     let scope = take_optional_string(&mut object, "scope")?;
     let id_token = take_optional_string(&mut object, "id_token")?;
 
@@ -602,6 +712,218 @@ mod tests {
             scopes.iter().map(|scope| (*scope).to_owned()).collect(),
         )
         .unwrap()
+    }
+
+    fn authentication_state() -> AuthenticationState {
+        AuthenticationState::new_at(
+            TokenResponse {
+                access_token: "old-access".to_owned(),
+                token_type: "Bearer".to_owned(),
+                expires_in: Some(60),
+                refresh_token: Some("old-refresh".to_owned()),
+                scope: Some("openid profile".to_owned()),
+                id_token: Some("old-id".to_owned()),
+                additional_parameters: BTreeMap::new(),
+            },
+            1_000,
+        )
+        .unwrap()
+    }
+
+    fn service_configuration() -> ServiceConfiguration {
+        ServiceConfiguration::new(
+            Url::parse("https://issuer.example/authorize").unwrap(),
+            Url::parse("https://issuer.example/token").unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn authentication_state_serializes_expiration() {
+        let state = authentication_state();
+
+        assert_eq!(state.expires_at(), Some(1_060));
+        assert_eq!(state.is_expired_at(1_059), Some(false));
+        assert_eq!(state.is_expired_at(1_060), Some(true));
+
+        let serialized = serde_json::to_vec(&state).unwrap();
+        let restored: AuthenticationState = serde_json::from_slice(&serialized).unwrap();
+        assert_eq!(restored.expires_at(), Some(1_060));
+        assert_eq!(
+            restored.token_response().access_token,
+            state.token_response().access_token
+        );
+
+        let token_response = TokenResponse {
+            access_token: "access".to_owned(),
+            token_type: "Bearer".to_owned(),
+            expires_in: None,
+            refresh_token: None,
+            scope: None,
+            id_token: None,
+            additional_parameters: BTreeMap::new(),
+        };
+        let state_without_expiry = AuthenticationState::new_at(token_response, 1_000).unwrap();
+        assert_eq!(state_without_expiry.expires_at(), None);
+        assert_eq!(state_without_expiry.is_expired_at(2_000), None);
+    }
+
+    #[tokio::test]
+    async fn refresh_updates_tokens_and_retains_omitted_refresh_fields() {
+        let mut state = authentication_state();
+        let before = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let transport = test_transport(
+            StatusCode::OK,
+            br#"{
+                "access_token":"new-access",
+                "token_type":"Bearer",
+                "expires_in":3600
+            }"#,
+        );
+
+        state
+            .refresh(
+                &service_configuration(),
+                "native-client",
+                &transport,
+                CancellationHandle::new(),
+            )
+            .await
+            .unwrap();
+
+        let request = transport.request.lock().unwrap().take().unwrap();
+        let form: BTreeMap<_, _> = form_urlencoded::parse(&request.body).into_owned().collect();
+        assert_eq!(request.method, Method::POST);
+        assert_eq!(request.url.as_str(), "https://issuer.example/token");
+        assert_eq!(
+            form.get("grant_type").map(String::as_str),
+            Some("refresh_token")
+        );
+        assert_eq!(
+            form.get("refresh_token").map(String::as_str),
+            Some("old-refresh")
+        );
+        assert_eq!(
+            form.get("client_id").map(String::as_str),
+            Some("native-client")
+        );
+        assert_eq!(state.token_response().access_token, "new-access");
+        assert_eq!(
+            state.token_response().refresh_token.as_deref(),
+            Some("old-refresh")
+        );
+        assert_eq!(
+            state.token_response().scope.as_deref(),
+            Some("openid profile")
+        );
+        assert_eq!(state.token_response().id_token.as_deref(), Some("old-id"));
+        let after = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let expires_at = state.expires_at().unwrap();
+        assert!(expires_at >= before + 3_600 && expires_at <= after + 3_600);
+    }
+
+    #[tokio::test]
+    async fn refresh_rotates_refresh_token_and_preserves_state_on_failure() {
+        let mut state = authentication_state();
+        let transport = test_transport(
+            StatusCode::OK,
+            br#"{
+                "access_token":"new-access",
+                "token_type":"Bearer",
+                "refresh_token":"rotated-refresh"
+            }"#,
+        );
+        state
+            .refresh(
+                &service_configuration(),
+                "native-client",
+                &transport,
+                CancellationHandle::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            state.token_response().refresh_token.as_deref(),
+            Some("rotated-refresh")
+        );
+
+        let before = serde_json::to_value(&state).unwrap();
+        let error_transport =
+            test_transport(StatusCode::BAD_REQUEST, br#"{"error":"invalid_grant"}"#);
+        assert!(matches!(
+            state
+                .refresh(
+                    &service_configuration(),
+                    "native-client",
+                    &error_transport,
+                    CancellationHandle::new(),
+                )
+                .await,
+            Err(AuthError::AuthorizationServer { code, .. }) if code == "invalid_grant"
+        ));
+        assert_eq!(serde_json::to_value(&state).unwrap(), before);
+
+        let invalid_response = test_transport(
+            StatusCode::OK,
+            br#"{
+                "access_token":"new-access",
+                "token_type":"Bearer",
+                "refresh_token":""
+            }"#,
+        );
+        assert!(matches!(
+            state
+                .refresh(
+                    &service_configuration(),
+                    "native-client",
+                    &invalid_response,
+                    CancellationHandle::new(),
+                )
+                .await,
+            Err(AuthError::InvalidTokenResponse(
+                "refresh_token must not be empty"
+            ))
+        ));
+        assert_eq!(serde_json::to_value(&state).unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn refresh_without_a_refresh_token_does_not_send_a_request() {
+        let mut state = AuthenticationState::new_at(
+            TokenResponse {
+                access_token: "access".to_owned(),
+                token_type: "Bearer".to_owned(),
+                expires_in: None,
+                refresh_token: None,
+                scope: None,
+                id_token: None,
+                additional_parameters: BTreeMap::new(),
+            },
+            1_000,
+        )
+        .unwrap();
+        let transport = test_transport(StatusCode::OK, br#"{}"#);
+
+        assert!(matches!(
+            state
+                .refresh(
+                    &service_configuration(),
+                    "native-client",
+                    &transport,
+                    CancellationHandle::new(),
+                )
+                .await,
+            Err(AuthError::InvalidConfiguration(
+                "authentication state has no refresh token"
+            ))
+        ));
+        assert!(transport.request.lock().unwrap().is_none());
     }
 
     #[tokio::test]

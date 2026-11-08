@@ -5,8 +5,8 @@ mod pkce;
 mod transport;
 
 pub use authorization::{
-    AuthorizationRequest, AuthorizationResponse, AuthorizationSession, ServiceConfiguration,
-    TokenResponse,
+    AuthenticationState, AuthorizationRequest, AuthorizationResponse, AuthorizationSession,
+    ServiceConfiguration, TokenResponse,
 };
 pub use cancellation::CancellationHandle;
 pub use error::{AuthError, Result};
