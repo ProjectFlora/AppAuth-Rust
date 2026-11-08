@@ -553,6 +553,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rejects_none_and_hmac_signing_algorithms_before_fetching_keys() {
+        let valid_claims = claims("https://issuer.example/", json!("native-client"), None);
+        let none_header =
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&json!({"alg": "none"})).unwrap());
+        let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&valid_claims).unwrap());
+        let none_token = format!("{none_header}.{payload}.");
+        let hmac_token = jsonwebtoken::encode(
+            &jsonwebtoken::Header::new(Algorithm::HS256),
+            &valid_claims,
+            &jsonwebtoken::EncodingKey::from_secret(b"test-secret"),
+        )
+        .unwrap();
+
+        for token in [none_token, hmac_token] {
+            let transport = TestTransport::new([]);
+            assert!(matches!(
+                validate(&token, &JwksCache::default(), &transport, None, false).await,
+                Err(AuthError::InvalidIdToken(_))
+            ));
+            assert_eq!(transport.request_count(), 0);
+        }
+    }
+
+    #[tokio::test]
     async fn rejects_invalid_claims_and_signatures() {
         let key = TestKey::rs256();
         let jwks_cache = JwksCache::default();
