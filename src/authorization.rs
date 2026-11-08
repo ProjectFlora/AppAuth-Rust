@@ -37,10 +37,20 @@ const RESERVED_TOKEN_PARAMETERS: &[&str] = &[
     "scope",
 ];
 
+const RESERVED_END_SESSION_PARAMETERS: &[&str] = &[
+    "client_id",
+    "id_token_hint",
+    "logout_hint",
+    "post_logout_redirect_uri",
+    "state",
+    "ui_locales",
+];
+
 #[derive(Clone)]
 pub struct ServiceConfiguration {
     authorization_endpoint: Url,
     token_endpoint: Url,
+    end_session_endpoint: Option<Url>,
 }
 
 impl ServiceConfiguration {
@@ -51,7 +61,14 @@ impl ServiceConfiguration {
         Ok(Self {
             authorization_endpoint,
             token_endpoint,
+            end_session_endpoint: None,
         })
+    }
+
+    pub fn with_end_session_endpoint(mut self, endpoint: Url) -> Result<Self> {
+        validate_logout_endpoint(&endpoint)?;
+        self.end_session_endpoint = Some(endpoint);
+        Ok(self)
     }
 
     pub async fn discover(
@@ -89,10 +106,16 @@ impl ServiceConfiguration {
 
         let authorization_endpoint = parse_discovered_endpoint(&metadata.authorization_endpoint)?;
         let token_endpoint = parse_discovered_endpoint(&metadata.token_endpoint)?;
+        let end_session_endpoint = metadata
+            .end_session_endpoint
+            .as_deref()
+            .map(parse_discovered_endpoint)
+            .transpose()?;
 
         Ok(Self {
             authorization_endpoint,
             token_endpoint,
+            end_session_endpoint,
         })
     }
 
@@ -103,6 +126,10 @@ impl ServiceConfiguration {
     pub fn token_endpoint(&self) -> &Url {
         &self.token_endpoint
     }
+
+    pub fn end_session_endpoint(&self) -> Option<&Url> {
+        self.end_session_endpoint.as_ref()
+    }
 }
 
 #[derive(Deserialize)]
@@ -110,6 +137,7 @@ struct DiscoveryMetadata {
     issuer: String,
     authorization_endpoint: String,
     token_endpoint: String,
+    end_session_endpoint: Option<String>,
 }
 
 pub struct AuthorizationRequest {
@@ -323,6 +351,157 @@ impl AuthorizationSession {
         }
         let body = form.finish().into_bytes();
         send_token_request(&self.token_endpoint, body, transport, cancellation).await
+    }
+}
+
+pub struct EndSessionRequest {
+    end_session_endpoint: Url,
+    client_id: String,
+    id_token_hint: Option<String>,
+    post_logout_redirect_uri: Option<Url>,
+}
+
+impl EndSessionRequest {
+    pub fn new(configuration: &ServiceConfiguration, client_id: impl Into<String>) -> Result<Self> {
+        let client_id = client_id.into();
+        if client_id.trim().is_empty() {
+            return Err(AuthError::InvalidConfiguration(
+                "client ID must not be empty",
+            ));
+        }
+
+        let end_session_endpoint =
+            configuration
+                .end_session_endpoint
+                .clone()
+                .ok_or(AuthError::InvalidConfiguration(
+                    "end-session endpoint is not configured",
+                ))?;
+        reject_reserved_end_session_parameters(&end_session_endpoint)?;
+
+        Ok(Self {
+            end_session_endpoint,
+            client_id,
+            id_token_hint: None,
+            post_logout_redirect_uri: None,
+        })
+    }
+
+    pub fn with_id_token_hint(mut self, id_token_hint: impl Into<String>) -> Result<Self> {
+        let id_token_hint = id_token_hint.into();
+        if id_token_hint.trim().is_empty() {
+            return Err(AuthError::InvalidConfiguration(
+                "ID Token hint must not be empty",
+            ));
+        }
+        self.id_token_hint = Some(id_token_hint);
+        Ok(self)
+    }
+
+    pub fn with_post_logout_redirect_uri(mut self, redirect_uri: Url) -> Result<Self> {
+        validate_redirect_uri(&redirect_uri)?;
+        self.post_logout_redirect_uri = Some(redirect_uri);
+        Ok(self)
+    }
+
+    pub fn begin(self) -> Result<EndSessionSession> {
+        let state = self
+            .post_logout_redirect_uri
+            .as_ref()
+            .map(|_| random_token())
+            .transpose()?;
+        let mut end_session_url = self.end_session_endpoint;
+        {
+            let mut query = end_session_url.query_pairs_mut();
+            query.append_pair("client_id", &self.client_id);
+            if let Some(id_token_hint) = &self.id_token_hint {
+                query.append_pair("id_token_hint", id_token_hint);
+            }
+            if let Some(redirect_uri) = &self.post_logout_redirect_uri {
+                query.append_pair("post_logout_redirect_uri", redirect_uri.as_str());
+            }
+            if let Some(state) = &state {
+                query.append_pair("state", state);
+            }
+        }
+
+        Ok(EndSessionSession {
+            end_session_url,
+            post_logout_redirect_uri: self.post_logout_redirect_uri,
+            state,
+        })
+    }
+}
+
+pub struct EndSessionSession {
+    end_session_url: Url,
+    post_logout_redirect_uri: Option<Url>,
+    state: Option<String>,
+}
+
+impl EndSessionSession {
+    pub fn end_session_url(&self) -> &Url {
+        &self.end_session_url
+    }
+
+    pub fn parse_redirect(&self, redirect: &Url) -> Result<EndSessionResponse> {
+        let expected_redirect_uri =
+            self.post_logout_redirect_uri
+                .as_ref()
+                .ok_or(AuthError::InvalidEndSessionResponse(
+                    "no post-logout redirect URI was requested",
+                ))?;
+        validate_end_session_redirect_uri_match(expected_redirect_uri, redirect)?;
+
+        let mut parameters = BTreeMap::new();
+        let mut names = HashSet::new();
+        for (name, value) in redirect.query_pairs() {
+            if !names.insert(name.to_string()) {
+                return Err(AuthError::InvalidEndSessionResponse(
+                    "response contains a duplicate parameter",
+                ));
+            }
+            parameters.insert(name.into_owned(), value.into_owned());
+        }
+
+        for (name, expected_value) in expected_redirect_uri.query_pairs() {
+            if parameters.get(name.as_ref()) != Some(&expected_value.into_owned()) {
+                return Err(AuthError::InvalidEndSessionResponse(
+                    "post-logout redirect URI query does not match",
+                ));
+            }
+            parameters.remove(name.as_ref());
+        }
+
+        let returned_state =
+            parameters
+                .remove("state")
+                .ok_or(AuthError::InvalidEndSessionResponse(
+                    "response is missing state",
+                ))?;
+        if self.state.as_deref() != Some(returned_state.as_str()) {
+            return Err(AuthError::InvalidEndSessionResponse("state mismatch"));
+        }
+
+        Ok(EndSessionResponse {
+            state: returned_state,
+            additional_parameters: parameters,
+        })
+    }
+}
+
+pub struct EndSessionResponse {
+    state: String,
+    additional_parameters: BTreeMap<String, String>,
+}
+
+impl EndSessionResponse {
+    pub fn state(&self) -> &str {
+        &self.state
+    }
+
+    pub fn additional_parameters(&self) -> &BTreeMap<String, String> {
+        &self.additional_parameters
     }
 }
 
@@ -605,6 +784,27 @@ fn validate_endpoint(endpoint: &Url) -> Result<()> {
     Ok(())
 }
 
+fn validate_logout_endpoint(endpoint: &Url) -> Result<()> {
+    if endpoint.scheme() != "https" || validate_endpoint(endpoint).is_err() {
+        return Err(AuthError::InvalidConfiguration(
+            "end-session endpoint must use HTTPS without user info or fragments",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_reserved_end_session_parameters(endpoint: &Url) -> Result<()> {
+    if endpoint
+        .query_pairs()
+        .any(|(name, _)| RESERVED_END_SESSION_PARAMETERS.contains(&name.as_ref()))
+    {
+        return Err(AuthError::InvalidConfiguration(
+            "end-session endpoint query contains a reserved parameter",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_additional_token_parameter(name: &str) -> Result<()> {
     if name.is_empty() || RESERVED_TOKEN_PARAMETERS.contains(&name) {
         return Err(AuthError::InvalidConfiguration(
@@ -707,19 +907,31 @@ fn reject_reserved_endpoint_parameters(endpoint: &Url) -> Result<()> {
 }
 
 fn validate_redirect_uri_match(expected: &Url, received: &Url) -> Result<()> {
-    if received.fragment().is_some()
-        || expected.scheme() != received.scheme()
-        || expected.username() != received.username()
-        || expected.password() != received.password()
-        || expected.host_str() != received.host_str()
-        || expected.port() != received.port()
-        || expected.path() != received.path()
-    {
+    if !redirect_uris_match(expected, received) {
         return Err(AuthError::InvalidAuthorizationResponse(
             "redirect URI does not match the request",
         ));
     }
     Ok(())
+}
+
+fn validate_end_session_redirect_uri_match(expected: &Url, received: &Url) -> Result<()> {
+    if !redirect_uris_match(expected, received) {
+        return Err(AuthError::InvalidEndSessionResponse(
+            "post-logout redirect URI does not match the request",
+        ));
+    }
+    Ok(())
+}
+
+fn redirect_uris_match(expected: &Url, received: &Url) -> bool {
+    received.fragment().is_none()
+        && expected.scheme() == received.scheme()
+        && expected.username() == received.username()
+        && expected.password() == received.password()
+        && expected.host_str() == received.host_str()
+        && expected.port() == received.port()
+        && expected.path() == received.path()
 }
 
 #[cfg(test)]
@@ -1031,6 +1243,7 @@ mod tests {
                 "issuer":"https://issuer.example/tenant",
                 "authorization_endpoint":"https://issuer.example/tenant/authorize",
                 "token_endpoint":"https://issuer.example/tenant/token",
+                "end_session_endpoint":"https://issuer.example/tenant/logout",
                 "jwks_uri":"https://issuer.example/tenant/keys"
             }"#,
         );
@@ -1060,6 +1273,10 @@ mod tests {
         assert_eq!(
             configuration.token_endpoint().as_str(),
             "https://issuer.example/tenant/token"
+        );
+        assert_eq!(
+            configuration.end_session_endpoint().unwrap().as_str(),
+            "https://issuer.example/tenant/logout"
         );
     }
 
@@ -1100,6 +1317,139 @@ mod tests {
             .await,
             Err(AuthError::InvalidDiscoveryMetadata(
                 "endpoints must use HTTPS without user info or fragments"
+            ))
+        ));
+
+        let insecure_logout_endpoint = discovery_transport(
+            br#"{
+                "issuer":"https://issuer.example/",
+                "authorization_endpoint":"https://issuer.example/authorize",
+                "token_endpoint":"https://issuer.example/token",
+                "end_session_endpoint":"http://issuer.example/logout"
+            }"#,
+        );
+        assert!(matches!(
+            ServiceConfiguration::discover(
+                Url::parse("https://issuer.example").unwrap(),
+                &insecure_logout_endpoint,
+                CancellationHandle::new(),
+            )
+            .await,
+            Err(AuthError::InvalidDiscoveryMetadata(
+                "endpoints must use HTTPS without user info or fragments"
+            ))
+        ));
+    }
+
+    #[test]
+    fn end_session_request_builds_parameters_and_validates_the_callback() {
+        let configuration = service_configuration()
+            .with_end_session_endpoint(
+                Url::parse("https://issuer.example/logout?tenant=example").unwrap(),
+            )
+            .unwrap();
+        let redirect_uri = Url::parse("com.example.app:/logout?source=app").unwrap();
+        let session = EndSessionRequest::new(&configuration, "native-client")
+            .unwrap()
+            .with_id_token_hint("id-token-hint")
+            .unwrap()
+            .with_post_logout_redirect_uri(redirect_uri)
+            .unwrap()
+            .begin()
+            .unwrap();
+        let parameters: BTreeMap<_, _> = session
+            .end_session_url()
+            .query_pairs()
+            .into_owned()
+            .collect();
+        let state = parameters.get("state").unwrap();
+
+        assert_eq!(
+            parameters.get("client_id").map(String::as_str),
+            Some("native-client")
+        );
+        assert_eq!(
+            parameters.get("id_token_hint").map(String::as_str),
+            Some("id-token-hint")
+        );
+        assert_eq!(
+            parameters
+                .get("post_logout_redirect_uri")
+                .map(String::as_str),
+            Some("com.example.app:/logout?source=app")
+        );
+        assert_eq!(
+            parameters.get("tenant").map(String::as_str),
+            Some("example")
+        );
+
+        let callback = Url::parse(&format!(
+            "com.example.app:/logout?source=app&state={state}&logout=complete"
+        ))
+        .unwrap();
+        let response = session.parse_redirect(&callback).unwrap();
+        assert_eq!(response.state(), state);
+        assert_eq!(
+            response
+                .additional_parameters()
+                .get("logout")
+                .map(String::as_str),
+            Some("complete")
+        );
+
+        let mismatched_state =
+            Url::parse("com.example.app:/logout?source=app&state=wrong").unwrap();
+        assert!(matches!(
+            session.parse_redirect(&mismatched_state),
+            Err(AuthError::InvalidEndSessionResponse("state mismatch"))
+        ));
+        let missing_state = Url::parse("com.example.app:/logout?source=app").unwrap();
+        assert!(matches!(
+            session.parse_redirect(&missing_state),
+            Err(AuthError::InvalidEndSessionResponse(
+                "response is missing state"
+            ))
+        ));
+        let duplicate_state = Url::parse(&format!(
+            "com.example.app:/logout?source=app&state={state}&state={state}"
+        ))
+        .unwrap();
+        assert!(matches!(
+            session.parse_redirect(&duplicate_state),
+            Err(AuthError::InvalidEndSessionResponse(
+                "response contains a duplicate parameter"
+            ))
+        ));
+    }
+
+    #[test]
+    fn end_session_rejects_missing_or_insecure_endpoints() {
+        let configuration = service_configuration();
+        assert!(matches!(
+            EndSessionRequest::new(&configuration, "native-client"),
+            Err(AuthError::InvalidConfiguration(
+                "end-session endpoint is not configured"
+            ))
+        ));
+
+        assert!(matches!(
+            configuration
+                .clone()
+                .with_end_session_endpoint(Url::parse("http://issuer.example/logout").unwrap()),
+            Err(AuthError::InvalidConfiguration(
+                "end-session endpoint must use HTTPS without user info or fragments"
+            ))
+        ));
+
+        let endpoint_with_reserved_query = configuration
+            .with_end_session_endpoint(
+                Url::parse("https://issuer.example/logout?state=attacker").unwrap(),
+            )
+            .unwrap();
+        assert!(matches!(
+            EndSessionRequest::new(&endpoint_with_reserved_query, "native-client"),
+            Err(AuthError::InvalidConfiguration(
+                "end-session endpoint query contains a reserved parameter"
             ))
         ));
     }

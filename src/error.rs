@@ -7,6 +7,8 @@ pub enum AuthError {
     InvalidConfiguration(&'static str),
     #[error("invalid authorization response: {0}")]
     InvalidAuthorizationResponse(&'static str),
+    #[error("invalid end-session response: {0}")]
+    InvalidEndSessionResponse(&'static str),
     #[error("invalid token response: {0}")]
     InvalidTokenResponse(&'static str),
     #[error("invalid OIDC discovery metadata: {0}")]
