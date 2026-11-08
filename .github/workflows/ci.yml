@@ -34,6 +34,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked --workspace --all-targets --all-features
+      - run: cargo doc --locked --no-deps
       - name: Generate native bindings
         run: scripts/generate-bindings.sh
 

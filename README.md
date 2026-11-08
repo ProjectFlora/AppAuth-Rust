@@ -31,6 +31,20 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   WebView.
 - Keep OAuth/OIDC protocol handling in the shared Rust core.
 
+## Support baseline
+
+| Platform | Minimum | Initial-release support |
+| --- | --- | --- |
+| iOS / iPadOS | 18 | Rust core and native authorization adapter |
+| macOS | 15 | Rust core and native authorization adapter |
+| Android | API 34 (Android 14) | Rust core and native authorization adapter |
+| Windows | No desktop minimum | Shared Rust core only; desktop browser integration is deferred |
+| tvOS | Not applicable | Deferred |
+
+The Apple minimums follow the security-update generations reviewed on
+2026-11-08. Android API 34 is provisional. Recheck both the supported OS
+versions and Android device reach immediately before release.
+
 ## Redirect policy
 
 - **iOS / iPadOS:** Prefer verified HTTPS redirects; allow a custom URI scheme
@@ -113,6 +127,19 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   follow redirects and receives the shared cancellation handle for every
   request. The Rust `ReqwestTransport` remains available to Rust callers that
   provide a Tokio runtime.
+- Generate the public Rust API reference locally with
+  `cargo doc --locked --no-deps`; the HTML output is written to
+  `target/doc/appauth_rust/index.html`.
+- `examples/manual_authorization.rs` shows the shared Rust-core flow. It prints
+  the authorization URL and asks the caller to paste the redirect URL; native
+  applications should use the platform adapters for browser launch and
+  callback delivery. Check the example with
+  `cargo check --locked --example manual_authorization`.
+
+The project is not yet published on crates.io, Swift Package Manager, Maven
+Central, or Carthage. The initial native distribution decision is versioned
+GitHub Release assets: an Apple XCFramework and an Android AAR. Those versioned
+packages and checksums are not published yet.
 
 ## Apple adapters
 
@@ -207,8 +234,25 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   `ANDROID_NDK_HOME=/path/to/ndk ./native/android/gradlew -p native/android assembleRelease`.
   The AAR includes Rust shared libraries for `arm64-v8a` and `x86_64`; CI
   verifies both entries and uploads the AAR as a workflow artifact. The
-  versioned GitHub Release asset, checksums, and transitive dependency
-  installation instructions remain release-preparation work.
+  current output is
+  `native/android/build/outputs/aar/appauth-rust-android-release.aar`.
+- The CI `android-aar` artifact can be copied into an Android app's `libs`
+  directory and consumed with `implementation(files("libs/appauth-rust-android-release.aar"))`.
+  Because a raw AAR has no dependency metadata, also declare the runtime
+  dependencies used by this module:
+
+  ```kotlin
+  dependencies {
+      implementation(files("libs/appauth-rust-android-release.aar"))
+      implementation("net.java.dev.jna:jna:5.12.0@aar")
+      implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+      implementation("androidx.browser:browser:1.8.0")
+  }
+  ```
+
+- This workflow artifact is for CI validation and expires after 14 days. A
+  versioned GitHub Release AAR, checksums, and a Swift XCFramework are still
+  pending.
 - Android callback activity routing is exercised on an API 34 emulator.
   Complete authorization through an external browser and a live identity
   provider is not yet tested end-to-end.
