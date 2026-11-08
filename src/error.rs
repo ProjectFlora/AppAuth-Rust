@@ -31,6 +31,8 @@ pub enum AuthError {
     },
     #[error("HTTP transport failed")]
     Transport,
+    #[error("HTTP transport failed: {0}")]
+    TransportFailure(String),
     #[error("HTTP endpoint returned status {0}")]
     HttpStatus(StatusCode),
     #[error("operation was cancelled")]

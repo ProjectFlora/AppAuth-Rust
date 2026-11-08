@@ -418,16 +418,18 @@ impl AuthorizationSession {
             ));
         }
 
-        let mut form = form_urlencoded::Serializer::new(String::new());
-        form.append_pair("grant_type", "authorization_code")
-            .append_pair("code", &response.code)
-            .append_pair("redirect_uri", self.redirect_uri.as_str())
-            .append_pair("client_id", &self.client_id)
-            .append_pair("code_verifier", self.pkce.verifier());
-        for (name, value) in &self.additional_token_parameters {
-            form.append_pair(name, value);
-        }
-        let body = form.finish().into_bytes();
+        let body = {
+            let mut form = form_urlencoded::Serializer::new(String::new());
+            form.append_pair("grant_type", "authorization_code")
+                .append_pair("code", &response.code)
+                .append_pair("redirect_uri", self.redirect_uri.as_str())
+                .append_pair("client_id", &self.client_id)
+                .append_pair("code_verifier", self.pkce.verifier());
+            for (name, value) in &self.additional_token_parameters {
+                form.append_pair(name, value);
+            }
+            form.finish().into_bytes()
+        };
         let token_response =
             send_token_request(&self.token_endpoint, body, transport, cancellation.clone()).await?;
         if self.nonce.is_some() && token_response.id_token.is_none() {
@@ -774,6 +776,10 @@ impl AuthorizationResponse {
         &self.code
     }
 
+    pub fn state(&self) -> &str {
+        &self.state
+    }
+
     pub fn additional_parameters(&self) -> &BTreeMap<String, String> {
         &self.additional_parameters
     }
@@ -908,14 +914,16 @@ impl AuthenticationState {
                 "authentication state has no refresh token",
             ))?;
 
-        let mut form = form_urlencoded::Serializer::new(String::new());
-        form.append_pair("grant_type", "refresh_token")
-            .append_pair("refresh_token", refresh_token)
-            .append_pair("client_id", client_id);
-        for (name, value) in additional_parameters {
-            form.append_pair(name, value);
-        }
-        let body = form.finish().into_bytes();
+        let body = {
+            let mut form = form_urlencoded::Serializer::new(String::new());
+            form.append_pair("grant_type", "refresh_token")
+                .append_pair("refresh_token", refresh_token)
+                .append_pair("client_id", client_id);
+            for (name, value) in additional_parameters {
+                form.append_pair(name, value);
+            }
+            form.finish().into_bytes()
+        };
         let mut refreshed = send_token_request(
             &configuration.token_endpoint,
             body,

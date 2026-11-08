@@ -104,6 +104,16 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   returned serializable state contains tokens and nonce; the host application
   remains responsible for secure storage and encryption.
 
+## Native bindings
+
+- The UniFFI 0.32.2 API is exposed through `appauth_rust::ffi`. Generate Swift
+  and Kotlin source with `scripts/generate-bindings.sh`; generated sources go
+  under `target/uniffi` by default and should not be hand-edited.
+- Native callers provide a `NativeHttpTransport` implementation. It must not
+  follow redirects and receives the shared cancellation handle for every
+  request. The Rust `ReqwestTransport` remains available to Rust callers that
+  provide a Tokio runtime.
+
 ## Platform plan
 
 | Platform | Initial scope |

@@ -5,6 +5,10 @@ mod id_token;
 mod pkce;
 mod transport;
 
+pub mod ffi;
+
+uniffi::setup_scaffolding!();
+
 pub use authorization::{
     AuthenticationState, AuthorizationRequest, AuthorizationResponse, AuthorizationSession,
     ClientRegistrationRequest, ClientRegistrationResponse, EndSessionRequest, EndSessionResponse,
