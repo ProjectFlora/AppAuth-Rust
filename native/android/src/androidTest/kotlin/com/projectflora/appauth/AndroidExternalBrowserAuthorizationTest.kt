@@ -61,7 +61,7 @@ class AndroidExternalBrowserAuthorizationTest {
 
                 val authorizationParameters =
                     withTimeoutOrNull(30_000) {
-                        select {
+                        select<Map<String, String>> {
                             server.authorizationRequest.onAwait { it }
                             result.onAwait {
                                 it.getOrThrow()
@@ -84,7 +84,7 @@ class AndroidExternalBrowserAuthorizationTest {
 
                 val tokenParameters =
                     withTimeoutOrNull(30_000) {
-                        select {
+                        select<Map<String, String>> {
                             server.tokenRequest.onAwait { it }
                             result.onAwait {
                                 it.getOrThrow()
