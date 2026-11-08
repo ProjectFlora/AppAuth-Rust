@@ -47,6 +47,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: scripts/check-apple-targets.sh
       - run: scripts/check-apple-adapters.sh
+      - name: Package Apple XCFramework
+        run: scripts/package-apple-xcframework.sh 0.0.0-ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apple-xcframework
+          path: target/apple/release-package/AppAuthRust-Apple-0.0.0-ci.zip
+          if-no-files-found: error
+          retention-days: 14
 
   windows_core:
     name: Windows core target validation
