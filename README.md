@@ -114,6 +114,28 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   request. The Rust `ReqwestTransport` remains available to Rust callers that
   provide a Tokio runtime.
 
+## Apple adapters
+
+- `native/apple/IOSAuthorizationAdapter.swift` runs authorization in
+  `ASWebAuthenticationSession`; HTTPS callbacks use Apple's verified callback
+  matcher, and custom URI schemes are supported as a fallback. The host app
+  must configure a `webcredentials:<host>` associated domain or register its
+  custom URL scheme, and provide an
+  `ASWebAuthenticationPresentationContextProviding` implementation.
+- `native/apple/MacOSAuthorizationAdapter.swift` accepts a redirect template
+  such as `http://127.0.0.1/oauth/callback`, replaces its port with a
+  dynamically allocated port, and binds the listener only to IPv4 loopback.
+  Unexpected paths receive 404 while the adapter continues waiting.
+- Cancelling the iOS adapter or Swift task dismisses its authentication
+  session; iOS-reported browser dismissal maps to `FfiError.Cancelled`.
+  Cancellation on either adapter stops its callback wait and cancels
+  in-flight core work. The macOS adapter cannot dismiss the external browser.
+  `URLSessionNativeHttpTransport` refuses HTTP redirects and forwards
+  cancellation to `URLSession`.
+- Run `scripts/check-apple-adapters.sh` to regenerate the bindings, type-check
+  the adapters against the iOS and macOS SDKs, and smoke-test the macOS
+  loopback listener.
+
 ## Platform plan
 
 | Platform | Initial scope |
