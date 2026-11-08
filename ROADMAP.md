@@ -83,7 +83,7 @@ This roadmap tracks work remaining for the initial scope in
 1. **Finalize the initial feature boundary (complete):** Review the proposed
    initial, later, and out-of-scope features in [FEATURE_MATRIX.md](FEATURE_MATRIX.md),
    confirm the feature boundary, and resolve the remaining open decisions above.
-2. **Establish the Rust foundation (in progress):** Maintain the documented
+2. **Establish the Rust foundation (complete):** Maintain the documented
    single-crate core boundary, select core dependencies, define public types
    and error behavior, implement the pinned UniFFI proc-macro interface and
    reproducible binding generation, and verify the planned Apple, Android, and
@@ -94,7 +94,7 @@ This roadmap tracks work remaining for the initial scope in
    OIDC ID Token signature and claim validation, end-session, and dynamic client
    registration for public clients. Enforce exact redirect and state checks,
    with explicit cancellation for in-flight operations.
-4. **Integrate initial native platforms (in progress):** Add external-browser
+4. **Integrate initial native platforms (complete):** Add external-browser
    and redirect integrations for iOS/iPadOS, macOS, and Android while keeping
    UI and OS lifecycle concerns outside the shared protocol core.
 5. **Add Windows desktop integration (later phase):** This is not required for
@@ -112,8 +112,9 @@ OIDC ID Token validation. The UniFFI facade and reproducible binding generation
 are in place. Initial iOS/iPadOS and macOS authorization adapters are
 implemented and covered by SDK type-checking and a macOS loopback smoke test.
 The Android authorization adapter is implemented with App Links/custom-scheme
-selection and unit-tested redirect handling. Cross-target builds, end-to-end
-platform flows, and release validation remain.
+selection and unit-tested redirect handling. CI cross-compiles all documented
+Apple, Android, and Windows Rust targets. End-to-end platform flows and release
+validation remain.
 
 ## Initial validation checkpoints
 
