@@ -136,12 +136,12 @@ class AndroidExternalBrowserAuthorizationTest {
                 return
             }
         }
+    }
 
-        private fun continueChromeSetup(device: UiDevice) {
-            for (label in listOf("Accept & continue", "No thanks", "Use without an account")) {
-                if (device.wait(Until.hasObject(By.text(label)), 2_000)) {
-                    device.findObject(By.text(label))?.click()
-                }
+    private fun continueChromeSetup(device: UiDevice) {
+        for (label in listOf("Accept & continue", "No thanks", "Use without an account")) {
+            if (device.wait(Until.hasObject(By.text(label)), 2_000)) {
+                device.findObject(By.text(label))?.click()
             }
         }
     }
