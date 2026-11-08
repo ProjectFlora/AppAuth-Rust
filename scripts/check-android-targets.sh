@@ -13,17 +13,24 @@ if [[ ! "$api_level" =~ ^[1-9][0-9]*$ ]]; then
     exit 2
 fi
 
+if [[ ! -x "$toolchain/llvm-ar" ]]; then
+    echo "Android NDK archiver not found or not executable: $toolchain/llvm-ar" >&2
+    exit 1
+fi
+
 for target in aarch64-linux-android x86_64-linux-android; do
     case "$target" in
         aarch64-linux-android)
             linker="$toolchain/aarch64-linux-android${api_level}-clang"
             export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$linker"
             export CC_aarch64_linux_android="$linker"
+            export AR_aarch64_linux_android="$toolchain/llvm-ar"
             ;;
         x86_64-linux-android)
             linker="$toolchain/x86_64-linux-android${api_level}-clang"
             export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$linker"
             export CC_x86_64_linux_android="$linker"
+            export AR_x86_64_linux_android="$toolchain/llvm-ar"
             ;;
     esac
 
