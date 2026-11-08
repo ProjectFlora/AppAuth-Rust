@@ -9,7 +9,8 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -59,7 +60,15 @@ class AndroidExternalBrowserAuthorizationTest {
                 }
 
                 val authorizationParameters =
-                    withTimeout(30_000) { server.authorizationRequest.await() }
+                    withTimeoutOrNull(30_000) {
+                        select {
+                            server.authorizationRequest.onAwait { it }
+                            result.onAwait {
+                                it.getOrThrow()
+                                throw AssertionError("Authorization completed without opening the mock provider")
+                            }
+                        }
+                    } ?: throw AssertionError("External browser did not open the mock provider")
                 assertEquals("code", authorizationParameters["response_type"])
                 assertEquals("mock-client", authorizationParameters["client_id"])
                 assertEquals(redirectUri, authorizationParameters["redirect_uri"])
@@ -73,10 +82,16 @@ class AndroidExternalBrowserAuthorizationTest {
                 checkNotNull(device.findObject(By.text("Authorize"))).click()
                 confirmExternalAppLaunch(device)
 
-                val authenticationState = withTimeout(30_000) { result.await().getOrThrow() }
-                assertEquals("mock-access-token", authenticationState.tokenResponse().accessToken)
-
-                val tokenParameters = withTimeout(10_000) { server.tokenRequest.await() }
+                val tokenParameters =
+                    withTimeoutOrNull(30_000) {
+                        select {
+                            server.tokenRequest.onAwait { it }
+                            result.onAwait {
+                                it.getOrThrow()
+                                throw AssertionError("Authorization completed before token exchange")
+                            }
+                        }
+                    } ?: throw AssertionError("Browser callback did not reach the token endpoint")
                 assertEquals("authorization_code", tokenParameters["grant_type"])
                 assertEquals("mock-code", tokenParameters["code"])
                 assertEquals(redirectUri, tokenParameters["redirect_uri"])
@@ -90,6 +105,11 @@ class AndroidExternalBrowserAuthorizationTest {
                                 .digest(codeVerifier.toByteArray(StandardCharsets.UTF_8)),
                         )
                 assertEquals(authorizationParameters["code_challenge"], expectedChallenge)
+
+                val authenticationState =
+                    withTimeoutOrNull(30_000) { result.await().getOrThrow() }
+                        ?: throw AssertionError("Token exchange did not complete")
+                assertEquals("mock-access-token", authenticationState.tokenResponse().accessToken)
                 server.throwIfFailed()
             } finally {
                 scenario.close()
