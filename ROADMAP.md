@@ -101,14 +101,12 @@ This roadmap tracks work remaining for the initial scope in
    platform build/flow tests, security-focused edge-case coverage, examples,
    API documentation, and a release/support matrix.
 
-The initial crate implementation currently provides endpoint configuration,
-Authorization Code + PKCE request construction, state and redirect validation,
-an asynchronous cancellable HTTP transport, code exchange, and token response
-parsing, OIDC discovery, explicit refresh-token exchange, and serializable
-authentication state with additional token-request parameters and opaque
-unrecognized response fields, and RP-Initiated Logout request/response
-handling. ID Token validation, dynamic registration, UniFFI integration, and
-native platform adapters remain unimplemented.
+The Rust core now provides endpoint configuration and discovery, Authorization
+Code + PKCE, callback validation, cancellable HTTP, code exchange and token
+parsing, explicit refresh with serializable authentication state, additional
+token parameters, RP-Initiated Logout, and public-client dynamic registration.
+ID Token validation, UniFFI integration, and native platform adapters remain
+unimplemented.
 
 ## Initial validation checkpoints
 

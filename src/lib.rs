@@ -6,7 +6,8 @@ mod transport;
 
 pub use authorization::{
     AuthenticationState, AuthorizationRequest, AuthorizationResponse, AuthorizationSession,
-    EndSessionRequest, EndSessionResponse, EndSessionSession, ServiceConfiguration, TokenResponse,
+    ClientRegistrationRequest, ClientRegistrationResponse, EndSessionRequest, EndSessionResponse,
+    EndSessionSession, ServiceConfiguration, TokenResponse,
 };
 pub use cancellation::CancellationHandle;
 pub use error::{AuthError, Result};

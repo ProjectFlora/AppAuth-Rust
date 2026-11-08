@@ -11,10 +11,17 @@ pub enum AuthError {
     InvalidEndSessionResponse(&'static str),
     #[error("invalid token response: {0}")]
     InvalidTokenResponse(&'static str),
+    #[error("invalid client registration response: {0}")]
+    InvalidClientRegistrationResponse(&'static str),
     #[error("invalid OIDC discovery metadata: {0}")]
     InvalidDiscoveryMetadata(&'static str),
     #[error("authorization server returned error: {code}")]
     AuthorizationServer {
+        code: String,
+        description: Option<String>,
+    },
+    #[error("client registration server returned error: {code}")]
+    ClientRegistrationServer {
         code: String,
         description: Option<String>,
     },

@@ -77,6 +77,16 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   state.
 - The host application launches the external browser and handles its lifecycle.
 
+## Dynamic client registration
+
+- Use the discovered `registration_endpoint` or configure one explicitly; it
+  must use HTTPS. The request registers a native public client with Authorization
+  Code and refresh-token grants and `token_endpoint_auth_method=none`.
+- A host may provide an initial access token for a protected registration
+  endpoint per request; the library does not embed one.
+- The response exposes only the client ID. Responses containing a client secret
+  or specifying a non-native/confidential client are rejected.
+
 ## Platform plan
 
 | Platform | Initial scope |
