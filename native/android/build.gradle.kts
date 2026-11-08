@@ -69,7 +69,7 @@ tasks.named("preBuild").configure {
 }
 
 tasks.configureEach {
-    if (name == "mergeReleaseJniLibFolders") {
+    if (name == "mergeDebugJniLibFolders" || name == "mergeReleaseJniLibFolders") {
         dependsOn(buildAndroidRustLibraries)
     }
 }
@@ -81,6 +81,7 @@ dependencies {
 
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 
     testImplementation("junit:junit:4.13.2")
 }

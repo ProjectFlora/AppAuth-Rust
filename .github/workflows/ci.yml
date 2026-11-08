@@ -96,7 +96,7 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
-          target: google_apis
+          target: google_apis_playstore
           disable-linux-hw-accel: false
           disable-animations: true
           script: ./native/android/gradlew -p native/android connectedDebugAndroidTest
