@@ -58,8 +58,14 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
       - uses: dtolnay/rust-toolchain@stable
+      - name: Build Android Rust targets
+        env:
+          ANDROID_API_LEVEL: '34'
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          scripts/check-android-targets.sh
       - uses: gradle/actions/setup-gradle@v4
       - run: ./native/android/gradlew -p native/android testDebugUnitTest
 
