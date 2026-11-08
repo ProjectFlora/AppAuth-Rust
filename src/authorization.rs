@@ -7,6 +7,7 @@ use serde_json::{Map, Value};
 use url::{form_urlencoded, Host, Url};
 
 use crate::{
+    id_token::{validate_id_token, IdTokenValidation, JwksCache},
     pkce::{random_token, PkcePair},
     AuthError, CancellationHandle, HttpRequest, HttpTransport, Result,
 };
@@ -52,6 +53,9 @@ pub struct ServiceConfiguration {
     token_endpoint: Url,
     end_session_endpoint: Option<Url>,
     registration_endpoint: Option<Url>,
+    issuer: Option<Url>,
+    jwks_uri: Option<Url>,
+    jwks_cache: JwksCache,
 }
 
 impl ServiceConfiguration {
@@ -64,6 +68,9 @@ impl ServiceConfiguration {
             token_endpoint,
             end_session_endpoint: None,
             registration_endpoint: None,
+            issuer: None,
+            jwks_uri: None,
+            jwks_cache: JwksCache::default(),
         })
     }
 
@@ -76,6 +83,15 @@ impl ServiceConfiguration {
     pub fn with_registration_endpoint(mut self, endpoint: Url) -> Result<Self> {
         validate_registration_endpoint(&endpoint)?;
         self.registration_endpoint = Some(endpoint);
+        Ok(self)
+    }
+
+    pub fn with_oidc_validation_endpoints(mut self, issuer: Url, jwks_uri: Url) -> Result<Self> {
+        validate_issuer(&issuer)?;
+        validate_oidc_endpoint(&jwks_uri)?;
+        self.issuer = Some(issuer);
+        self.jwks_uri = Some(jwks_uri);
+        self.jwks_cache = JwksCache::default();
         Ok(self)
     }
 
@@ -124,12 +140,20 @@ impl ServiceConfiguration {
             .as_deref()
             .map(parse_discovered_endpoint)
             .transpose()?;
+        let jwks_uri = metadata
+            .jwks_uri
+            .as_deref()
+            .map(parse_discovered_endpoint)
+            .transpose()?;
 
         Ok(Self {
             authorization_endpoint,
             token_endpoint,
             end_session_endpoint,
             registration_endpoint,
+            issuer: Some(issuer),
+            jwks_uri,
+            jwks_cache: JwksCache::default(),
         })
     }
 
@@ -148,6 +172,14 @@ impl ServiceConfiguration {
     pub fn registration_endpoint(&self) -> Option<&Url> {
         self.registration_endpoint.as_ref()
     }
+
+    pub fn issuer(&self) -> Option<&Url> {
+        self.issuer.as_ref()
+    }
+
+    pub fn jwks_uri(&self) -> Option<&Url> {
+        self.jwks_uri.as_ref()
+    }
 }
 
 #[derive(Deserialize)]
@@ -157,6 +189,7 @@ struct DiscoveryMetadata {
     token_endpoint: String,
     end_session_endpoint: Option<String>,
     registration_endpoint: Option<String>,
+    jwks_uri: Option<String>,
 }
 
 pub struct AuthorizationRequest {
@@ -185,6 +218,13 @@ impl AuthorizationRequest {
         validate_redirect_uri(&redirect_uri)?;
         for scope in &scopes {
             validate_scope(scope)?;
+        }
+        if scopes.iter().any(|scope| scope == "openid")
+            && (configuration.issuer.is_none() || configuration.jwks_uri.is_none())
+        {
+            return Err(AuthError::InvalidConfiguration(
+                "OIDC issuer and JWKS endpoint are required to validate ID Tokens",
+            ));
         }
 
         Ok(Self {
@@ -259,6 +299,9 @@ impl AuthorizationRequest {
             authorization_url,
             redirect_uri: self.redirect_uri,
             token_endpoint: self.configuration.token_endpoint,
+            oidc_issuer: self.configuration.issuer,
+            jwks_uri: self.configuration.jwks_uri,
+            jwks_cache: self.configuration.jwks_cache,
             client_id: self.client_id,
             additional_token_parameters: self.additional_token_parameters,
             state,
@@ -272,6 +315,9 @@ pub struct AuthorizationSession {
     authorization_url: Url,
     redirect_uri: Url,
     token_endpoint: Url,
+    oidc_issuer: Option<Url>,
+    jwks_uri: Option<Url>,
+    jwks_cache: JwksCache,
     client_id: String,
     additional_token_parameters: BTreeMap<String, String>,
     state: String,
@@ -286,6 +332,14 @@ impl AuthorizationSession {
 
     pub fn nonce(&self) -> Option<&str> {
         self.nonce.as_deref()
+    }
+
+    /// Creates authentication state while retaining this session's OIDC nonce.
+    pub fn authentication_state(
+        &self,
+        token_response: TokenResponse,
+    ) -> Result<AuthenticationState> {
+        AuthenticationState::new_with_oidc_nonce(token_response, self.nonce.clone())
     }
 
     pub fn parse_redirect(&self, redirect: &Url) -> Result<AuthorizationResponse> {
@@ -358,6 +412,11 @@ impl AuthorizationSession {
                 "authorization response belongs to a different session",
             ));
         }
+        if self.nonce.is_some() && (self.oidc_issuer.is_none() || self.jwks_uri.is_none()) {
+            return Err(AuthError::InvalidConfiguration(
+                "OIDC issuer and JWKS endpoint are required to validate ID Tokens",
+            ));
+        }
 
         let mut form = form_urlencoded::Serializer::new(String::new());
         form.append_pair("grant_type", "authorization_code")
@@ -369,7 +428,42 @@ impl AuthorizationSession {
             form.append_pair(name, value);
         }
         let body = form.finish().into_bytes();
-        send_token_request(&self.token_endpoint, body, transport, cancellation).await
+        let token_response =
+            send_token_request(&self.token_endpoint, body, transport, cancellation.clone()).await?;
+        if self.nonce.is_some() && token_response.id_token.is_none() {
+            return Err(AuthError::InvalidIdToken(
+                "openid token response is missing an ID Token",
+            ));
+        }
+        if let Some(id_token) = &token_response.id_token {
+            let issuer = self
+                .oidc_issuer
+                .as_ref()
+                .ok_or(AuthError::InvalidConfiguration(
+                    "OIDC issuer is required to validate ID Tokens",
+                ))?;
+            let jwks_uri = self
+                .jwks_uri
+                .as_ref()
+                .ok_or(AuthError::InvalidConfiguration(
+                    "JWKS endpoint is required to validate ID Tokens",
+                ))?;
+            validate_id_token(
+                IdTokenValidation {
+                    token: id_token,
+                    issuer,
+                    jwks_uri,
+                    client_id: &self.client_id,
+                    expected_nonce: self.nonce.as_deref(),
+                    require_nonce: self.nonce.is_some(),
+                },
+                &self.jwks_cache,
+                transport,
+                cancellation,
+            )
+            .await?;
+        }
+        Ok(token_response)
     }
 }
 
@@ -692,7 +786,7 @@ pub struct TokenResponse {
     pub expires_in: Option<u64>,
     pub refresh_token: Option<String>,
     pub scope: Option<String>,
-    /// Raw ID Token value. This version does not validate its signature or claims.
+    /// Raw ID Token value. Tokens returned by code exchange are verified before return.
     pub id_token: Option<String>,
     #[serde(default)]
     pub additional_parameters: BTreeMap<String, Value>,
@@ -703,18 +797,45 @@ pub struct TokenResponse {
 pub struct AuthenticationState {
     token_response: TokenResponse,
     expires_at: Option<u64>,
+    #[serde(default)]
+    oidc_nonce: Option<String>,
 }
 
 impl AuthenticationState {
     /// Creates state and records expiry relative to the current system time.
     pub fn new(token_response: TokenResponse) -> Result<Self> {
+        Self::new_with_oidc_nonce(token_response, None)
+    }
+
+    /// Creates state while retaining the nonce used for the OIDC authorization.
+    pub fn new_with_oidc_nonce(
+        token_response: TokenResponse,
+        oidc_nonce: Option<String>,
+    ) -> Result<Self> {
+        if oidc_nonce
+            .as_deref()
+            .is_some_and(|nonce| nonce.trim().is_empty())
+        {
+            return Err(AuthError::InvalidConfiguration(
+                "OIDC nonce must not be empty",
+            ));
+        }
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| AuthError::Clock)?;
-        Self::new_at(token_response, now.as_secs())
+        Self::new_at_with_oidc_nonce(token_response, now.as_secs(), oidc_nonce)
     }
 
+    #[cfg(test)]
     fn new_at(token_response: TokenResponse, now: u64) -> Result<Self> {
+        Self::new_at_with_oidc_nonce(token_response, now, None)
+    }
+
+    fn new_at_with_oidc_nonce(
+        token_response: TokenResponse,
+        now: u64,
+        oidc_nonce: Option<String>,
+    ) -> Result<Self> {
         let expires_at = token_response
             .expires_in
             .map(|expires_in| {
@@ -727,6 +848,7 @@ impl AuthenticationState {
         Ok(Self {
             token_response,
             expires_at,
+            oidc_nonce,
         })
     }
 
@@ -794,9 +916,42 @@ impl AuthenticationState {
             form.append_pair(name, value);
         }
         let body = form.finish().into_bytes();
-        let mut refreshed =
-            send_token_request(&configuration.token_endpoint, body, transport, cancellation)
-                .await?;
+        let mut refreshed = send_token_request(
+            &configuration.token_endpoint,
+            body,
+            transport,
+            cancellation.clone(),
+        )
+        .await?;
+        if let Some(id_token) = &refreshed.id_token {
+            let issuer = configuration
+                .issuer
+                .as_ref()
+                .ok_or(AuthError::InvalidConfiguration(
+                    "OIDC issuer is required to validate ID Tokens",
+                ))?;
+            let jwks_uri =
+                configuration
+                    .jwks_uri
+                    .as_ref()
+                    .ok_or(AuthError::InvalidConfiguration(
+                        "JWKS endpoint is required to validate ID Tokens",
+                    ))?;
+            validate_id_token(
+                IdTokenValidation {
+                    token: id_token,
+                    issuer,
+                    jwks_uri,
+                    client_id,
+                    expected_nonce: self.oidc_nonce.as_deref(),
+                    require_nonce: false,
+                },
+                &configuration.jwks_cache,
+                transport,
+                cancellation,
+            )
+            .await?;
+        }
 
         if refreshed.refresh_token.is_none() {
             refreshed.refresh_token = Some(refresh_token.to_owned());
@@ -808,7 +963,8 @@ impl AuthenticationState {
             refreshed.id_token = self.token_response.id_token.clone();
         }
 
-        let updated_state = Self::new(refreshed)?;
+        let mut updated_state = Self::new(refreshed)?;
+        updated_state.oidc_nonce = self.oidc_nonce.clone();
         *self = updated_state;
         Ok(())
     }
@@ -995,6 +1151,15 @@ fn validate_registration_endpoint(endpoint: &Url) -> Result<()> {
     if endpoint.scheme() != "https" || validate_endpoint(endpoint).is_err() {
         return Err(AuthError::InvalidConfiguration(
             "client registration endpoint must use HTTPS without user info or fragments",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_oidc_endpoint(endpoint: &Url) -> Result<()> {
+    if endpoint.scheme() != "https" || validate_endpoint(endpoint).is_err() {
+        return Err(AuthError::InvalidConfiguration(
+            "JWKS endpoint must use HTTPS without user info or fragments",
         ));
     }
     Ok(())
@@ -1215,11 +1380,19 @@ mod tests {
     }
 
     fn request(scopes: &[&str]) -> AuthorizationRequest {
-        let configuration = ServiceConfiguration::new(
+        let mut configuration = ServiceConfiguration::new(
             Url::parse("https://issuer.example/authorize").unwrap(),
             Url::parse("https://issuer.example/token").unwrap(),
         )
         .unwrap();
+        if scopes.contains(&"openid") {
+            configuration = configuration
+                .with_oidc_validation_endpoints(
+                    Url::parse("https://issuer.example/").unwrap(),
+                    Url::parse("https://issuer.example/keys").unwrap(),
+                )
+                .unwrap();
+        }
         AuthorizationRequest::new(
             configuration,
             "native-client",
@@ -1254,6 +1427,21 @@ mod tests {
     }
 
     #[test]
+    fn openid_authorization_requires_validation_endpoints_before_browser_launch() {
+        assert!(matches!(
+            AuthorizationRequest::new(
+                service_configuration(),
+                "native-client",
+                Url::parse("com.example.app:/oauth2redirect").unwrap(),
+                vec!["openid".to_owned()],
+            ),
+            Err(AuthError::InvalidConfiguration(
+                "OIDC issuer and JWKS endpoint are required to validate ID Tokens"
+            ))
+        ));
+    }
+
+    #[test]
     fn authentication_state_serializes_expiration() {
         let state = authentication_state();
 
@@ -1281,6 +1469,33 @@ mod tests {
         let state_without_expiry = AuthenticationState::new_at(token_response, 1_000).unwrap();
         assert_eq!(state_without_expiry.expires_at(), None);
         assert_eq!(state_without_expiry.is_expired_at(2_000), None);
+    }
+
+    #[test]
+    fn authorization_session_carries_nonce_into_serialized_authentication_state() {
+        let session = request(&["openid"]).begin().unwrap();
+        let state = session
+            .authentication_state(TokenResponse {
+                access_token: "access".to_owned(),
+                token_type: "Bearer".to_owned(),
+                expires_in: None,
+                refresh_token: Some("refresh".to_owned()),
+                scope: Some("openid".to_owned()),
+                id_token: Some("validated-id-token".to_owned()),
+                additional_parameters: BTreeMap::new(),
+            })
+            .unwrap();
+
+        let serialized = serde_json::to_value(&state).unwrap();
+        assert_eq!(
+            serialized["oidc_nonce"],
+            serde_json::json!(session.nonce().unwrap())
+        );
+        let restored: AuthenticationState = serde_json::from_value(serialized).unwrap();
+        assert_eq!(
+            serde_json::to_value(restored).unwrap()["oidc_nonce"],
+            serde_json::json!(session.nonce().unwrap())
+        );
     }
 
     #[tokio::test]
@@ -1416,6 +1631,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn refresh_rejects_an_invalid_returned_id_token_without_updating_state() {
+        let mut state = AuthenticationState::new_with_oidc_nonce(
+            TokenResponse {
+                access_token: "old-access".to_owned(),
+                token_type: "Bearer".to_owned(),
+                expires_in: None,
+                refresh_token: Some("old-refresh".to_owned()),
+                scope: Some("openid".to_owned()),
+                id_token: Some("old-id".to_owned()),
+                additional_parameters: BTreeMap::new(),
+            },
+            Some("original-nonce".to_owned()),
+        )
+        .unwrap();
+        let before = serde_json::to_value(&state).unwrap();
+        let configuration = service_configuration()
+            .with_oidc_validation_endpoints(
+                Url::parse("https://issuer.example/").unwrap(),
+                Url::parse("https://issuer.example/keys").unwrap(),
+            )
+            .unwrap();
+        let transport = test_transport(
+            StatusCode::OK,
+            br#"{
+                "access_token":"new-access",
+                "token_type":"Bearer",
+                "id_token":"not.a.jwt"
+            }"#,
+        );
+
+        assert!(matches!(
+            state
+                .refresh(
+                    &configuration,
+                    "native-client",
+                    &transport,
+                    CancellationHandle::new(),
+                )
+                .await,
+            Err(AuthError::InvalidIdToken(
+                "JWT header is malformed or unsupported"
+            ))
+        ));
+        assert_eq!(serde_json::to_value(&state).unwrap(), before);
+    }
+
+    #[tokio::test]
     async fn refresh_without_a_refresh_token_does_not_send_a_request() {
         let mut state = AuthenticationState::new_at(
             TokenResponse {
@@ -1518,6 +1780,14 @@ mod tests {
         assert_eq!(
             configuration.registration_endpoint().unwrap().as_str(),
             "https://issuer.example/tenant/register"
+        );
+        assert_eq!(
+            configuration.issuer().unwrap().as_str(),
+            "https://issuer.example/tenant"
+        );
+        assert_eq!(
+            configuration.jwks_uri().unwrap().as_str(),
+            "https://issuer.example/tenant/keys"
         );
     }
 
@@ -2027,7 +2297,7 @@ mod tests {
 
     #[tokio::test]
     async fn code_exchange_sends_verifier_and_preserves_unknown_token_fields() {
-        let session = request(&["openid"])
+        let session = request(&[])
             .with_additional_token_parameter("audience", "https://api.example")
             .unwrap()
             .begin()
@@ -2045,7 +2315,6 @@ mod tests {
                 "token_type":"Bearer",
                 "expires_in":3600,
                 "refresh_token":"refresh",
-                "id_token":"unverified-id-token",
                 "provider_data":{"key":"value"}
             }"#,
         );
@@ -2086,14 +2355,46 @@ mod tests {
             challenge
         );
         assert_eq!(token_response.access_token, "access");
-        assert_eq!(
-            token_response.id_token.as_deref(),
-            Some("unverified-id-token")
-        );
+        assert_eq!(token_response.id_token, None);
         assert_eq!(
             token_response.additional_parameters["provider_data"]["key"],
             "value"
         );
+    }
+
+    #[tokio::test]
+    async fn openid_code_exchange_rejects_missing_or_malformed_id_tokens() {
+        for (body, expected_error) in [
+            (
+                br#"{"access_token":"access","token_type":"Bearer"}"#.as_slice(),
+                "openid token response is missing an ID Token",
+            ),
+            (
+                br#"{"access_token":"access","token_type":"Bearer","id_token":"not.a.jwt"}"#
+                    .as_slice(),
+                "JWT header is malformed or unsupported",
+            ),
+        ] {
+            let session = request(&["openid"]).begin().unwrap();
+            let redirect = Url::parse(&format!(
+                "com.example.app:/oauth2redirect?code=auth-code&state={}",
+                session.state
+            ))
+            .unwrap();
+            let authorization_response = session.parse_redirect(&redirect).unwrap();
+            let transport = test_transport(StatusCode::OK, body);
+
+            assert!(matches!(
+                session
+                    .exchange_code(
+                        &transport,
+                        &authorization_response,
+                        CancellationHandle::new(),
+                    )
+                    .await,
+                Err(AuthError::InvalidIdToken(message)) if message == expected_error
+            ));
+        }
     }
 
     #[tokio::test]

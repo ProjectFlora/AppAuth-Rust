@@ -13,6 +13,10 @@ pub enum AuthError {
     InvalidTokenResponse(&'static str),
     #[error("invalid client registration response: {0}")]
     InvalidClientRegistrationResponse(&'static str),
+    #[error("invalid ID Token: {0}")]
+    InvalidIdToken(&'static str),
+    #[error("invalid JWKS: {0}")]
+    InvalidJwks(&'static str),
     #[error("invalid OIDC discovery metadata: {0}")]
     InvalidDiscoveryMetadata(&'static str),
     #[error("authorization server returned error: {code}")]

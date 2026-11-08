@@ -15,7 +15,7 @@ confirmation.
 | Code exchange, token responses, and refresh | Supported | Supported | Initial — agreed |
 | Authorization state and fresh-token convenience | `OIDAuthState` tracks requests/responses and supports refresh | `AuthState` supports JSON persistence and fresh-token action | Initial — agreed; serialize state in core, host app owns persistence and encryption |
 | Operation cancellation | Platform/browser cancellation is represented in flow results | Completion and cancellation use separate intents | Initial — agreed; expose explicit cancel handle and distinct cancellation result |
-| OIDC ID Token | Parses claims; explicitly does not verify JWT signatures | Validates selected claims; does not verify JWT signatures | Initial — agreed; verify signatures and required claims |
+| OIDC ID Token | Parses claims; explicitly does not verify JWT signatures | Validates selected claims; does not verify JWT signatures | Initial — agreed; RS256/ES256 signatures, required claims, and JWKS rotation |
 | Additional authorization and token request parameters | Supported | Supported | Initial — agreed; constrain reserved/security-sensitive parameters |
 | Additional response parameters | Exposed by token response models | Exposed by token response models | Initial — agreed; preserve unrecognized values opaquely without interpreting them |
 | OIDC end-session / logout | Supported | Supported | Initial — agreed |
