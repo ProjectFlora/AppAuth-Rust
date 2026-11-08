@@ -24,6 +24,19 @@ const RESERVED_AUTHORIZATION_PARAMETERS: &[&str] = &[
     "state",
 ];
 
+const RESERVED_TOKEN_PARAMETERS: &[&str] = &[
+    "client_assertion",
+    "client_assertion_type",
+    "client_id",
+    "client_secret",
+    "code",
+    "code_verifier",
+    "grant_type",
+    "redirect_uri",
+    "refresh_token",
+    "scope",
+];
+
 #[derive(Clone)]
 pub struct ServiceConfiguration {
     authorization_endpoint: Url,
@@ -105,6 +118,7 @@ pub struct AuthorizationRequest {
     redirect_uri: Url,
     scopes: Vec<String>,
     additional_parameters: BTreeMap<String, String>,
+    additional_token_parameters: BTreeMap<String, String>,
 }
 
 impl AuthorizationRequest {
@@ -132,6 +146,7 @@ impl AuthorizationRequest {
             redirect_uri,
             scopes,
             additional_parameters: BTreeMap::new(),
+            additional_token_parameters: BTreeMap::new(),
         })
     }
 
@@ -148,6 +163,17 @@ impl AuthorizationRequest {
         }
 
         self.additional_parameters.insert(name, value.into());
+        Ok(self)
+    }
+
+    pub fn with_additional_token_parameter(
+        mut self,
+        name: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Result<Self> {
+        let name = name.into();
+        validate_additional_token_parameter(&name)?;
+        self.additional_token_parameters.insert(name, value.into());
         Ok(self)
     }
 
@@ -187,6 +213,7 @@ impl AuthorizationRequest {
             redirect_uri: self.redirect_uri,
             token_endpoint: self.configuration.token_endpoint,
             client_id: self.client_id,
+            additional_token_parameters: self.additional_token_parameters,
             state,
             nonce,
             pkce,
@@ -199,6 +226,7 @@ pub struct AuthorizationSession {
     redirect_uri: Url,
     token_endpoint: Url,
     client_id: String,
+    additional_token_parameters: BTreeMap<String, String>,
     state: String,
     nonce: Option<String>,
     pkce: PkcePair,
@@ -284,14 +312,16 @@ impl AuthorizationSession {
             ));
         }
 
-        let body = form_urlencoded::Serializer::new(String::new())
-            .append_pair("grant_type", "authorization_code")
+        let mut form = form_urlencoded::Serializer::new(String::new());
+        form.append_pair("grant_type", "authorization_code")
             .append_pair("code", &response.code)
             .append_pair("redirect_uri", self.redirect_uri.as_str())
             .append_pair("client_id", &self.client_id)
-            .append_pair("code_verifier", self.pkce.verifier())
-            .finish()
-            .into_bytes();
+            .append_pair("code_verifier", self.pkce.verifier());
+        for (name, value) in &self.additional_token_parameters {
+            form.append_pair(name, value);
+        }
+        let body = form.finish().into_bytes();
         send_token_request(&self.token_endpoint, body, transport, cancellation).await
     }
 }
@@ -380,11 +410,30 @@ impl AuthenticationState {
         transport: &dyn HttpTransport,
         cancellation: CancellationHandle,
     ) -> Result<()> {
+        self.refresh_with_additional_parameters(
+            configuration,
+            client_id,
+            &BTreeMap::new(),
+            transport,
+            cancellation,
+        )
+        .await
+    }
+
+    pub async fn refresh_with_additional_parameters(
+        &mut self,
+        configuration: &ServiceConfiguration,
+        client_id: &str,
+        additional_parameters: &BTreeMap<String, String>,
+        transport: &dyn HttpTransport,
+        cancellation: CancellationHandle,
+    ) -> Result<()> {
         if client_id.trim().is_empty() {
             return Err(AuthError::InvalidConfiguration(
                 "client ID must not be empty",
             ));
         }
+        validate_additional_token_parameters(additional_parameters)?;
         let refresh_token = self
             .token_response
             .refresh_token
@@ -394,12 +443,14 @@ impl AuthenticationState {
                 "authentication state has no refresh token",
             ))?;
 
-        let body = form_urlencoded::Serializer::new(String::new())
-            .append_pair("grant_type", "refresh_token")
+        let mut form = form_urlencoded::Serializer::new(String::new());
+        form.append_pair("grant_type", "refresh_token")
             .append_pair("refresh_token", refresh_token)
-            .append_pair("client_id", client_id)
-            .finish()
-            .into_bytes();
+            .append_pair("client_id", client_id);
+        for (name, value) in additional_parameters {
+            form.append_pair(name, value);
+        }
+        let body = form.finish().into_bytes();
         let mut refreshed =
             send_token_request(&configuration.token_endpoint, body, transport, cancellation)
                 .await?;
@@ -550,6 +601,22 @@ fn validate_endpoint(endpoint: &Url) -> Result<()> {
         return Err(AuthError::InvalidConfiguration(
             "endpoints must use HTTPS or loopback HTTP without user info or fragments",
         ));
+    }
+    Ok(())
+}
+
+fn validate_additional_token_parameter(name: &str) -> Result<()> {
+    if name.is_empty() || RESERVED_TOKEN_PARAMETERS.contains(&name) {
+        return Err(AuthError::InvalidConfiguration(
+            "additional token parameter has an empty or reserved name",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_additional_token_parameters(parameters: &BTreeMap<String, String>) -> Result<()> {
+    for name in parameters.keys() {
+        validate_additional_token_parameter(name)?;
     }
     Ok(())
 }
@@ -783,11 +850,14 @@ mod tests {
                 "expires_in":3600
             }"#,
         );
+        let additional_parameters =
+            BTreeMap::from([("audience".to_owned(), "https://api.example".to_owned())]);
 
         state
-            .refresh(
+            .refresh_with_additional_parameters(
                 &service_configuration(),
                 "native-client",
+                &additional_parameters,
                 &transport,
                 CancellationHandle::new(),
             )
@@ -809,6 +879,10 @@ mod tests {
         assert_eq!(
             form.get("client_id").map(String::as_str),
             Some("native-client")
+        );
+        assert_eq!(
+            form.get("audience").map(String::as_str),
+            Some("https://api.example")
         );
         assert_eq!(state.token_response().access_token, "new-access");
         assert_eq!(
@@ -921,6 +995,30 @@ mod tests {
                 .await,
             Err(AuthError::InvalidConfiguration(
                 "authentication state has no refresh token"
+            ))
+        ));
+        assert!(transport.request.lock().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn refresh_rejects_reserved_additional_parameters_before_sending() {
+        let mut state = authentication_state();
+        let additional_parameters =
+            BTreeMap::from([("client_secret".to_owned(), "not-allowed".to_owned())]);
+        let transport = test_transport(StatusCode::OK, br#"{}"#);
+
+        assert!(matches!(
+            state
+                .refresh_with_additional_parameters(
+                    &service_configuration(),
+                    "native-client",
+                    &additional_parameters,
+                    &transport,
+                    CancellationHandle::new(),
+                )
+                .await,
+            Err(AuthError::InvalidConfiguration(
+                "additional token parameter has an empty or reserved name"
             ))
         ));
         assert!(transport.request.lock().unwrap().is_none());
@@ -1112,9 +1210,26 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn additional_token_parameters_cannot_override_protocol_or_client_fields() {
+        for name in ["grant_type", "refresh_token", "client_id", "client_secret"] {
+            let result = request(&[]).with_additional_token_parameter(name, "caller-value");
+            assert!(matches!(
+                result,
+                Err(AuthError::InvalidConfiguration(
+                    "additional token parameter has an empty or reserved name"
+                ))
+            ));
+        }
+    }
+
     #[tokio::test]
     async fn code_exchange_sends_verifier_and_preserves_unknown_token_fields() {
-        let session = request(&["openid"]).begin().unwrap();
+        let session = request(&["openid"])
+            .with_additional_token_parameter("audience", "https://api.example")
+            .unwrap()
+            .begin()
+            .unwrap();
         let redirect = Url::parse(&format!(
             "com.example.app:/oauth2redirect?code=auth-code&state={}",
             session.state
@@ -1160,6 +1275,10 @@ mod tests {
             Some("authorization_code")
         );
         assert_eq!(form.get("code").map(String::as_str), Some("auth-code"));
+        assert_eq!(
+            form.get("audience").map(String::as_str),
+            Some("https://api.example")
+        );
         assert_eq!(
             URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes())),
             challenge
