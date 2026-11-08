@@ -89,6 +89,7 @@ Carthage remain candidates for later evaluation.
 - [Google Play Android device dashboard](https://developer.android.com/about/dashboards)
 - [RFC 8252: OAuth 2.0 for Native Apps](https://www.rfc-editor.org/rfc/rfc8252)
 - [RFC 6749: Authorization Response](https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2)
+- [OpenID Connect RP-Initiated Logout 1.0](https://openid.net/specs/openid-connect-rpinitiated-1_0.html)
 - [UniFFI documentation](https://mozilla.github.io/uniffi-rs/latest/)
 - [UniFFI async/Future support](https://mozilla.github.io/uniffi-rs/latest/futures.html)
 - [UniFFI Swift bindings](https://mozilla.github.io/uniffi-rs/latest/swift/overview.html)

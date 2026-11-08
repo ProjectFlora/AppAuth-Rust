@@ -66,6 +66,17 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 - Do not impose an implicit authorization timeout. The host application owns
   timeout policy and cancels through the operation's cancellation handle.
 
+## End-session / logout
+
+- Use the discovered `end_session_endpoint` or configure one explicitly; it
+  must use HTTPS. Providers without an end-session endpoint cannot use this
+  flow.
+- Build an RP-Initiated Logout URL with the client ID, optional ID Token hint,
+  and optional post-logout redirect URI. When a redirect URI is supplied, the
+  core generates state and validates the registered callback URI and returned
+  state.
+- The host application launches the external browser and handles its lifecycle.
+
 ## Platform plan
 
 | Platform | Initial scope |
