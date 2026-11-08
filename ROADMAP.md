@@ -105,8 +105,10 @@ The initial crate implementation currently provides endpoint configuration,
 Authorization Code + PKCE request construction, state and redirect validation,
 an asynchronous cancellable HTTP transport, code exchange, and token response
 parsing, OIDC discovery, explicit refresh-token exchange, and serializable
-authentication state. ID Token validation, end-session, dynamic registration,
-UniFFI integration, and native platform adapters remain unimplemented.
+authentication state with additional token-request parameters and opaque
+unrecognized response fields. ID Token validation, end-session, dynamic
+registration, UniFFI integration, and native platform adapters remain
+unimplemented.
 
 ## Initial validation checkpoints
 
