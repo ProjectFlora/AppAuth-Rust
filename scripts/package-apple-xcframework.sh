@@ -102,12 +102,13 @@ xcrun swiftc \
     -Xcc "-fmodule-map-file=$headers/module.modulemap" \
     -L "$repo_root/target/apple" \
     -lappauth_rust_macos \
-    -o "$repo_root/target/apple/mac-loopback-smoke-static" \
+    -o "$repo_root/target/apple/mac-authorization-flow-smoke-static" \
     "$generated/swift/appauth_rust.swift" \
     "$repo_root/native/apple/MacOSAuthorizationAdapter.swift" \
+    "$repo_root/native/apple/MacOSMockOAuthProvider.swift" \
     "$repo_root/native/apple/URLSessionNativeHttpTransport.swift" \
-    "$repo_root/native/apple/MacOSLoopbackListenerSmoke.swift"
-"$repo_root/target/apple/mac-loopback-smoke-static"
+    "$repo_root/native/apple/MacOSAuthorizationFlowSmoke.swift"
+"$repo_root/target/apple/mac-authorization-flow-smoke-static"
 
 ditto -c -k --sequesterRsrc --keepParent \
     "$package_root" \
