@@ -209,8 +209,9 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   verifies both entries and uploads the AAR as a workflow artifact. The
   versioned GitHub Release asset, checksums, and transitive dependency
   installation instructions remain release-preparation work.
-- The Android authorization flow has unit coverage but has not yet been
-  exercised end-to-end on an emulator or device.
+- Android callback activity routing is exercised on an API 34 emulator.
+  Complete authorization through an external browser and a live identity
+  provider is not yet tested end-to-end.
 
 ## Platform plan
 

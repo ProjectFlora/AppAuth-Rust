@@ -112,10 +112,11 @@ OIDC ID Token validation. The UniFFI facade and reproducible binding generation
 are in place. Initial iOS/iPadOS and macOS authorization adapters are
 implemented and covered by SDK type-checking and a macOS loopback smoke test.
 The Android authorization adapter is implemented with App Links/custom-scheme
-selection and unit-tested redirect handling. CI cross-compiles all documented
-Apple, Android, and Windows Rust targets and verifies Rust libraries are
-packaged in the Android release AAR. End-to-end platform flows and release
-validation remain.
+selection, unit-tested redirect handling, and emulator-tested callback
+activity routing. CI cross-compiles all documented Apple, Android, and Windows
+Rust targets and verifies Rust libraries are packaged in the Android release
+AAR. Full authorization through external browsers and live identity providers,
+and release validation, remain.
 
 ## Initial validation checkpoints
 

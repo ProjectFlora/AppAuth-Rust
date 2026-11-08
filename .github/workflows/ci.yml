@@ -78,6 +78,17 @@ jobs:
           echo "ANDROID_API_LEVEL=$ANDROID_API_LEVEL" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./native/android/gradlew -p native/android testDebugUnitTest
+      - name: Enable Android emulator hardware acceleration
+        run: sudo chmod a+rw /dev/kvm
+      - name: Run Android callback tests on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-linux-hw-accel: false
+          disable-animations: true
+          script: ./native/android/gradlew -p native/android connectedDebugAndroidTest
       - run: ./native/android/gradlew -p native/android assembleRelease
       - name: Verify Android native libraries in AAR
         run: |
