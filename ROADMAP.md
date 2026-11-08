@@ -40,17 +40,17 @@ This roadmap tracks work remaining for the initial scope in
 
 ## Work phases
 
-1. **Finalize the feature matrix:** Review the proposed initial, later, and
-   out-of-scope features in [FEATURE_MATRIX.md](FEATURE_MATRIX.md), confirm the
-   feature boundary, and resolve the remaining open decisions above.
-2. **Establish the Rust foundation:** Create the crate/workspace structure,
-   select core dependencies, define public types and error behavior, choose
-   the UniFFI packaging approach, and verify the planned Apple, Android, and
-   Windows build targets.
-3. **Implement the shared authorization core:** Add endpoint configuration
-   and discovery, Authorization Code + PKCE request construction, callback
-   validation, code exchange, token response handling, refresh behavior, OIDC
-   ID Token signature and claim validation, end-session, and dynamic client
+1. **Finalize the initial feature boundary (complete):** Review the proposed
+   initial, later, and out-of-scope features in [FEATURE_MATRIX.md](FEATURE_MATRIX.md),
+   confirm the feature boundary, and resolve the remaining open decisions above.
+2. **Establish the Rust foundation (in progress):** Create the crate/workspace
+   structure, select core dependencies, define public types and error behavior,
+   choose the UniFFI packaging approach, and verify the planned Apple, Android,
+   and Windows build targets.
+3. **Implement the shared authorization core (in progress):** Add endpoint
+   configuration and discovery, Authorization Code + PKCE request construction,
+   callback validation, code exchange, token response handling, refresh behavior,
+   OIDC ID Token signature and claim validation, end-session, and dynamic client
    registration for public clients. Enforce exact redirect and state checks,
    with explicit cancellation for in-flight operations.
 4. **Integrate initial native platforms:** Add external-browser and redirect
@@ -61,6 +61,13 @@ This roadmap tracks work remaining for the initial scope in
 6. **Validate and prepare a release:** Add unit and protocol integration tests,
    platform build/flow tests, security-focused edge-case coverage, examples,
    API documentation, and a release/support matrix.
+
+The initial crate implementation currently provides endpoint configuration,
+Authorization Code + PKCE request construction, state and redirect validation,
+an asynchronous cancellable HTTP transport, code exchange, and token response
+parsing. Discovery, refresh, serializable authentication state, ID Token
+validation, end-session, dynamic registration, UniFFI integration, and native
+platform adapters remain unimplemented.
 
 ## Initial validation checkpoints
 

@@ -1,0 +1,133 @@
+name: Rust CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+concurrency:
+  group: rust-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked --workspace --all-targets --all-features
+
+  lint:
+    name: Formatting and Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+  coverage:
+    name: Coverage
+    outputs:
+      line_coverage: ${{ steps.coverage_summary.outputs.line_coverage }}
+      function_coverage: ${{ steps.coverage_summary.outputs.function_coverage }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+      - name: Generate coverage summary
+        id: coverage_summary
+        run: |
+          cargo llvm-cov --workspace --all-targets --all-features --summary-only | tee coverage-summary.txt
+          cat coverage-summary.txt >> "$GITHUB_STEP_SUMMARY"
+          line_coverage=$(awk '$1 == "TOTAL" { print $10; exit }' coverage-summary.txt)
+          function_coverage=$(awk '$1 == "TOTAL" { print $7; exit }' coverage-summary.txt)
+          test -n "$line_coverage"
+          test -n "$function_coverage"
+          echo "line_coverage=$line_coverage" >> "$GITHUB_OUTPUT"
+          echo "function_coverage=$function_coverage" >> "$GITHUB_OUTPUT"
+      - name: Generate LCOV report
+        run: cargo llvm-cov --workspace --all-targets --all-features --lcov --output-path lcov.info
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lcov-coverage
+          path: lcov.info
+          if-no-files-found: error
+          retention-days: 14
+
+  # GITHUB_TOKEN is write-enabled only for same-repository PRs; fork PRs keep read-only checks.
+  report:
+    name: PR report
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: [test, lint, coverage]
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- appauth-rust-ci-report -->';
+            const checks = [
+              ['Tests', '${{ needs.test.result }}'],
+              ['Formatting and Clippy', '${{ needs.lint.result }}'],
+            ];
+            const resultLabel = result =>
+              result === 'success' ? '✅ passed' :
+              result === 'failure' ? '❌ failed' :
+              `⚠️ ${result}`;
+            const coverageResult = '${{ needs.coverage.result }}';
+            const formatCoverage = value =>
+              /^\d{1,3}(?:\.\d+)?%$/.test(value) ? value : 'unavailable';
+            const lineCoverage = formatCoverage('${{ needs.coverage.outputs.line_coverage }}');
+            const functionCoverage = formatCoverage('${{ needs.coverage.outputs.function_coverage }}');
+            const { owner, repo } = context.repo;
+            const body = [
+              marker,
+              '### CI results',
+              '',
+              '| Check | Result |',
+              '| --- | --- |',
+              ...checks.map(([name, result]) => `| ${name} | ${resultLabel(result)} |`),
+              `| Coverage | ${resultLabel(coverageResult)} — lines ${lineCoverage}, functions ${functionCoverage} |`,
+              '',
+              `[View workflow run](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId})`,
+            ].join('\n');
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(comment =>
+              comment.user?.login === 'github-actions[bot]' &&
+              comment.body?.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
