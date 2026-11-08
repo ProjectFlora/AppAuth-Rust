@@ -1321,6 +1321,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn token_requests_surface_http_status_without_an_oauth_error_body() {
+        let transport = test_transport(StatusCode::SERVICE_UNAVAILABLE, b"temporarily unavailable");
+
+        assert!(matches!(
+            send_token_request(
+                &Url::parse("https://issuer.example/token").unwrap(),
+                Vec::new(),
+                &transport,
+                CancellationHandle::new(),
+            )
+            .await,
+            Err(AuthError::HttpStatus(status)) if status == StatusCode::SERVICE_UNAVAILABLE
+        ));
+    }
+
+    #[tokio::test]
     async fn code_exchange_rejects_response_from_another_session() {
         let first_session = request(&[]).begin().unwrap();
         let second_session = request(&[]).begin().unwrap();
