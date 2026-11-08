@@ -1,6 +1,7 @@
 mod authorization;
 mod cancellation;
 mod error;
+mod id_token;
 mod pkce;
 mod transport;
 

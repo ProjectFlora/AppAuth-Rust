@@ -8,6 +8,9 @@ This roadmap tracks work remaining for the initial scope in
 - **OIDC scope:** Include ID Token validation in the initial release, including
   signature verification and validation of required claims such as issuer,
   audience, expiration, and nonce.
+- **OIDC algorithms and JWKS:** Accept RS256 and ES256 only; cache JWKS for up
+  to 300 seconds, respect stricter server cache directives, and refresh once
+  when a cached set does not contain the presented key ID.
 - **Authentication state:** The Rust core models serializable authentication
   state; persistence and encryption are the host application's responsibility.
 - **Native API surface:** Expose the Rust core through thin Swift adapters for

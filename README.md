@@ -87,6 +87,23 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 - The response exposes only the client ID. Responses containing a client secret
   or specifying a non-native/confidential client are rejected.
 
+## OpenID Connect ID Token validation
+
+- Authorization requests containing `openid` require an issuer and `jwks_uri`
+  from discovery or `with_oidc_validation_endpoints`. The code exchange rejects
+  missing ID Tokens and verifies any returned ID Token before exposing it.
+- Only RS256 and ES256 signatures are accepted. Issuer, audience, subject,
+  expiry, issued-at time, authorized party, and the request nonce are checked;
+  time checks allow 60 seconds of clock skew.
+- JWKS responses follow their `Cache-Control` directives with a maximum
+  300-second cache lifetime. An unknown `kid` triggers one JWKS refresh when a
+  cached set was used. Refresh responses that include a new ID Token are also
+  verified before authentication state is updated.
+- Create state with `AuthorizationSession::authentication_state` after code
+  exchange so the request nonce is persisted and checked on refresh. The
+  returned serializable state contains tokens and nonce; the host application
+  remains responsible for secure storage and encryption.
+
 ## Platform plan
 
 | Platform | Initial scope |
