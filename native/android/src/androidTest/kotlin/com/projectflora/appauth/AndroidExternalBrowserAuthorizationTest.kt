@@ -21,8 +21,10 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
+import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.URL
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -35,9 +37,18 @@ class AndroidExternalBrowserAuthorizationTest {
     @Test
     fun customTabAuthorizationReturnsThroughCallbackAndExchangesCode() = runBlocking {
         MockAuthorizationServer().use { server ->
+            val healthConnection =
+                URL("${server.baseUrl}/health").openConnection() as HttpURLConnection
+            try {
+                assertEquals(200, healthConnection.responseCode)
+            } finally {
+                healthConnection.disconnect()
+            }
+
             val scenario = ActivityScenario.launch(AndroidAuthorizationFlowTestActivity::class.java)
             try {
                 val result = CompletableDeferred<Result<uniffi.appauth_rust.FfiAuthenticationState>>()
+                val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
                 val redirectUri = "com.example.app:/oauth/callback"
                 scenario.onActivity { activity ->
                     activity.authorize(
@@ -59,6 +70,7 @@ class AndroidExternalBrowserAuthorizationTest {
                     ) { result.complete(it) }
                 }
 
+                continueChromeSetup(device)
                 val authorizationParameters =
                     withTimeoutOrNull(30_000) {
                         select<Map<String, String>> {
@@ -74,7 +86,6 @@ class AndroidExternalBrowserAuthorizationTest {
                 assertEquals(redirectUri, authorizationParameters["redirect_uri"])
                 assertEquals("S256", authorizationParameters["code_challenge_method"])
 
-                val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
                 assertTrue(
                     "Mock provider page did not load in the external browser",
                     device.wait(Until.hasObject(By.text("Authorize")), 20_000),
@@ -123,6 +134,14 @@ class AndroidExternalBrowserAuthorizationTest {
             if (device.wait(Until.hasObject(By.text(label)), 2_000)) {
                 device.findObject(By.text(label))?.click()
                 return
+            }
+        }
+
+        private fun continueChromeSetup(device: UiDevice) {
+            for (label in listOf("Accept & continue", "No thanks", "Use without an account")) {
+                if (device.wait(Until.hasObject(By.text(label)), 2_000)) {
+                    device.findObject(By.text(label))?.click()
+                }
             }
         }
     }
@@ -190,6 +209,7 @@ private class MockAuthorizationServer : Closeable {
         val uri = Uri.parse("$baseUrl$requestTarget")
 
         when (uri.path) {
+            "/health" -> respond(output, 200, "text/plain", "ok".toByteArray())
             "/authorize" -> {
                 val parameters = parseForm(uri.encodedQuery.orEmpty())
                 authorizationRequest.complete(parameters)
