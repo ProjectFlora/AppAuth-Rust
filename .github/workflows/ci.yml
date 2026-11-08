@@ -44,7 +44,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - run: scripts/check-apple-targets.sh
       - run: scripts/check-apple-adapters.sh
+
+  windows_core:
+    name: Windows core target validation
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --lib --target x86_64-pc-windows-msvc
 
   android_adapters:
     name: Android adapters validation
@@ -119,7 +129,7 @@ jobs:
   report:
     name: PR report
     if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    needs: [test, apple_adapters, android_adapters, lint, coverage]
+    needs: [test, apple_adapters, android_adapters, windows_core, lint, coverage]
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -132,6 +142,7 @@ jobs:
               ['Tests', '${{ needs.test.result }}'],
               ['Apple adapters validation', '${{ needs.apple_adapters.result }}'],
               ['Android adapters validation', '${{ needs.android_adapters.result }}'],
+              ['Windows core target validation', '${{ needs.windows_core.result }}'],
               ['Formatting and Clippy', '${{ needs.lint.result }}'],
             ];
             const resultLabel = result =>
