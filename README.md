@@ -140,6 +140,10 @@ The project is not yet published on crates.io, Swift Package Manager, Maven
 Central, or Carthage. The initial native distribution decision is versioned
 GitHub Release assets: an Apple XCFramework and an Android AAR. Those versioned
 packages and checksums are not published yet.
+The release workflow accepts only SemVer tags that point to `main` and match
+the crate version. It publishes the Apple XCFramework, Android AAR, Rust API
+reference, and SHA-256 checksums. Do not tag v0.1.0 until the remaining
+release-candidate checks are complete.
 
 ## Apple adapters
 
