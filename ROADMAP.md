@@ -88,7 +88,7 @@ This roadmap tracks work remaining for the initial scope in
    and error behavior, implement the pinned UniFFI proc-macro interface and
    reproducible binding generation, and verify the planned Apple, Android, and
    Windows build targets.
-3. **Implement the shared authorization core (in progress):** Add endpoint
+3. **Implement the shared authorization core (complete):** Provide endpoint
    configuration and discovery, Authorization Code + PKCE request construction,
    callback validation, code exchange, token response handling, refresh behavior,
    OIDC ID Token signature and claim validation, end-session, and dynamic client
@@ -104,12 +104,13 @@ This roadmap tracks work remaining for the initial scope in
    platform build/flow tests, security-focused edge-case coverage, examples,
    API documentation, and a release/support matrix.
 
-The Rust core now provides endpoint configuration and discovery, Authorization
+The Rust core provides endpoint configuration and discovery, Authorization
 Code + PKCE, callback validation, cancellable HTTP, code exchange and token
 parsing, explicit refresh with serializable authentication state, additional
-token parameters, RP-Initiated Logout, and public-client dynamic registration.
-ID Token validation, UniFFI integration, and native platform adapters remain
-unimplemented.
+token parameters, RP-Initiated Logout, public-client dynamic registration, and
+OIDC ID Token validation. Remaining implementation work is UniFFI integration
+and native platform adapters; cross-target and protocol/platform release
+validation also remains.
 
 ## Initial validation checkpoints
 
