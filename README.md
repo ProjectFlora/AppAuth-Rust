@@ -7,14 +7,20 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 ## Initial scope
 
 - Implement a shared Rust core for native applications.
+- Expose the core to iOS/iPadOS and macOS through thin Swift adapters, and to
+  Android through a thin Kotlin adapter generated with UniFFI. Keep browser
+  launch and redirect lifecycle in these adapters.
 - Start with Authorization Code + PKCE, authorization server discovery or
   explicit endpoint configuration, authorization code exchange, and token
   refresh.
 - Include OpenID Connect ID Token validation in the initial release.
+- Include OIDC end-session and dynamic client registration for public clients.
+- Allow additional authorization and token request parameters.
+- Model authentication state in the Rust core and make it serializable; host
+  applications are responsible for persistence and encryption.
 - Use the external browser for authorization; do not embed the flow in a
   WebView.
-- Keep browser launching and redirect handling in platform-specific
-  integration layers rather than the shared core.
+- Keep OAuth/OIDC protocol handling in the shared Rust core.
 
 ## Platform plan
 
@@ -43,4 +49,5 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 The OS versions actually supported by a release must be checked and recorded
 at release time; these policies do not promise fixed version numbers.
 
-See [ROADMAP.md](ROADMAP.md) for the remaining design decisions and work phases.
+See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for the feature-scope proposal and
+[ROADMAP.md](ROADMAP.md) for remaining design decisions and work phases.
