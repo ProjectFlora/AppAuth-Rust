@@ -231,6 +231,9 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   - Windows shared core: `x86_64-pc-windows-msvc`
   - Linux: `x86_64-unknown-linux-gnu` for development and CI only; Linux is
     not an initial-release platform commitment.
+- **Cross-target CI:** Build the Rust core for every documented Apple, Android,
+  and Windows release target. These checks do not package release artifacts or
+  exercise authorization flows on devices.
 - **Crate boundary:** Keep the protocol implementation in the single
   `appauth-rust` Rust crate. Swift and Kotlin adapters are native-language
   packages; introduce a Cargo workspace only if a separate Rust crate is
