@@ -111,8 +111,9 @@ token parameters, RP-Initiated Logout, public-client dynamic registration, and
 OIDC ID Token validation. The UniFFI facade and reproducible binding generation
 are in place. Initial iOS/iPadOS and macOS authorization adapters are
 implemented and covered by SDK type-checking and a macOS loopback smoke test.
-Android integration, cross-target builds, end-to-end platform flows, and
-release validation remain.
+The Android authorization adapter is implemented with App Links/custom-scheme
+selection and unit-tested redirect handling. Cross-target builds, end-to-end
+platform flows, and release validation remain.
 
 ## Initial validation checkpoints
 

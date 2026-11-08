@@ -136,6 +136,77 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   the adapters against the iOS and macOS SDKs, and smoke-test the macOS
   loopback listener.
 
+## Android adapter
+
+- `native/android` launches authorization in a Custom Tab. It uses the HTTPS
+  App Link redirect only when Android reports the host as verified and the
+  configured callback activity resolves for that URI; otherwise it selects
+  the registered custom-scheme fallback.
+- Declare both registered redirect URIs with the authorization server. The
+  host app must register
+  `com.projectflora.appauth.AndroidAuthorizationCallbackActivity` with
+  `android:exported="true"` and browsable intent filters for those URIs. Set
+  `android:autoVerify="true"` on the HTTPS filter and host the matching
+  `assetlinks.json` file. The adapter ignores callbacks that do not match the
+  active redirect's scheme, host, port, and path; the Rust core validates the
+  complete callback and state.
+- For example, add these filters to the callback activity in the host app's
+  manifest, replacing the sample host and scheme with the registered values:
+
+  ```xml
+  <activity
+      android:name="com.projectflora.appauth.AndroidAuthorizationCallbackActivity"
+      android:exported="true"
+      android:noHistory="true">
+      <intent-filter android:autoVerify="true">
+          <action android:name="android.intent.action.VIEW" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <category android:name="android.intent.category.BROWSABLE" />
+          <data
+              android:scheme="https"
+              android:host="login.example.com"
+              android:path="/oauth/callback" />
+      </intent-filter>
+      <intent-filter>
+          <action android:name="android.intent.action.VIEW" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <category android:name="android.intent.category.BROWSABLE" />
+          <data
+              android:scheme="com.example.app"
+              android:path="/oauth/callback" />
+      </intent-filter>
+  </activity>
+  ```
+
+- Pass both URIs in `AndroidRedirectConfiguration`; the adapter selects the
+  verified HTTPS App Link when available and otherwise uses the custom scheme.
+  Supply a native transport when authorizing:
+
+  ```kotlin
+  val adapter = AndroidAuthorizationAdapter(activity)
+  val state = adapter.authorize(
+      configuration,
+      options,
+      AndroidRedirectConfiguration(
+          appLinkUri = "https://login.example.com/oauth/callback",
+          customSchemeUri = "com.example.app:/oauth/callback",
+      ),
+      UrlConnectionNativeHttpTransport(),
+  )
+  ```
+
+- `UrlConnectionNativeHttpTransport` does not follow HTTP redirects and
+  disconnects active requests when its cancellation handle is cancelled.
+  `AndroidAuthorizationAdapter.cancel()` stops the callback wait and cancels
+  core work; the host remains responsible for authorization timeout policy.
+- Build and run the adapter unit tests with
+  `./native/android/gradlew -p native/android testDebugUnitTest`. The module
+  targets the documented Android API 34 minimum and regenerates UniFFI Kotlin
+  bindings under its build directory.
+- The source module does not yet package Android-target Rust shared libraries
+  into a distributable AAR; cross-target builds and release artifact packaging
+  remain release-validation work.
+
 ## Platform plan
 
 | Platform | Initial scope |
