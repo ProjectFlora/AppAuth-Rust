@@ -104,9 +104,9 @@ This roadmap tracks work remaining for the initial scope in
 The initial crate implementation currently provides endpoint configuration,
 Authorization Code + PKCE request construction, state and redirect validation,
 an asynchronous cancellable HTTP transport, code exchange, and token response
-parsing. Discovery, refresh, serializable authentication state, ID Token
-validation, end-session, dynamic registration, UniFFI integration, and native
-platform adapters remain unimplemented.
+parsing, OIDC discovery, explicit refresh-token exchange, and serializable
+authentication state. ID Token validation, end-session, dynamic registration,
+UniFFI integration, and native platform adapters remain unimplemented.
 
 ## Initial validation checkpoints
 

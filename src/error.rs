@@ -22,6 +22,8 @@ pub enum AuthError {
     HttpStatus(StatusCode),
     #[error("operation was cancelled")]
     Cancelled,
+    #[error("system clock is before the Unix epoch")]
+    Clock,
     #[error("secure random number generation failed")]
     Randomness,
 }
