@@ -173,11 +173,10 @@ release-candidate checks are complete.
   `scripts/package-apple-xcframework.sh 0.1.0`. It creates
   `target/apple/release-package/AppAuthRust-Apple-0.1.0.zip`, containing an
   `AppAuthRust.xcframework` with static Rust libraries for iOS device,
-  iOS simulator, and universal macOS, plus the generated Swift API source.
-- Add `AppAuthRust.xcframework` to the Xcode project and add
-  `Swift/appauth_rust.swift` from the archive to the app target. The CI
-  `apple-xcframework` artifact is for validation and expires after 14 days.
-  Versioned GitHub Release assets and checksums remain pending.
+  iOS simulator, and universal macOS, the generated Swift API source, and an
+  installation guide. See [Swift XCFramework installation](docs/swift-xcframework.md).
+  The CI `apple-xcframework` artifact is for validation and expires after
+  14 days. Versioned GitHub Release assets and checksums remain pending.
 
 ## Android adapter
 

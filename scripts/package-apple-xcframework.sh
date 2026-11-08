@@ -53,6 +53,7 @@ done
 mkdir -p "$repo_root/target/apple" "$package_root/Swift" "$headers"
 cp "$generated/swift/appauth_rust.swift" "$package_root/Swift/"
 cp "$repo_root/LICENSE" "$package_root/"
+cp "$repo_root/docs/swift-xcframework.md" "$package_root/README.md"
 cp "$generated/swift/appauth_rustFFI.h" "$headers/"
 cp "$generated/swift/appauth_rustFFI.modulemap" "$headers/module.modulemap"
 
