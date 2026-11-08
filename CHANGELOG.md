@@ -15,7 +15,8 @@ changes remain under `Unreleased`.
 - UniFFI-generated Swift and Kotlin APIs, with external-browser authorization
   adapters for iOS/iPadOS, macOS, and Android.
 - Cross-target CI for Apple, Android, and Windows core targets; Android release
-  AAR packaging and callback-routing instrumentation checks.
+  AAR packaging, Apple XCFramework packaging, and callback-routing
+  instrumentation checks.
 
 ### Security
 
@@ -29,3 +30,5 @@ changes remain under `Unreleased`.
 - The initial distribution plan is versioned GitHub Release assets containing
   an Apple XCFramework and Android AAR. These release packages and checksums
   have not yet been published.
+- Version tags follow SemVer as vMAJOR.MINOR.PATCH; the planned initial release
+  is v0.1.0, matching the crate version.

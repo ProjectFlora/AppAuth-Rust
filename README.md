@@ -163,6 +163,18 @@ packages and checksums are not published yet.
   the adapters against the iOS and macOS SDKs, and smoke-test the macOS
   loopback listener.
 
+## Apple binary package
+
+- Build a package for a specific version with
+  `scripts/package-apple-xcframework.sh 0.1.0`. It creates
+  `target/apple/release-package/AppAuthRust-Apple-0.1.0.zip`, containing an
+  `AppAuthRust.xcframework` with static Rust libraries for iOS device,
+  iOS simulator, and universal macOS, plus the generated Swift API source.
+- Add `AppAuthRust.xcframework` to the Xcode project and add
+  `Swift/appauth_rust.swift` from the archive to the app target. The CI
+  `apple-xcframework` artifact is for validation and expires after 14 days.
+  Versioned GitHub Release assets and checksums remain pending.
+
 ## Android adapter
 
 - `native/android` launches authorization in a Custom Tab. It uses the HTTPS
