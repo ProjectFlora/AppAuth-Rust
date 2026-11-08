@@ -16,11 +16,30 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 - Include OpenID Connect ID Token validation in the initial release.
 - Include OIDC end-session and dynamic client registration for public clients.
 - Allow additional authorization and token request parameters.
+- Preserve unrecognized response parameters as opaque values without
+  interpreting provider-specific semantics.
 - Model authentication state in the Rust core and make it serializable; host
   applications are responsible for persistence and encryption.
+- Expose explicit cancellation for in-flight operations, distinguish it from
+  authorization-server errors, and propagate it to active work where the
+  platform and transport allow.
+- Use an asynchronous HTTP transport abstraction, with a Rust `reqwest`
+  implementation by default and the option for native adapters to provide
+  their own transport. Rust callers provide the Tokio runtime used by the
+  default transport.
 - Use the external browser for authorization; do not embed the flow in a
   WebView.
 - Keep OAuth/OIDC protocol handling in the shared Rust core.
+
+## Redirect policy
+
+- **iOS / iPadOS:** Prefer verified HTTPS redirects; allow a custom URI scheme
+  fallback. AppAuth-iOS requires iOS 17.4+ and `webcredentials` domain
+  association for HTTPS redirects.
+- **Android:** Prefer verified Android App Links; allow a custom URI scheme
+  fallback. App Links require API 23+ and domain association.
+- **macOS and Windows:** Use an HTTP loopback redirect on a dynamically
+  allocated port, bound only to the loopback interface.
 
 ## Platform plan
 

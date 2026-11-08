@@ -11,18 +11,19 @@ confirmation.
 | Authorization Code + PKCE | Supported | Supported | Initial — agreed |
 | Authorization server configuration and OIDC discovery | Supported | Supported | Initial — agreed |
 | External browser authorization | System authentication session; WebViews unsupported | Custom Tabs preferred; WebViews unsupported | Initial — agreed; platform adapters handle browser/UI |
-| Redirect capture and authorization response | iOS URI redirects; macOS loopback or custom scheme | Custom scheme or HTTPS App Links | Initial — agreed at high level; exact redirect modes remain open |
+| Redirect capture and authorization response | iOS HTTPS redirects or custom scheme; macOS loopback or custom scheme | Custom scheme or HTTPS App Links | Initial — agreed: iOS HTTPS preferred/custom fallback; Android App Links preferred/custom fallback; macOS/Windows loopback |
 | Code exchange, token responses, and refresh | Supported | Supported | Initial — agreed |
 | Authorization state and fresh-token convenience | `OIDAuthState` tracks requests/responses and supports refresh | `AuthState` supports JSON persistence and fresh-token action | Initial — agreed; serialize state in core, host app owns persistence and encryption |
+| Operation cancellation | Platform/browser cancellation is represented in flow results | Completion and cancellation use separate intents | Initial — agreed; expose explicit cancel handle and distinct cancellation result |
 | OIDC ID Token | Parses claims; explicitly does not verify JWT signatures | Validates selected claims; does not verify JWT signatures | Initial — agreed; verify signatures and required claims |
 | Additional authorization and token request parameters | Supported | Supported | Initial — agreed; constrain reserved/security-sensitive parameters |
-| Additional response parameters | Exposed by token response models | Exposed by token response models | Open — decide whether to preserve unrecognized response fields |
+| Additional response parameters | Exposed by token response models | Exposed by token response models | Initial — agreed; preserve unrecognized values opaquely without interpreting them |
 | OIDC end-session / logout | Supported | Supported | Initial — agreed |
 | Dynamic client registration | Supported | Supported | Initial — agreed for public clients; do not embed client secrets |
 | Browser selection/custom user agent | Custom external user agents | Browser matching and custom-tab selection | Later — platform-specific |
 | Native application API | Native Objective-C/Swift APIs | Native Java/Kotlin APIs | Initial — agreed; thin Swift and Kotlin adapters around the Rust core |
 | Rust-to-native bindings | N/A | N/A | Initial — agreed; UniFFI generates the Swift/Kotlin bindings |
-| Custom HTTP transport | Customizable URL session provider | Custom connection builder | Open — choose runtime/transport design before committing API |
+| HTTP transport | Customizable URL session provider | Custom connection builder | Initial — agreed; async abstraction, caller-runtime reqwest default, native override available |
 | Device Authorization Grant | Separate AppAuthTV implementation | Not part of the documented core flow | Deferred with tvOS |
 | Static client secret in a native app | API can accept a client secret | Supported, but upstream warns against static secrets | Out of scope — native clients are public clients |
 | Resource Owner Password / Implicit flows | Not part of the documented recommended flow | Not part of the documented recommended flow | Out of scope — use Authorization Code + PKCE |
@@ -67,3 +68,4 @@ Swift/Kotlin binding approach.
 - [UniFFI documentation](https://mozilla.github.io/uniffi-rs/latest/)
 - [UniFFI async/Future support](https://mozilla.github.io/uniffi-rs/latest/futures.html)
 - [UniFFI Swift bindings](https://mozilla.github.io/uniffi-rs/latest/swift/overview.html)
+- [UniFFI async API client example](https://github.com/mozilla/uniffi-rs/tree/main/examples/async-api-client)

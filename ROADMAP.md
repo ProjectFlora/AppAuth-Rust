@@ -15,21 +15,28 @@ This roadmap tracks work remaining for the initial scope in
   redirect lifecycle handling in those adapters.
 - **Binding mechanism:** Use UniFFI to generate Swift and Kotlin bindings.
   Define explicit cancellation behavior and platform packaging separately.
+- **HTTP architecture:** Use an asynchronous transport abstraction, with a
+  Rust `reqwest` implementation by default and native transport overrides
+  available to mobile adapters.
+- **Runtime ownership:** Rust callers provide the Tokio runtime used by the
+  default `reqwest` transport; native mobile adapters may use their own HTTP
+  clients.
+- **Redirect policy:** Prefer verified HTTPS links on iOS/iPadOS and Android,
+  with custom URI scheme fallbacks; use loopback redirects on macOS and Windows.
+- **Cancellation contract:** Expose an explicit, idempotent operation
+  cancellation handle and a distinct cancellation result; propagate
+  cancellation to active work where supported.
 
 ## Open decisions
 
-- **Async and HTTP design:** Choose an async/runtime strategy and decide how
-  callers configure or replace HTTP transport.
-- **Redirect support:** Specify supported redirect types and callback
-  lifecycle per platform, including cancellation and malformed or unexpected
-  responses.
+- **Redirect lifecycle:** Define callback validation, listener lifecycle,
+  cancellation, and malformed or unexpected response behavior for each
+  platform.
 - **Rust and packaging support:** Set the Rust MSRV, target architectures,
   crate boundaries, and distribution mechanisms for UniFFI-generated bindings.
-- **Cancellation behavior:** Design how a native caller cancels an in-flight
-  authorization, network, or refresh operation across the UniFFI boundary.
-- **Remaining feature boundary:** Decide how to expose unrecognized response
-  parameters and provider-specific extensions; review the remaining proposals
-  in [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
+- **Provider-specific behavior:** Decide whether to add any provider-specific
+  semantics beyond the agreed opaque request/response parameter support;
+  review the remaining proposals in [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
 
 ## Work phases
 
@@ -37,14 +44,15 @@ This roadmap tracks work remaining for the initial scope in
    out-of-scope features in [FEATURE_MATRIX.md](FEATURE_MATRIX.md), confirm the
    feature boundary, and resolve the remaining open decisions above.
 2. **Establish the Rust foundation:** Create the crate/workspace structure,
-   select core dependencies, define public types and error behavior, choose the
-   UniFFI packaging approach, and verify the planned Apple, Android, and
+   select core dependencies, define public types and error behavior, choose
+   the UniFFI packaging approach, and verify the planned Apple, Android, and
    Windows build targets.
 3. **Implement the shared authorization core:** Add endpoint configuration
    and discovery, Authorization Code + PKCE request construction, callback
    validation, code exchange, token response handling, refresh behavior, OIDC
    ID Token signature and claim validation, end-session, and dynamic client
-   registration for public clients.
+   registration for public clients. Enforce exact redirect and state checks,
+   with explicit cancellation for in-flight operations.
 4. **Integrate initial native platforms:** Add external-browser and redirect
    integrations for iOS/iPadOS, macOS, and Android while keeping UI and OS
    lifecycle concerns outside the shared protocol core.
