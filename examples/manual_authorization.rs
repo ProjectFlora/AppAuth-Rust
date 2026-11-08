@@ -33,7 +33,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )?
     .begin()?;
 
-    println!("Open this URL in your system browser:\n{}", session.authorization_url());
+    println!(
+        "Open this URL in your system browser:\n{}",
+        session.authorization_url()
+    );
     print!("Paste the complete redirect URL: ");
     io::stdout().flush()?;
 
