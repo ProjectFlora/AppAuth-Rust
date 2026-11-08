@@ -10,6 +10,8 @@ use crate::{
     AuthError, CancellationHandle, HttpRequest, HttpTransport, Result,
 };
 
+const OIDC_DISCOVERY_PATH: [&str; 2] = [".well-known", "openid-configuration"];
+
 const RESERVED_AUTHORIZATION_PARAMETERS: &[&str] = &[
     "client_id",
     "code_challenge",
@@ -38,6 +40,48 @@ impl ServiceConfiguration {
         })
     }
 
+    pub async fn discover(
+        issuer: Url,
+        transport: &dyn HttpTransport,
+        cancellation: CancellationHandle,
+    ) -> Result<Self> {
+        validate_issuer(&issuer)?;
+        let discovery_url = oidc_discovery_url(&issuer)?;
+        let mut headers = HeaderMap::new();
+        headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
+
+        let response = transport
+            .execute(
+                HttpRequest {
+                    method: Method::GET,
+                    url: discovery_url,
+                    headers,
+                    body: Vec::new(),
+                },
+                cancellation,
+            )
+            .await?;
+        if !response.status.is_success() {
+            return Err(AuthError::HttpStatus(response.status));
+        }
+
+        let metadata: DiscoveryMetadata = serde_json::from_slice(&response.body)
+            .map_err(|_| AuthError::InvalidDiscoveryMetadata("response is not valid JSON"))?;
+        if metadata.issuer != issuer.as_str() {
+            return Err(AuthError::InvalidDiscoveryMetadata(
+                "issuer does not match the requested issuer",
+            ));
+        }
+
+        let authorization_endpoint = parse_discovered_endpoint(&metadata.authorization_endpoint)?;
+        let token_endpoint = parse_discovered_endpoint(&metadata.token_endpoint)?;
+
+        Ok(Self {
+            authorization_endpoint,
+            token_endpoint,
+        })
+    }
+
     pub fn authorization_endpoint(&self) -> &Url {
         &self.authorization_endpoint
     }
@@ -45,6 +89,13 @@ impl ServiceConfiguration {
     pub fn token_endpoint(&self) -> &Url {
         &self.token_endpoint
     }
+}
+
+#[derive(Deserialize)]
+struct DiscoveryMetadata {
+    issuer: String,
+    authorization_endpoint: String,
+    token_endpoint: String,
 }
 
 pub struct AuthorizationRequest {
@@ -393,6 +444,43 @@ fn validate_endpoint(endpoint: &Url) -> Result<()> {
     Ok(())
 }
 
+fn validate_issuer(issuer: &Url) -> Result<()> {
+    if issuer.scheme() != "https"
+        || issuer.host_str().is_none()
+        || !issuer.username().is_empty()
+        || issuer.password().is_some()
+        || issuer.query().is_some()
+        || issuer.fragment().is_some()
+    {
+        return Err(AuthError::InvalidConfiguration(
+            "OIDC issuer must be an HTTPS URL without user info, query, or fragment",
+        ));
+    }
+    Ok(())
+}
+
+fn oidc_discovery_url(issuer: &Url) -> Result<Url> {
+    let mut discovery_url = issuer.clone();
+    let mut path_segments = discovery_url
+        .path_segments_mut()
+        .map_err(|_| AuthError::InvalidConfiguration("OIDC issuer URL cannot be a base URL"))?;
+    path_segments.pop_if_empty();
+    path_segments.extend(OIDC_DISCOVERY_PATH);
+    drop(path_segments);
+    Ok(discovery_url)
+}
+
+fn parse_discovered_endpoint(value: &str) -> Result<Url> {
+    let endpoint = Url::parse(value)
+        .map_err(|_| AuthError::InvalidDiscoveryMetadata("endpoint is not a valid URL"))?;
+    if endpoint.scheme() != "https" || validate_endpoint(&endpoint).is_err() {
+        return Err(AuthError::InvalidDiscoveryMetadata(
+            "endpoints must use HTTPS without user info or fragments",
+        ));
+    }
+    Ok(endpoint)
+}
+
 fn validate_redirect_uri(redirect_uri: &Url) -> Result<()> {
     if redirect_uri.scheme().is_empty()
         || redirect_uri.fragment().is_some()
@@ -497,6 +585,10 @@ mod tests {
         }
     }
 
+    fn discovery_transport(body: &'static [u8]) -> TestTransport {
+        test_transport(StatusCode::OK, body)
+    }
+
     fn request(scopes: &[&str]) -> AuthorizationRequest {
         let configuration = ServiceConfiguration::new(
             Url::parse("https://issuer.example/authorize").unwrap(),
@@ -510,6 +602,86 @@ mod tests {
             scopes.iter().map(|scope| (*scope).to_owned()).collect(),
         )
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn discovery_uses_issuer_path_and_validates_endpoints() {
+        let transport = discovery_transport(
+            br#"{
+                "issuer":"https://issuer.example/tenant",
+                "authorization_endpoint":"https://issuer.example/tenant/authorize",
+                "token_endpoint":"https://issuer.example/tenant/token",
+                "jwks_uri":"https://issuer.example/tenant/keys"
+            }"#,
+        );
+
+        let configuration = ServiceConfiguration::discover(
+            Url::parse("https://issuer.example/tenant").unwrap(),
+            &transport,
+            CancellationHandle::new(),
+        )
+        .await
+        .unwrap();
+        let request = transport.request.lock().unwrap().take().unwrap();
+
+        assert_eq!(
+            request.url.as_str(),
+            "https://issuer.example/tenant/.well-known/openid-configuration"
+        );
+        assert_eq!(request.method, Method::GET);
+        assert_eq!(
+            request.headers.get(header::ACCEPT).unwrap(),
+            "application/json"
+        );
+        assert_eq!(
+            configuration.authorization_endpoint().as_str(),
+            "https://issuer.example/tenant/authorize"
+        );
+        assert_eq!(
+            configuration.token_endpoint().as_str(),
+            "https://issuer.example/tenant/token"
+        );
+    }
+
+    #[tokio::test]
+    async fn discovery_rejects_mismatched_issuer_and_insecure_endpoints() {
+        let mismatched_issuer = discovery_transport(
+            br#"{
+                "issuer":"https://other.example",
+                "authorization_endpoint":"https://issuer.example/authorize",
+                "token_endpoint":"https://issuer.example/token"
+            }"#,
+        );
+        assert!(matches!(
+            ServiceConfiguration::discover(
+                Url::parse("https://issuer.example").unwrap(),
+                &mismatched_issuer,
+                CancellationHandle::new(),
+            )
+            .await,
+            Err(AuthError::InvalidDiscoveryMetadata(
+                "issuer does not match the requested issuer"
+            ))
+        ));
+
+        let insecure_endpoint = discovery_transport(
+            br#"{
+                "issuer":"https://issuer.example/",
+                "authorization_endpoint":"http://issuer.example/authorize",
+                "token_endpoint":"https://issuer.example/token"
+            }"#,
+        );
+        assert!(matches!(
+            ServiceConfiguration::discover(
+                Url::parse("https://issuer.example").unwrap(),
+                &insecure_endpoint,
+                CancellationHandle::new(),
+            )
+            .await,
+            Err(AuthError::InvalidDiscoveryMetadata(
+                "endpoints must use HTTPS without user info or fragments"
+            ))
+        ));
     }
 
     #[test]

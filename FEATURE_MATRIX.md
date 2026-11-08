@@ -28,7 +28,7 @@ confirmation.
 | Static client secret in a native app | API can accept a client secret | Supported, but upstream warns against static secrets | Out of scope — native clients are public clients |
 | Resource Owner Password / Implicit flows | Not part of the documented recommended flow | Not part of the documented recommended flow | Out of scope — use Authorization Code + PKCE |
 | UserInfo and application API calls | Caller makes API calls with tokens | Caller makes API calls with tokens | Out of scope — return tokens; callers use them with their APIs |
-| Windows browser and redirect integration | Not applicable | Not applicable | Later — agreed; shared Rust core comes first |
+| Windows browser and redirect integration | Not applicable | Not applicable | Later — outside the initial release; shared Rust core only initially |
 
 ## Important parity difference
 
@@ -41,6 +41,16 @@ allowed signing algorithms, required claim checks, and key-rotation behavior.
 
 Dynamic registration is scoped to native public clients. A registration flow
 that requires a confidential client secret is not supported in the native app.
+
+## Provider-specific behavior
+
+The initial release will not detect providers or add provider-specific defaults
+or protocol branches. Callers can supply additional authorization and token
+request parameters, subject to the core's reserved-parameter checks, and
+unrecognized response parameters are exposed through the token response's
+`additional_parameters` map as raw JSON values; the SDK does not interpret
+them. Any later provider-specific behavior requires an explicit scope decision
+and interoperability evidence.
 
 ## Binding spike notes
 
@@ -58,6 +68,14 @@ not validate runtime cancellation behavior or Apple/Android packaging; these
 remain open implementation tasks. UniFFI is adopted for the initial
 Swift/Kotlin binding approach.
 
+The initial distribution decision is to pin generation to UniFFI 0.32.2 and
+use proc macros to define the native-facing Rust API. Publish versioned Apple
+XCFramework and Android AAR artifacts with checksums through GitHub Releases.
+The XCFramework contains the generated Swift API and Rust library; the AAR
+contains the generated Kotlin API and Android Rust libraries. Compiled binaries
+stay out of the source repository. Maven Central, Swift Package Manager, and
+Carthage remain candidates for later evaluation.
+
 ## References
 
 - [AppAuth-iOS README](https://github.com/openid/AppAuth-iOS/blob/master/README.md)
@@ -65,6 +83,12 @@ Swift/Kotlin binding approach.
 - [AppAuth-iOS `OIDIDToken.h`](https://github.com/openid/AppAuth-iOS/blob/master/Sources/AppAuthCore/OIDIDToken.h)
 - [AppAuth-iOS `OIDTokenResponse.h`](https://github.com/openid/AppAuth-iOS/blob/master/Sources/AppAuthCore/OIDTokenResponse.h)
 - [AppAuth-Android `IdToken.java`](https://github.com/openid/AppAuth-Android/blob/master/library/java/net/openid/appauth/IdToken.java)
+- [Apple security releases](https://support.apple.com/en-us/100100)
+- [Android Security Bulletin, November 2026](https://source.android.com/docs/security/bulletin/2026/2026-11-01)
+- [Google Pixel software update policy](https://support.google.com/pixelphone/answer/4457705?hl=en)
+- [Google Play Android device dashboard](https://developer.android.com/about/dashboards)
+- [RFC 8252: OAuth 2.0 for Native Apps](https://www.rfc-editor.org/rfc/rfc8252)
+- [RFC 6749: Authorization Response](https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2)
 - [UniFFI documentation](https://mozilla.github.io/uniffi-rs/latest/)
 - [UniFFI async/Future support](https://mozilla.github.io/uniffi-rs/latest/futures.html)
 - [UniFFI Swift bindings](https://mozilla.github.io/uniffi-rs/latest/swift/overview.html)

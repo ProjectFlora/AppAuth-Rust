@@ -9,6 +9,8 @@ pub enum AuthError {
     InvalidAuthorizationResponse(&'static str),
     #[error("invalid token response: {0}")]
     InvalidTokenResponse(&'static str),
+    #[error("invalid OIDC discovery metadata: {0}")]
+    InvalidDiscoveryMetadata(&'static str),
     #[error("authorization server returned error: {code}")]
     AuthorizationServer {
         code: String,

@@ -13,8 +13,17 @@ This roadmap tracks work remaining for the initial scope in
 - **Native API surface:** Expose the Rust core through thin Swift adapters for
   Apple platforms and a thin Kotlin adapter for Android; keep browser and
   redirect lifecycle handling in those adapters.
-- **Binding mechanism:** Use UniFFI to generate Swift and Kotlin bindings.
-  Define explicit cancellation behavior and platform packaging separately.
+- **Binding mechanism:** Define the native-facing Rust API with UniFFI
+  proc-macros, keeping protocol implementation behind that interface. Pin the
+  UniFFI runtime and binding generator to 0.32.2; generate bindings
+  reproducibly and do not hand-edit generated files. Implement explicit
+  cancellation separately from UniFFI.
+- **Initial binding distribution:** Pin UniFFI generation to 0.32.2, matching
+  the validated spike, and generate bindings reproducibly from the Rust
+  interface. Publish versioned Apple XCFramework and Android AAR artifacts with
+  checksums through GitHub Releases; keep compiled binaries out of the source
+  repository. Evaluate Maven Central, Swift Package Manager, and Carthage as
+  later distribution channels.
 - **HTTP architecture:** Use an asynchronous transport abstraction, with a
   Rust `reqwest` implementation by default and native transport overrides
   available to mobile adapters.
@@ -22,31 +31,60 @@ This roadmap tracks work remaining for the initial scope in
   default `reqwest` transport; native mobile adapters may use their own HTTP
   clients.
 - **Redirect policy:** Prefer verified HTTPS links on iOS/iPadOS and Android,
-  with custom URI scheme fallbacks; use loopback redirects on macOS and Windows.
+  with custom URI scheme fallbacks; use loopback redirects on macOS.
+- **Windows scope:** Include the shared Rust core for `x86_64-pc-windows-msvc`
+  in the initial release. Defer Windows browser and redirect integration, and
+  its minimum OS decision, to a later phase; it is not an initial-release
+  requirement.
+- **Authorization callback lifecycle:** Native adapters prepare the callback
+  handler or loopback listener before browser launch and stop it after the first
+  callback for the registered redirect. Unrelated callbacks are ignored
+  (loopback requests to another path receive 404); malformed matching
+  callbacks and state mismatches terminate with an invalid-response error, and
+  matching OAuth errors remain authorization-server errors. Explicit
+  cancellation and platform-reported user dismissal return `Cancelled` and
+  clean up listeners and active work. There is no implicit timeout; the host
+  owns timeout policy.
 - **Cancellation contract:** Expose an explicit, idempotent operation
   cancellation handle and a distinct cancellation result; propagate
   cancellation to active work where supported.
+- **Rust support:** Set Rust 1.88 as the MSRV based on the currently locked
+  dependency set and test it in CI. Support the documented initial-release
+  target triples in [README.md](README.md); Linux is for development and CI
+  only. Keep one Rust core crate and add a workspace only if separate Rust
+  crates become necessary.
+- **Initial support matrix:** As checked on 2026-11-08, set iOS/iPadOS minimum
+  to 18 and macOS minimum to 15 based on Apple's current security-updated
+  generations. Set Android API 34 as a provisional minimum based on current
+  AOSP Security Bulletin coverage; reassess it before release using the current
+  bulletin and available Google Play Console Reach and devices data. Windows
+  desktop OS minimum remains deferred because only the shared core is in the
+  initial release.
+- **Provider-specific behavior:** Do not add provider detection, defaults, or
+  protocol branches in the initial release. Keep provider parameters caller
+  supplied and expose unrecognized response parameters to callers as raw
+  additional values, without interpreting them; future additions require an
+  explicit scope decision and interoperability evidence.
 
 ## Open decisions
 
-- **Redirect lifecycle:** Define callback validation, listener lifecycle,
-  cancellation, and malformed or unexpected response behavior for each
-  platform.
-- **Rust and packaging support:** Set the Rust MSRV, target architectures,
-  crate boundaries, and distribution mechanisms for UniFFI-generated bindings.
-- **Provider-specific behavior:** Decide whether to add any provider-specific
-  semantics beyond the agreed opaque request/response parameter support;
-  review the remaining proposals in [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
+- **Long-term package distribution:** Evaluate Maven Central, Swift Package
+  Manager, and Carthage after the initial GitHub Release artifacts are
+  available.
+- **Android release floor:** Reassess provisional API 34 against current
+  security bulletins, device reach data, and the final native dependency set
+  before the release candidate.
 
 ## Work phases
 
 1. **Finalize the initial feature boundary (complete):** Review the proposed
    initial, later, and out-of-scope features in [FEATURE_MATRIX.md](FEATURE_MATRIX.md),
    confirm the feature boundary, and resolve the remaining open decisions above.
-2. **Establish the Rust foundation (in progress):** Create the crate/workspace
-   structure, select core dependencies, define public types and error behavior,
-   choose the UniFFI packaging approach, and verify the planned Apple, Android,
-   and Windows build targets.
+2. **Establish the Rust foundation (in progress):** Maintain the documented
+   single-crate core boundary, select core dependencies, define public types
+   and error behavior, implement the pinned UniFFI proc-macro interface and
+   reproducible binding generation, and verify the planned Apple, Android, and
+   Windows build targets.
 3. **Implement the shared authorization core (in progress):** Add endpoint
    configuration and discovery, Authorization Code + PKCE request construction,
    callback validation, code exchange, token response handling, refresh behavior,
@@ -56,7 +94,8 @@ This roadmap tracks work remaining for the initial scope in
 4. **Integrate initial native platforms:** Add external-browser and redirect
    integrations for iOS/iPadOS, macOS, and Android while keeping UI and OS
    lifecycle concerns outside the shared protocol core.
-5. **Complete Windows desktop integration:** Add external-browser launch and
+5. **Add Windows desktop integration (later phase):** This is not required for
+   the initial release. When scheduled, add external-browser launch and
    redirect handling, then define and document the minimum Windows version.
 6. **Validate and prepare a release:** Add unit and protocol integration tests,
    platform build/flow tests, security-focused edge-case coverage, examples,
