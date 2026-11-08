@@ -68,8 +68,10 @@ tasks.named("preBuild").configure {
     dependsOn(generateUniFfiBindings)
 }
 
-tasks.named("mergeReleaseJniLibFolders").configure {
-    dependsOn(buildAndroidRustLibraries)
+tasks.configureEach {
+    if (name == "mergeReleaseJniLibFolders") {
+        dependsOn(buildAndroidRustLibraries)
+    }
 }
 
 dependencies {
