@@ -1,6 +1,7 @@
 use std::{
     io,
     net::{Ipv4Addr, SocketAddrV4},
+    time::Duration,
 };
 
 use serde::Deserialize;
@@ -21,6 +22,7 @@ use crate::{
 };
 
 const MAX_REQUEST_SIZE: usize = 16 * 1024;
+const CALLBACK_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(windows)]
 const STATUS_SUCCESS: i32 = 0;
 #[cfg(windows)]
@@ -206,7 +208,15 @@ async fn wait_for_callback(
             _ = cancellation.cancelled() => return Err(AuthError::Cancelled.into()),
             accepted = listener.accept() => accepted?,
         };
-        let request = read_request_headers(&mut stream, &cancellation).await?;
+        let request = match tokio::time::timeout(
+            CALLBACK_REQUEST_TIMEOUT,
+            read_request_headers(&mut stream, &cancellation),
+        )
+        .await
+        {
+            Ok(request) => request?,
+            Err(_) => continue,
+        };
         let outcome = request
             .as_deref()
             .map(|request| parse_callback_request(request, callback_path, port))
@@ -636,6 +646,37 @@ mod tests {
             callback_task.await.unwrap().unwrap().as_str(),
             format!("http://127.0.0.1:{port}/oauth/callback?code=sample&state=state")
         );
+    }
+
+    #[tokio::test]
+    async fn stalled_connection_does_not_block_matching_callback() {
+        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let callback_task = tokio::spawn(wait_for_callback(
+            listener,
+            "/oauth/callback",
+            port,
+            CancellationHandle::new(),
+        ));
+
+        let stalled_stream = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        let response = tokio::time::timeout(
+            CALLBACK_REQUEST_TIMEOUT + Duration::from_secs(1),
+            send_request(port, "/oauth/callback?code=sample&state=state"),
+        )
+        .await
+        .expect("callback should proceed after the stalled connection times out");
+
+        assert!(response.starts_with("HTTP/1.1 200"));
+        assert_eq!(
+            callback_task.await.unwrap().unwrap().as_str(),
+            format!("http://127.0.0.1:{port}/oauth/callback?code=sample&state=state")
+        );
+        drop(stalled_stream);
     }
 
     #[tokio::test]
