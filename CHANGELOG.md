@@ -1,22 +1,47 @@
 # Changelog
 
-Notable changes to AppAuth-Rust are documented here. Until the first release,
-changes remain under `Unreleased`.
+Notable changes to AppAuth-Rust are documented here. The 0.x series is
+pre-1.0: releases may be published while interoperability testing and support
+policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-10
+
 ### Added
 
-- Shared OAuth 2.0 Authorization Code + PKCE core with OIDC discovery,
-  cancellable transport, refreshable serializable authentication state, and
-  preservation of additional response parameters.
-- OpenID Connect ID Token signature and claim validation, end-session requests,
-  and public-client dynamic registration.
-- UniFFI-generated Swift and Kotlin APIs, with external-browser authorization
-  adapters for iOS/iPadOS, macOS, and Android.
-- Cross-target CI for Apple, Android, and Windows core targets; Android release
-  AAR packaging, Apple XCFramework packaging, and callback-routing
-  instrumentation checks.
+- Windows desktop authorization through the system browser and loopback
+  callback, with a cancellable C ABI and C++/.NET interop.
+- Windows DLL/C ABI package generation and Windows adapter tests in CI.
+
+### Validation
+
+- iOS simulator and Android emulator authorization flows use local mock
+  providers; macOS loopback and Windows adapter flows have mock/test coverage.
+
+### Distribution
+
+- Published as a regular GitHub Release while remaining a pre-1.0 version.
+  Release assets include Apple XCFramework, Android AAR, Windows DLL/C ABI
+  package, API documentation, and SHA-256 checksums.
+
+### Known limitations
+
+- Live identity-provider interoperability has not been validated.
+- macOS and Windows tests do not automate the real system-browser flow.
+- Platform minimums and provider interoperability policies remain subject to
+  the 1.0.0 readiness criteria in `ROADMAP.md`.
+
+## [0.1.0] - 2026-11-09
+
+### Added
+
+- Initial OAuth 2.0 Authorization Code + PKCE and OpenID Connect core,
+  including discovery, refreshable serializable authentication state, ID Token
+  validation, end-session, and public-client dynamic registration.
+- UniFFI-generated Swift and Kotlin APIs and native authorization adapters for
+  iOS/iPadOS, macOS, and Android.
+- Initial Apple XCFramework, Android AAR, API documentation, and checksums.
 
 ### Security
 
@@ -24,11 +49,3 @@ changes remain under `Unreleased`.
   external browsers rather than embedded WebViews.
 - ID Tokens accept RS256 and ES256 only and are checked against issuer JWKS,
   required claims, and the request nonce.
-
-### Distribution
-
-- The initial distribution plan is versioned GitHub Release assets containing
-  an Apple XCFramework and Android AAR. These release packages and checksums
-  have not yet been published.
-- Version tags follow SemVer as vMAJOR.MINOR.PATCH; the planned initial release
-  is v0.1.0, matching the crate version.

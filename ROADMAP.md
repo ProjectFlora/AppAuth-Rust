@@ -75,15 +75,36 @@ This roadmap tracks work remaining for the initial scope in
 - **Long-term package distribution:** Evaluate Maven Central, Swift Package
   Manager, and Carthage after the initial GitHub Release artifacts are
   available.
-- **Android release floor:** Reassess provisional API 34 against current
+- **Android 1.0 release floor:** Reassess provisional API 34 against current
   security bulletins, device reach data, and the final native dependency set
-  before the release candidate.
+  before 1.0.0.
+
+## Pre-1.0 release policy
+
+- 0.x releases are usable development releases, not a promise that the initial
+  feature set or compatibility guarantees are complete. They may be published
+  as regular GitHub Releases while known gaps remain; release notes must state
+  the status and limitations.
+- v0.2.0 is the current implementation snapshot. It adds the Windows desktop
+  adapter and release package to the previously published v0.1.0 assets.
+- Do not declare 1.0.0 ready until all of these conditions are met:
+  - Reassess and settle provisional platform minimums, including Android API
+    level, Apple security-supported OS generations, and the Windows support
+    matrix.
+  - Validate authorization against live identity providers on supported
+    platforms, including real browser launch and callback behavior where
+    applicable.
+  - Complete security-focused protocol and platform edge-case coverage, and
+    ensure CI is green for all declared targets and packages.
+  - Validate installation and use of each release artifact, publish complete
+    API/user documentation, and record the final support matrix.
 
 ## Work phases
 
 1. **Finalize the initial feature boundary (complete):** Review the proposed
-   initial, later, and out-of-scope features in [FEATURE_MATRIX.md](FEATURE_MATRIX.md),
-   confirm the feature boundary, and resolve the remaining open decisions above.
+   initial, later, and out-of-scope features in [FEATURE_MATRIX.md](FEATURE_MATRIX.md)
+   and confirm the feature boundary. Remaining 1.0.0 policy decisions are
+   tracked above.
 2. **Establish the Rust foundation (complete):** Maintain the documented
    single-crate core boundary, select core dependencies, define public types
    and error behavior, implement the pinned UniFFI proc-macro interface and
@@ -103,9 +124,9 @@ This roadmap tracks work remaining for the initial scope in
    cancellation for `x86_64-pc-windows-msvc`. At each release, review
    Microsoft's supported Windows client versions and update the documented
    support matrix and validation targets accordingly.
-6. **Validate and prepare a release:** Add unit and protocol integration tests,
-   platform build/flow tests, security-focused edge-case coverage, examples,
-   API documentation, and a release/support matrix.
+6. **Continue pre-1.0 validation and release preparation (in progress):**
+   Publish 0.x development releases as milestones. Close the 1.0.0 readiness
+   criteria above before making compatibility and support commitments.
 
 The Rust core provides endpoint configuration and discovery, Authorization
 Code + PKCE, callback validation, cancellable HTTP, code exchange and token

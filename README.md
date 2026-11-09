@@ -140,15 +140,18 @@ versions and Android device reach immediately before release.
   callback delivery. Check the example with
   `cargo check --locked --example manual_authorization`.
 
-The project is not yet published on crates.io, Swift Package Manager, Maven
-Central, or Carthage. The initial native distribution decision is versioned
-GitHub Release assets: an Apple XCFramework, Android AAR, and Windows DLL
-package with C/C++ and .NET interop files. Those versioned packages and
-checksums are not published yet.
+The crate is not published on crates.io, and native packages are not published
+through Swift Package Manager, Maven Central, or Carthage. Binary distribution
+uses versioned GitHub Releases. The published v0.1.0 release contains the
+Apple XCFramework, Android AAR, API reference, and checksums; it predates the
+Windows adapter. The v0.2.0 release adds the Windows DLL/C ABI package with
+C/C++ and .NET interop files.
 The release workflow accepts only SemVer tags that point to `main` and match
-the crate version. It publishes the Apple XCFramework, Android AAR, Windows
-package, Rust API reference, and SHA-256 checksums. Do not tag v0.1.0 until the
-remaining release-candidate checks are complete.
+the crate version. A manual workflow run validates and packages a release
+candidate without publishing; pushing its matching version tag publishes the
+assets and SHA-256 checksums. Releases before 1.0.0 are pre-1.0 and may have
+documented interoperability or support-policy gaps; see `CHANGELOG.md` and
+`ROADMAP.md`.
 
 ## Apple adapters
 
@@ -177,8 +180,8 @@ remaining release-candidate checks are complete.
 ## Apple binary package
 
 - Build a package for a specific version with
-  `scripts/package-apple-xcframework.sh 0.1.0`. It creates
-  `target/apple/release-package/AppAuthRust-Apple-0.1.0.zip`, containing an
+  `scripts/package-apple-xcframework.sh 0.2.0`. It creates
+  `target/apple/release-package/AppAuthRust-Apple-0.2.0.zip`, containing an
   `AppAuthRust.xcframework` with static Rust libraries for iOS device,
   iOS simulator, and universal macOS, the generated Swift API source, and an
   installation guide. See [Swift XCFramework installation](docs/swift-xcframework.md).
