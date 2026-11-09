@@ -26,36 +26,63 @@ import java.net.URI
 import java.net.URISyntaxException
 import java.util.concurrent.atomic.AtomicReference
 
+/**
+ * Configures redirect URIs used by [AndroidAuthorizationAdapter].
+ *
+ * When both URIs are supplied, a verified App Link is preferred and the
+ * custom-scheme URI is the fallback.
+ *
+ * @property appLinkUri HTTPS App Link callback URI, or `null` when unavailable.
+ * @property customSchemeUri Registered custom-scheme callback URI, or `null` when unavailable.
+ */
 data class AndroidRedirectConfiguration(
     val appLinkUri: String?,
     val customSchemeUri: String?,
 )
 
+/** Errors raised while preparing or running Android browser authorization. */
 sealed class AndroidAuthorizationAdapterException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause) {
+    /** An authorization operation is already active on this adapter. */
     class AuthorizationAlreadyRunning : AndroidAuthorizationAdapterException("An authorization is already running")
 
+    /** A configured callback URI is invalid or cannot be routed to the callback activity. */
     class InvalidRedirectConfiguration(
         message: String,
     ) : AndroidAuthorizationAdapterException(message)
 
+    /** No external browser could be opened for authorization. */
     class BrowserUnavailable(
         cause: Throwable,
     ) : AndroidAuthorizationAdapterException("No browser is available for authorization", cause)
 
+    /** The host application has not registered the callback activity for the selected URI. */
     class CallbackActivityNotRegistered :
         AndroidAuthorizationAdapterException(
             "Register AndroidAuthorizationCallbackActivity for the configured redirect URI",
         )
 }
 
+/**
+ * Runs OAuth authorization in an external browser Custom Tab.
+ *
+ * The host application must register [AndroidAuthorizationCallbackActivity]
+ * and its configured redirect URI intent filters in the manifest.
+ */
 class AndroidAuthorizationAdapter(
     private val activity: Activity,
 ) {
     private val activeOperation = AtomicReference<AuthorizationOperation?>()
 
+    /**
+     * Selects a verified App Link or registered custom-scheme redirect, opens
+     * the browser, validates the callback, and exchanges its authorization code.
+     *
+     * Only one operation may run on an adapter at a time. Coroutine
+     * cancellation and [cancel] stop the callback wait and in-flight request.
+     */
     suspend fun authorize(
         configuration: FfiServiceConfiguration,
         options: FfiAuthorizationOptions,
@@ -124,6 +151,7 @@ class AndroidAuthorizationAdapter(
         }
     }
 
+    /** Cancels the active browser callback wait and in-flight core request. */
     fun cancel() {
         activeOperation.get()?.cancel()
     }
@@ -165,6 +193,12 @@ class AndroidAuthorizationAdapter(
     }
 }
 
+/**
+ * Receives OAuth callbacks and delivers them to the active authorization.
+ *
+ * Declare this activity as exported with browsable intent filters for each
+ * configured redirect URI in the host application's manifest.
+ */
 class AndroidAuthorizationCallbackActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -10,34 +10,53 @@ use crate::{
     HttpRequest, HttpResponse, HttpTransport, Result, ServiceConfiguration, TokenResponse,
 };
 
+/// Errors exposed to Swift and Kotlin callers.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiError {
+    /// A caller-provided request or configuration value was invalid.
     #[error("invalid request: {0}")]
     InvalidRequest(String),
+    /// The server response was malformed or failed validation.
     #[error("invalid response: {0}")]
     InvalidResponse(String),
+    /// The authorization server rejected the request.
     #[error("authorization server returned error: {code}")]
     AuthorizationServer {
+        /// OAuth error code.
         code: String,
+        /// Optional human-readable error description.
         description: Option<String>,
     },
+    /// The client registration server rejected the request.
     #[error("client registration server returned error: {code}")]
     ClientRegistrationServer {
+        /// Registration error code.
         code: String,
+        /// Optional human-readable error description.
         description: Option<String>,
     },
+    /// An endpoint returned an unsuccessful HTTP status.
     #[error("HTTP endpoint returned status {status}")]
-    HttpStatus { status: u16 },
+    HttpStatus {
+        /// HTTP status code.
+        status: u16,
+    },
+    /// The HTTP transport failed without additional detail.
     #[error("HTTP transport failed")]
     Transport,
+    /// The HTTP transport failed and provided a diagnostic message.
     #[error("HTTP transport failed: {0}")]
     TransportFailure(String),
+    /// The operation was cancelled by the caller or platform.
     #[error("operation was cancelled")]
     Cancelled,
+    /// The system clock is earlier than the Unix epoch.
     #[error("system clock is before the Unix epoch")]
     Clock,
+    /// Secure random value generation failed.
     #[error("secure random number generation failed")]
     Randomness,
+    /// An unexpected internal or serialization error occurred.
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -80,6 +99,7 @@ impl From<uniffi::UnexpectedUniFFICallbackError> for FfiError {
 }
 
 #[derive(uniffi::Object)]
+/// Cloneable cancellation signal for native operations and HTTP requests.
 pub struct FfiCancellationHandle {
     inner: CancellationHandle,
 }
@@ -87,50 +107,70 @@ pub struct FfiCancellationHandle {
 #[uniffi::export]
 impl FfiCancellationHandle {
     #[uniffi::constructor]
+    /// Creates a cancellation handle that is not cancelled.
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             inner: CancellationHandle::new(),
         })
     }
 
+    /// Cancels the operation; repeated calls have no additional effect.
     pub fn cancel(&self) {
         self.inner.cancel();
     }
 
+    /// Returns whether cancellation has been requested.
     pub fn is_cancelled(&self) -> bool {
         self.inner.is_cancelled()
     }
 
+    /// Suspends until cancellation is requested.
     pub async fn cancelled(&self) {
         self.inner.cancelled().await;
     }
 }
 
 #[derive(uniffi::Record)]
+/// An HTTP header passed between the core and a native transport.
 pub struct FfiHttpHeader {
+    /// Header name.
     pub name: String,
+    /// Header value as raw bytes.
     pub value: Vec<u8>,
 }
 
 #[derive(uniffi::Record)]
+/// An HTTP request passed to a native transport.
 pub struct FfiHttpRequest {
+    /// HTTP method, such as `GET` or `POST`.
     pub method: String,
+    /// Absolute endpoint URL.
     pub url: String,
+    /// Request headers.
     pub headers: Vec<FfiHttpHeader>,
+    /// Request body bytes.
     pub body: Vec<u8>,
 }
 
 #[derive(uniffi::Record)]
+/// An HTTP response returned by a native transport.
 pub struct FfiHttpResponse {
+    /// HTTP status code.
     pub status: u16,
+    /// Response headers.
     pub headers: Vec<FfiHttpHeader>,
+    /// Response body bytes.
     pub body: Vec<u8>,
 }
 
-/// Native transports must not follow redirects for OAuth requests.
+/// Native HTTP transport used by the shared OAuth/OIDC core.
+///
+/// Implementations must not follow redirects. They must propagate cancellation
+/// and return redirect responses to the core without forwarding credentials.
 #[uniffi::export(foreign)]
 #[async_trait]
 pub trait NativeHttpTransport: Send + Sync {
+    /// Executes one request and returns its response or transport error.
     async fn execute(
         &self,
         request: FfiHttpRequest,
@@ -204,6 +244,7 @@ fn headers_from_ffi(headers: Vec<FfiHttpHeader>) -> std::result::Result<HeaderMa
 }
 
 #[derive(uniffi::Object)]
+/// OAuth endpoint configuration shared by native authorization operations.
 pub struct FfiServiceConfiguration {
     inner: ServiceConfiguration,
 }
@@ -211,6 +252,7 @@ pub struct FfiServiceConfiguration {
 #[uniffi::export]
 impl FfiServiceConfiguration {
     #[uniffi::constructor]
+    /// Creates a configuration from explicit authorization and token endpoints.
     pub fn new(
         authorization_endpoint: String,
         token_endpoint: String,
@@ -222,6 +264,7 @@ impl FfiServiceConfiguration {
     }
 
     #[uniffi::constructor]
+    /// Discovers and validates OpenID Provider metadata for an issuer.
     pub async fn discover(
         issuer: String,
         transport: Arc<dyn NativeHttpTransport>,
@@ -234,6 +277,7 @@ impl FfiServiceConfiguration {
         Ok(Arc::new(Self { inner }))
     }
 
+    /// Configures the issuer and JWKS endpoint used to validate ID Tokens.
     pub fn with_oidc_validation_endpoints(
         &self,
         issuer: String,
@@ -248,6 +292,7 @@ impl FfiServiceConfiguration {
         Ok(Arc::new(Self { inner }))
     }
 
+    /// Adds an HTTPS end-session endpoint.
     pub fn with_end_session_endpoint(
         &self,
         endpoint: String,
@@ -257,6 +302,7 @@ impl FfiServiceConfiguration {
         Ok(Arc::new(Self { inner }))
     }
 
+    /// Adds an HTTPS dynamic client registration endpoint.
     pub fn with_registration_endpoint(
         &self,
         endpoint: String,
@@ -266,45 +312,62 @@ impl FfiServiceConfiguration {
         Ok(Arc::new(Self { inner }))
     }
 
+    /// Returns the authorization endpoint URL.
     pub fn authorization_endpoint(&self) -> String {
         self.inner.authorization_endpoint().to_string()
     }
 
+    /// Returns the token endpoint URL.
     pub fn token_endpoint(&self) -> String {
         self.inner.token_endpoint().to_string()
     }
 
+    /// Returns the configured issuer URL, if any.
     pub fn issuer(&self) -> Option<String> {
         self.inner.issuer().map(ToString::to_string)
     }
 
+    /// Returns the configured JWKS URL, if any.
     pub fn jwks_uri(&self) -> Option<String> {
         self.inner.jwks_uri().map(ToString::to_string)
     }
 }
 
+/// A string-valued OAuth parameter.
 #[derive(uniffi::Record)]
 pub struct FfiParameter {
+    /// Parameter name.
     pub name: String,
+    /// Parameter value.
     pub value: String,
 }
 
+/// A JSON-valued token response parameter.
 #[derive(uniffi::Record)]
 pub struct FfiJsonParameter {
+    /// Parameter name.
     pub name: String,
+    /// Parameter value encoded as JSON text.
     pub value_json: String,
 }
 
+/// Inputs for creating an Authorization Code + PKCE request.
 #[derive(uniffi::Record)]
 pub struct FfiAuthorizationOptions {
+    /// Public client identifier.
     pub client_id: String,
+    /// Registered callback URI.
     pub redirect_uri: String,
+    /// OAuth scopes requested from the authorization server.
     pub scopes: Vec<String>,
+    /// Additional authorization request parameters.
     pub additional_parameters: Vec<FfiParameter>,
+    /// Additional token exchange parameters.
     pub additional_token_parameters: Vec<FfiParameter>,
 }
 
 #[uniffi::export]
+/// Creates a prepared authorization session for a native browser adapter.
 pub fn begin_authorization(
     configuration: Arc<FfiServiceConfiguration>,
     options: FfiAuthorizationOptions,
@@ -352,6 +415,7 @@ fn ensure_unique_parameter_names(parameters: &[FfiParameter]) -> std::result::Re
     Ok(())
 }
 
+/// A validated authorization response received from the redirect URI.
 #[derive(uniffi::Object)]
 pub struct FfiAuthorizationResponse {
     inner: AuthorizationResponse,
@@ -359,14 +423,17 @@ pub struct FfiAuthorizationResponse {
 
 #[uniffi::export]
 impl FfiAuthorizationResponse {
+    /// Returns the authorization code.
     pub fn code(&self) -> String {
         self.inner.code().to_owned()
     }
 
+    /// Returns the state matched against the originating session.
     pub fn state(&self) -> String {
         self.inner.state().to_owned()
     }
 
+    /// Returns unrecognized response parameters.
     pub fn additional_parameters(&self) -> Vec<FfiParameter> {
         self.inner
             .additional_parameters()
@@ -379,6 +446,7 @@ impl FfiAuthorizationResponse {
     }
 }
 
+/// Prepared authorization URL and state for parsing a callback and exchanging its code.
 #[derive(uniffi::Object)]
 pub struct FfiAuthorizationSession {
     inner: AuthorizationSession,
@@ -387,14 +455,17 @@ pub struct FfiAuthorizationSession {
 
 #[uniffi::export]
 impl FfiAuthorizationSession {
+    /// Returns the URL to open in an external user agent.
     pub fn authorization_url(&self) -> String {
         self.inner.authorization_url().to_string()
     }
 
+    /// Returns the generated OIDC nonce, if `openid` was requested.
     pub fn nonce(&self) -> Option<String> {
         self.inner.nonce().map(str::to_owned)
     }
 
+    /// Validates a callback URI and extracts its authorization response.
     pub fn parse_redirect(
         &self,
         redirect_uri: String,
@@ -404,6 +475,7 @@ impl FfiAuthorizationSession {
         Ok(Arc::new(FfiAuthorizationResponse { inner }))
     }
 
+    /// Exchanges the validated code, verifies any ID Token, and returns token state.
     pub async fn exchange_code(
         &self,
         response: Arc<FfiAuthorizationResponse>,
@@ -423,14 +495,22 @@ impl FfiAuthorizationSession {
     }
 }
 
+/// Token values returned by an OAuth token endpoint.
 #[derive(uniffi::Record)]
 pub struct FfiTokenResponse {
+    /// The bearer access token.
     pub access_token: String,
+    /// The token type, typically `Bearer`.
     pub token_type: String,
+    /// Access-token lifetime in seconds, if supplied.
     pub expires_in: Option<u64>,
+    /// Refresh token, if supplied.
     pub refresh_token: Option<String>,
+    /// Granted scopes, if supplied.
     pub scope: Option<String>,
+    /// Raw ID Token value, verified before return when present.
     pub id_token: Option<String>,
+    /// Unrecognized token response values serialized as JSON text.
     pub additional_parameters: Vec<FfiJsonParameter>,
 }
 
@@ -455,6 +535,7 @@ impl From<&TokenResponse> for FfiTokenResponse {
     }
 }
 
+/// Serializable token state. The host application is responsible for secure storage.
 #[derive(uniffi::Object)]
 pub struct FfiAuthenticationState {
     inner: tokio::sync::Mutex<AuthenticationState>,
@@ -463,6 +544,7 @@ pub struct FfiAuthenticationState {
 #[uniffi::export]
 impl FfiAuthenticationState {
     #[uniffi::constructor]
+    /// Restores authentication state from JSON previously produced by [`Self::to_json`].
     pub fn from_json(serialized: String) -> std::result::Result<Arc<Self>, FfiError> {
         let inner = serde_json::from_str(&serialized).map_err(|_| {
             FfiError::InvalidRequest("invalid authentication state JSON".to_owned())
@@ -472,23 +554,28 @@ impl FfiAuthenticationState {
         }))
     }
 
+    /// Serializes this sensitive state for host-managed secure storage.
     pub async fn to_json(&self) -> std::result::Result<String, FfiError> {
         serde_json::to_string(&*self.inner.lock().await)
             .map_err(|error| FfiError::Internal(error.to_string()))
     }
 
+    /// Returns the current token response.
     pub async fn token_response(&self) -> FfiTokenResponse {
         FfiTokenResponse::from(self.inner.lock().await.token_response())
     }
 
+    /// Returns access-token expiration as Unix time, if known.
     pub async fn expires_at(&self) -> Option<u64> {
         self.inner.lock().await.expires_at()
     }
 
+    /// Returns whether the access token has expired at the supplied Unix time.
     pub async fn is_expired_at(&self, unix_time_seconds: u64) -> Option<bool> {
         self.inner.lock().await.is_expired_at(unix_time_seconds)
     }
 
+    /// Refreshes tokens explicitly and updates state only after a successful response.
     pub async fn refresh(
         &self,
         configuration: Arc<FfiServiceConfiguration>,
@@ -518,19 +605,26 @@ impl FfiAuthenticationState {
     }
 }
 
+/// Inputs for dynamic registration of a native public client.
 #[derive(uniffi::Record)]
 pub struct FfiRegistrationOptions {
+    /// Registered redirect URIs.
     pub redirect_uris: Vec<String>,
+    /// Optional display name sent to the registration endpoint.
     pub client_name: Option<String>,
+    /// Optional per-request bearer token for a protected registration endpoint.
     pub initial_access_token: Option<String>,
 }
 
+/// Public client identifier returned by dynamic registration.
 #[derive(uniffi::Record)]
 pub struct FfiClientRegistrationResponse {
+    /// Registered client ID.
     pub client_id: String,
 }
 
 #[uniffi::export]
+/// Registers and returns the client ID for a native public client.
 pub async fn register_public_client(
     configuration: Arc<FfiServiceConfiguration>,
     options: FfiRegistrationOptions,
@@ -558,19 +652,27 @@ pub async fn register_public_client(
     })
 }
 
+/// Inputs for an OpenID Connect RP-Initiated Logout request.
 #[derive(uniffi::Record)]
 pub struct FfiEndSessionOptions {
+    /// Public client identifier.
     pub client_id: String,
+    /// Optional ID Token hint.
     pub id_token_hint: Option<String>,
+    /// Optional callback URI; when set, a random state is validated on return.
     pub post_logout_redirect_uri: Option<String>,
 }
 
+/// A validated end-session callback.
 #[derive(uniffi::Record)]
 pub struct FfiEndSessionResponse {
+    /// Validated state value.
     pub state: String,
+    /// Unrecognized response parameters.
     pub additional_parameters: Vec<FfiParameter>,
 }
 
+/// Logout URL and state used to validate an optional post-logout callback.
 #[derive(uniffi::Object)]
 pub struct FfiEndSessionSession {
     inner: crate::EndSessionSession,
@@ -578,10 +680,12 @@ pub struct FfiEndSessionSession {
 
 #[uniffi::export]
 impl FfiEndSessionSession {
+    /// Returns the URL to open in an external user agent.
     pub fn end_session_url(&self) -> String {
         self.inner.end_session_url().to_string()
     }
 
+    /// Validates the post-logout callback URI and returns its response.
     pub fn parse_redirect(
         &self,
         redirect_uri: String,
@@ -603,6 +707,7 @@ impl FfiEndSessionSession {
 }
 
 #[uniffi::export]
+/// Creates a logout session for a configured end-session endpoint.
 pub fn begin_end_session(
     configuration: Arc<FfiServiceConfiguration>,
     options: FfiEndSessionOptions,

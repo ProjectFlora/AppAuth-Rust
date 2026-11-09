@@ -12,10 +12,12 @@ private final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate, Sendab
   }
 }
 
+/// `URLSession`-based UniFFI transport that returns redirects without following them.
 public final class URLSessionNativeHttpTransport: NativeHttpTransport, @unchecked Sendable {
   private let redirectDelegate: NoRedirectDelegate
   private let session: URLSession
 
+  /// Creates a transport with the supplied session configuration.
   public init(configuration: URLSessionConfiguration = .ephemeral) {
     let redirectDelegate = NoRedirectDelegate()
     self.redirectDelegate = redirectDelegate
@@ -26,6 +28,7 @@ public final class URLSessionNativeHttpTransport: NativeHttpTransport, @unchecke
     )
   }
 
+  /// Executes one HTTP request and propagates task or core cancellation.
   public func execute(
     request: FfiHttpRequest,
     cancellation: FfiCancellationHandle

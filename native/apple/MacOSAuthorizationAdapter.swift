@@ -3,21 +3,35 @@
   import Foundation
   import Network
 
+  /// Errors raised while preparing or running macOS browser authorization.
   public enum MacOSAuthorizationAdapterError: Error {
+    /// An authorization session is already active on this adapter.
     case authorizationSessionAlreadyRunning
+    /// The configured browser-opening closure could not open the URL.
     case browserCouldNotBeOpened
+    /// The generated authorization URL could not be represented as a URL.
     case invalidAuthorizationURL
+    /// The callback template is not a valid loopback redirect URI.
     case invalidLoopbackRedirectURI
+    /// The loopback server received a malformed callback request.
     case malformedLoopbackRequest
   }
 
   @MainActor
+  /// Runs authorization using a loopback callback bound to IPv4 localhost.
+  ///
+  /// The adapter selects an available port and substitutes it into the
+  /// configured `http://127.0.0.1/...` redirect template.
   public final class MacOSAuthorizationAdapter {
     private let openAuthorizationURL: @MainActor @Sendable (URL) async throws -> Void
     private var activeCancellation: FfiCancellationHandle?
     private var activeListener: LoopbackHTTPListener?
     private var isRunning = false
 
+    /// Creates an adapter with a browser-opening closure.
+    ///
+    /// The default opens the URL using `NSWorkspace`; a custom closure can be
+    /// supplied by hosts that manage browser presentation themselves.
     public init(
       openAuthorizationURL: @escaping @MainActor @Sendable (URL) async throws -> Void = { url in
         guard NSWorkspace.shared.open(url) else {
@@ -28,6 +42,10 @@
       self.openAuthorizationURL = openAuthorizationURL
     }
 
+    /// Starts the loopback listener, opens the external browser, and exchanges the callback code.
+    ///
+    /// Only one operation may run on an adapter at a time. Cancelling stops
+    /// the listener and any in-flight core request.
     public func authorize(
       configuration: FfiServiceConfiguration,
       options: FfiAuthorizationOptions,
@@ -101,6 +119,7 @@
       }
     }
 
+    /// Cancels the active callback wait and in-flight core request.
     public func cancel() {
       activeCancellation?.cancel()
       if let activeListener {
