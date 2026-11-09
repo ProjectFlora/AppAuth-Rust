@@ -284,9 +284,9 @@ release-candidate checks are complete.
 
 ## Rust support
 
-- **MSRV:** Rust 1.88, the minimum required by the currently locked dependency
-  set. CI tests both this version and stable; dependency updates must preserve
-  the MSRV or deliberately raise it.
+- **MSRV:** Rust 1.99.1, matching the version currently used by CI. CI tests
+  both this version and stable; dependency updates must preserve this baseline
+  or deliberately raise it.
 - **Supported targets:**
   - iOS / iPadOS: `aarch64-apple-ios` (device),
     `aarch64-apple-ios-sim` (simulator)
