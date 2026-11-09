@@ -38,7 +38,7 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 | iOS / iPadOS | 18 | Rust core and native authorization adapter |
 | macOS | 15 | Rust core and native authorization adapter |
 | Android | API 34 (Android 14) | Rust core and native authorization adapter |
-| Windows | No desktop minimum | Shared Rust core only; desktop browser integration is deferred |
+| Windows | Microsoft-supported Windows client versions; reviewed each release | Rust core and desktop authorization adapter |
 | tvOS | Not applicable | Deferred |
 
 The Apple minimums follow the security-update generations reviewed on
@@ -54,8 +54,8 @@ versions and Android device reach immediately before release.
   fallback. App Links require API 23+ and domain association.
 - **macOS:** Use an HTTP loopback redirect on a dynamically allocated port,
   bound only to the loopback interface.
-- **Windows:** Loopback browser and redirect integration is deferred beyond
-  the initial release.
+- **Windows:** Use the external browser and an HTTP loopback redirect, bound
+  only to the loopback interface.
 
 ## Authorization callback lifecycle
 
@@ -127,6 +127,10 @@ versions and Android device reach immediately before release.
   follow redirects and receives the shared cancellation handle for every
   request. The Rust `ReqwestTransport` remains available to Rust callers that
   provide a Tokio runtime.
+- Windows desktop applications use the C ABI in `native/windows/include` to
+  run authorization in the system browser and receive a loopback callback.
+  The ABI is callable from C++ and from .NET through P/Invoke; see
+  [`native/windows/README.md`](native/windows/README.md).
 - Generate the public Rust API reference locally with
   `cargo doc --locked --no-deps`; the HTML output is written to
   `target/doc/appauth_rust/index.html`.
@@ -138,12 +142,13 @@ versions and Android device reach immediately before release.
 
 The project is not yet published on crates.io, Swift Package Manager, Maven
 Central, or Carthage. The initial native distribution decision is versioned
-GitHub Release assets: an Apple XCFramework and an Android AAR. Those versioned
-packages and checksums are not published yet.
+GitHub Release assets: an Apple XCFramework, Android AAR, and Windows DLL
+package with C/C++ and .NET interop files. Those versioned packages and
+checksums are not published yet.
 The release workflow accepts only SemVer tags that point to `main` and match
-the crate version. It publishes the Apple XCFramework, Android AAR, Rust API
-reference, and SHA-256 checksums. Do not tag v0.1.0 until the remaining
-release-candidate checks are complete.
+the crate version. It publishes the Apple XCFramework, Android AAR, Windows
+package, Rust API reference, and SHA-256 checksums. Do not tag v0.1.0 until the
+remaining release-candidate checks are complete.
 
 ## Apple adapters
 
@@ -265,12 +270,34 @@ release-candidate checks are complete.
   }
   ```
 
-- This workflow artifact is for CI validation and expires after 14 days. A
-  versioned GitHub Release AAR, checksums, and a Swift XCFramework are still
-  pending.
+- This workflow artifact is for CI validation and expires after 14 days.
+  Versioned GitHub Release packages and checksums are still pending.
 - Android callback activity routing is exercised on an API 34 emulator.
   Complete authorization through an external browser and a live identity
   provider is not yet tested end-to-end.
+
+## Windows adapter
+
+- `native/windows` provides a blocking C ABI for C++ and .NET hosts. It
+  discovers provider configuration, starts a loopback listener on
+  `127.0.0.1`, opens the external browser, validates the callback through the
+  shared Rust core, and exchanges the authorization code.
+- The C# `AuthorizeAsync` wrapper in `native/windows/dotnet` runs the blocking
+  ABI on a worker and connects .NET cancellation to the native cancellation
+  handle. C++ and VB.NET hosts can call the C ABI directly.
+- Call authorization from a worker thread. A C-compatible cancellation handle
+  cancels the callback wait and in-flight HTTP operations. Successful results
+  contain serialized token state and must be stored securely.
+- Build the Windows shared library and run its adapter tests with:
+
+  ```powershell
+  cargo build --locked --lib --target x86_64-pc-windows-msvc
+  cargo test --locked --lib --target x86_64-pc-windows-msvc
+  ```
+
+- The adapter targets `x86_64-pc-windows-msvc`. Review Microsoft's supported
+  Windows client versions at each release and update the support matrix and
+  validation targets.
 
 ## Platform plan
 
@@ -279,7 +306,7 @@ release-candidate checks are complete.
 | iOS / iPadOS | Shared core and native authorization integration |
 | macOS | Shared core and native authorization integration |
 | Android | Shared core and native authorization integration |
-| Windows | Shared Rust core only; desktop browser and redirect integration are not required for the initial release |
+| Windows | Shared core and desktop browser/redirect integration (v1 target) |
 | tvOS | Deferred |
 
 ## Rust support
@@ -292,7 +319,7 @@ release-candidate checks are complete.
     `aarch64-apple-ios-sim` (simulator)
   - macOS: `aarch64-apple-darwin`, `x86_64-apple-darwin`
   - Android: `aarch64-linux-android`, `x86_64-linux-android`
-  - Windows shared core: `x86_64-pc-windows-msvc`
+  - Windows: `x86_64-pc-windows-msvc`
   - Linux: `x86_64-unknown-linux-gnu` for development and CI only; Linux is
     not an initial-release platform commitment.
 - **Cross-target CI:** Build the Rust core for every documented Apple, Android,
@@ -309,13 +336,15 @@ release-candidate checks are complete.
   protocol implementation behind that API. Pin both the UniFFI runtime and
   binding generator to 0.32.2, matching the validated binding spike. Generate
   Swift and Kotlin bindings reproducibly; do not hand-edit generated files.
-- For the initial release, publish a versioned Apple XCFramework archive and
-  Android AAR as GitHub Release assets. The XCFramework contains the generated
+- For the initial release, publish a versioned Apple XCFramework archive,
+  Android AAR, and Windows DLL/C ABI package as GitHub Release assets. The
+  XCFramework contains the generated
   Swift API and Rust library for the documented Apple targets; the AAR contains
   the generated Kotlin API and Rust libraries for Android `arm64-v8a` and
   `x86_64`. Include checksums and instructions for adding the XCFramework in
-  Xcode or the AAR as a local Gradle dependency. Keep compiled platform
-  binaries out of the source repository.
+  Xcode, the AAR as a local Gradle dependency, and the Windows DLL/import
+  library in C++ or .NET applications. Keep compiled platform binaries out of
+  the source repository.
 - Evaluate Maven Central, Swift Package Manager, and Carthage as later
   distribution channels; they are not initial-release requirements.
 
@@ -326,7 +355,7 @@ release-candidate checks are complete.
 | iOS / iPadOS | 18 | Apple listed security updates for 27.2, 26.7.2, and 18.7.11 on 2026-10-26; minimum follows the oldest security-updated major generation. |
 | macOS | 15 (Sequoia) | Apple listed security updates for 27.2 (Golden Gate), 26.7.2 (Tahoe), and 15.8.2 (Sequoia) on 2026-10-26. |
 | Android | API 34 (Android 14), provisional | The November 2026 Android Security Bulletin lists AOSP versions 14–17. Re-evaluate against current security bulletins and Google Play Console Reach and devices data before release. |
-| Windows | No desktop OS minimum for the initial release | Only the shared Rust core is included; desktop browser and redirect integration are deferred. |
+| Windows | Microsoft-supported Windows client versions (x64), reviewed at each release | Track Microsoft's product lifecycle; no fixed minimum OS version. |
 
 The Apple versions above are a dated snapshot, not fixed promises. At release,
 recheck Apple's security updates and record the actual supported versions.
@@ -334,8 +363,9 @@ Android API 34 is a provisional SDK floor, not a guarantee that a device is
 receiving security patches: updates depend on the device manufacturer and model.
 Reassess the floor before release using the then-current Android Security
 Bulletin and available Play Console data. Android App Links require API 23, but
-the provisional security-based floor is higher. Windows desktop support and
-its minimum OS version will be decided when that integration is scheduled.
+the provisional security-based floor is higher. For Windows, review Microsoft's
+supported Windows client versions at each release and update the support matrix
+and validation targets; the v1 target is currently `x86_64-pc-windows-msvc`.
 
 See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for the feature-scope proposal and
 [ROADMAP.md](ROADMAP.md) for remaining design decisions and work phases.

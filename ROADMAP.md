@@ -14,8 +14,8 @@ This roadmap tracks work remaining for the initial scope in
 - **Authentication state:** The Rust core models serializable authentication
   state; persistence and encryption are the host application's responsibility.
 - **Native API surface:** Expose the Rust core through thin Swift adapters for
-  Apple platforms and a thin Kotlin adapter for Android; keep browser and
-  redirect lifecycle handling in those adapters.
+  Apple platforms, a thin Kotlin adapter for Android, and a Windows C ABI for
+  C++ and .NET hosts; keep browser and redirect lifecycle handling in adapters.
 - **Binding mechanism:** Define the native-facing Rust API with UniFFI
   proc-macros, keeping protocol implementation behind that interface. Pin the
   UniFFI runtime and binding generator to 0.32.2; generate bindings
@@ -23,10 +23,10 @@ This roadmap tracks work remaining for the initial scope in
   cancellation separately from UniFFI.
 - **Initial binding distribution:** Pin UniFFI generation to 0.32.2, matching
   the validated spike, and generate bindings reproducibly from the Rust
-  interface. Publish versioned Apple XCFramework and Android AAR artifacts with
-  checksums through GitHub Releases; keep compiled binaries out of the source
-  repository. Evaluate Maven Central, Swift Package Manager, and Carthage as
-  later distribution channels.
+  interface. Publish versioned Apple XCFramework, Android AAR, and Windows
+  DLL/C ABI packages with checksums through GitHub Releases; keep compiled
+  binaries out of the source repository. Evaluate Maven Central, Swift Package
+  Manager, and Carthage as later distribution channels.
 - **HTTP architecture:** Use an asynchronous transport abstraction, with a
   Rust `reqwest` implementation by default and native transport overrides
   available to mobile adapters.
@@ -34,11 +34,12 @@ This roadmap tracks work remaining for the initial scope in
   default `reqwest` transport; native mobile adapters may use their own HTTP
   clients.
 - **Redirect policy:** Prefer verified HTTPS links on iOS/iPadOS and Android,
-  with custom URI scheme fallbacks; use loopback redirects on macOS.
-- **Windows scope:** Include the shared Rust core for `x86_64-pc-windows-msvc`
-  in the initial release. Defer Windows browser and redirect integration, and
-  its minimum OS decision, to a later phase; it is not an initial-release
-  requirement.
+  with custom URI scheme fallbacks; use loopback redirects on macOS and Windows.
+- **Windows scope:** Include Windows desktop browser and redirect integration
+  in v1, using the external browser and loopback redirects. Initially target
+  `x86_64-pc-windows-msvc`; support Windows client versions currently supported
+  by Microsoft and review the supported versions at each release rather than
+  pinning a fixed minimum OS version.
 - **Authorization callback lifecycle:** Native adapters prepare the callback
   handler or loopback listener before browser launch and stop it after the first
   callback for the registered redirect. Unrelated callbacks are ignored
@@ -60,9 +61,9 @@ This roadmap tracks work remaining for the initial scope in
   to 18 and macOS minimum to 15 based on Apple's current security-updated
   generations. Set Android API 34 as a provisional minimum based on current
   AOSP Security Bulletin coverage; reassess it before release using the current
-  bulletin and available Google Play Console Reach and devices data. Windows
-  desktop OS minimum remains deferred because only the shared core is in the
-  initial release.
+  bulletin and available Google Play Console Reach and devices data. For
+  Windows, support Microsoft-supported Windows client versions and review the
+  support matrix at each release.
 - **Provider-specific behavior:** Do not add provider detection, defaults, or
   protocol branches in the initial release. Keep provider parameters caller
   supplied and expose unrecognized response parameters to callers as raw
@@ -97,9 +98,10 @@ This roadmap tracks work remaining for the initial scope in
 4. **Integrate initial native platforms (complete):** Add external-browser
    and redirect integrations for iOS/iPadOS, macOS, and Android while keeping
    UI and OS lifecycle concerns outside the shared protocol core.
-5. **Add Windows desktop integration (later phase):** This is not required for
-   the initial release. When scheduled, add external-browser launch and
-   redirect handling, then define and document the minimum Windows version.
+5. **Add Windows desktop integration (in progress; v1 target):** Add external-browser
+   launch and loopback redirect handling for `x86_64-pc-windows-msvc`. At each
+   release, review Microsoft's supported Windows client versions and update
+   the documented support matrix and validation targets accordingly.
 6. **Validate and prepare a release:** Add unit and protocol integration tests,
    platform build/flow tests, security-focused edge-case coverage, examples,
    API documentation, and a release/support matrix.
@@ -113,9 +115,10 @@ are in place. Initial iOS/iPadOS and macOS authorization adapters are
 implemented and covered by SDK type-checking and a macOS loopback smoke test.
 The Android authorization adapter is implemented with App Links/custom-scheme
 selection, unit-tested redirect handling, and emulator-tested callback
-activity routing. CI cross-compiles all documented Apple, Android, and Windows
-Rust targets, packages an Apple XCFramework, and verifies Rust libraries are
-packaged in the Android release AAR. Full authorization through external
+activity routing. The Windows C ABI and loopback authorization flow are
+implemented with unit coverage; CI is configured to build and test the Windows
+target. CI also packages an Apple XCFramework and verifies Rust libraries are
+packaged in the Android release AAR. Full authorization through real external
 browsers and live identity providers, and release validation, remain.
 
 ## Initial validation checkpoints

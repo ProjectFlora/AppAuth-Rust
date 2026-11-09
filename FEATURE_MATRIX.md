@@ -21,14 +21,14 @@ confirmation.
 | OIDC end-session / logout | Supported | Supported | Initial — agreed |
 | Dynamic client registration | Supported | Supported | Initial — agreed for public clients; do not embed client secrets |
 | Browser selection/custom user agent | Custom external user agents | Browser matching and custom-tab selection | Later — platform-specific |
-| Native application API | Native Objective-C/Swift APIs | Native Java/Kotlin APIs | Initial — agreed; thin Swift and Kotlin adapters around the Rust core |
-| Rust-to-native bindings | N/A | N/A | Initial — agreed; UniFFI generates the Swift/Kotlin bindings |
+| Native application API | Native Objective-C/Swift APIs | Native Java/Kotlin APIs | Initial — agreed; thin Swift/Kotlin adapters and a Windows C ABI around the Rust core |
+| Rust-to-native bindings | N/A | N/A | Initial — agreed; UniFFI generates Swift/Kotlin bindings; a C ABI serves Windows C++ and .NET hosts |
 | HTTP transport | Customizable URL session provider | Custom connection builder | Initial — agreed; async abstraction, caller-runtime reqwest default, native override available |
 | Device Authorization Grant | Separate AppAuthTV implementation | Not part of the documented core flow | Deferred with tvOS |
 | Static client secret in a native app | API can accept a client secret | Supported, but upstream warns against static secrets | Out of scope — native clients are public clients |
 | Resource Owner Password / Implicit flows | Not part of the documented recommended flow | Not part of the documented recommended flow | Out of scope — use Authorization Code + PKCE |
 | UserInfo and application API calls | Caller makes API calls with tokens | Caller makes API calls with tokens | Out of scope — return tokens; callers use them with their APIs |
-| Windows browser and redirect integration | Not applicable | Not applicable | Later — outside the initial release; shared Rust core only initially |
+| Windows browser and redirect integration | Not applicable | Not applicable | Initial — agreed for v1: external browser and loopback redirect; support Microsoft-supported Windows client versions and review at each release |
 
 ## Important parity difference
 
@@ -70,11 +70,12 @@ Swift/Kotlin binding approach.
 
 The initial distribution decision is to pin generation to UniFFI 0.32.2 and
 use proc macros to define the native-facing Rust API. Publish versioned Apple
-XCFramework and Android AAR artifacts with checksums through GitHub Releases.
-The XCFramework contains the generated Swift API and Rust library; the AAR
-contains the generated Kotlin API and Android Rust libraries. Compiled binaries
-stay out of the source repository. Maven Central, Swift Package Manager, and
-Carthage remain candidates for later evaluation.
+XCFramework, Android AAR, and Windows DLL/C ABI packages with checksums through
+GitHub Releases. The XCFramework contains the generated Swift API and Rust
+library; the AAR contains the generated Kotlin API and Android Rust libraries;
+the Windows package contains the DLL, import library, C header, and .NET
+wrapper. Compiled binaries stay out of the source repository. Maven Central,
+Swift Package Manager, and Carthage remain candidates for later evaluation.
 
 ## References
 
