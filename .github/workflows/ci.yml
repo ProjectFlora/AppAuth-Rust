@@ -59,7 +59,7 @@ jobs:
           retention-days: 14
 
   windows_core:
-    name: Windows desktop authorization
+    name: Windows core target validation
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
