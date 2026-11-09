@@ -13,11 +13,20 @@
 
   @MainActor
   public final class MacOSAuthorizationAdapter {
+    private let openAuthorizationURL: @MainActor @Sendable (URL) async throws -> Void
     private var activeCancellation: FfiCancellationHandle?
     private var activeListener: LoopbackHTTPListener?
     private var isRunning = false
 
-    public init() {}
+    public init(
+      openAuthorizationURL: @escaping @MainActor @Sendable (URL) async throws -> Void = { url in
+        guard NSWorkspace.shared.open(url) else {
+          throw MacOSAuthorizationAdapterError.browserCouldNotBeOpened
+        }
+      }
+    ) {
+      self.openAuthorizationURL = openAuthorizationURL
+    }
 
     public func authorize(
       configuration: FfiServiceConfiguration,
@@ -64,9 +73,11 @@
           let callbackTask = Task {
             try await listener.waitForCallback()
           }
-          guard NSWorkspace.shared.open(authorizationURL) else {
+          do {
+            try await openAuthorizationURL(authorizationURL)
+          } catch {
             callbackTask.cancel()
-            throw MacOSAuthorizationAdapterError.browserCouldNotBeOpened
+            throw error
           }
 
           let callbackURI = try await callbackTask.value

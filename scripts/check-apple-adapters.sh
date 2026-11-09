@@ -9,8 +9,9 @@ scripts/generate-bindings.sh "$output_dir"
 xcrun swift-format lint --strict \
     native/apple/IOSAuthorizationAdapter.swift \
     native/apple/MacOSAuthorizationAdapter.swift \
+    native/apple/MacOSMockOAuthProvider.swift \
     native/apple/URLSessionNativeHttpTransport.swift \
-    native/apple/MacOSLoopbackListenerSmoke.swift
+    native/apple/MacOSAuthorizationFlowSmoke.swift
 
 swift_file="$output_dir/swift/appauth_rust.swift"
 module_map="$output_dir/swift/appauth_rustFFI.modulemap"
@@ -22,6 +23,7 @@ swiftc \
     "$swift_file" \
     native/apple/IOSAuthorizationAdapter.swift \
     native/apple/MacOSAuthorizationAdapter.swift \
+    native/apple/MacOSMockOAuthProvider.swift \
     native/apple/URLSessionNativeHttpTransport.swift
 
 swiftc \
@@ -32,6 +34,7 @@ swiftc \
     "$swift_file" \
     native/apple/IOSAuthorizationAdapter.swift \
     native/apple/MacOSAuthorizationAdapter.swift \
+    native/apple/MacOSMockOAuthProvider.swift \
     native/apple/URLSessionNativeHttpTransport.swift
 
 mkdir -p target/apple
@@ -53,9 +56,10 @@ swiftc \
     -lappauth_rust \
     -Xlinker -rpath \
     -Xlinker "$repo_root/target/debug" \
-    -o target/apple/mac-loopback-smoke \
+    -o target/apple/mac-authorization-flow-smoke \
     "$swift_file" \
     native/apple/MacOSAuthorizationAdapter.swift \
+    native/apple/MacOSMockOAuthProvider.swift \
     native/apple/URLSessionNativeHttpTransport.swift \
-    native/apple/MacOSLoopbackListenerSmoke.swift
-target/apple/mac-loopback-smoke
+    native/apple/MacOSAuthorizationFlowSmoke.swift
+target/apple/mac-authorization-flow-smoke
