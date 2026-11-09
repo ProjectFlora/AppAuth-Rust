@@ -4,22 +4,36 @@ use url::Url;
 
 use crate::{AuthError, CancellationHandle, Result};
 
+/// An HTTP request issued by the OAuth/OIDC core.
 pub struct HttpRequest {
+    /// HTTP method.
     pub method: Method,
+    /// Absolute endpoint URL.
     pub url: Url,
+    /// Request headers.
     pub headers: HeaderMap,
+    /// Request body bytes.
     pub body: Vec<u8>,
 }
 
+/// An HTTP response returned to the OAuth/OIDC core.
 pub struct HttpResponse {
+    /// HTTP status code.
     pub status: StatusCode,
+    /// Response headers.
     pub headers: HeaderMap,
+    /// Response body bytes.
     pub body: Vec<u8>,
 }
 
-/// HTTP adapters must not follow redirects for OAuth requests.
+/// Asynchronous HTTP transport used for OAuth/OIDC endpoint requests.
+///
+/// Implementations must not follow redirects. Redirect responses are returned
+/// to the core as-is so credentials and authorization codes are not forwarded
+/// to a different endpoint.
 #[async_trait]
 pub trait HttpTransport: Send + Sync {
+    /// Executes one request and returns its response or transport error.
     async fn execute(
         &self,
         request: HttpRequest,
@@ -28,11 +42,13 @@ pub trait HttpTransport: Send + Sync {
 }
 
 #[derive(Clone)]
+/// Default `reqwest` transport for Rust callers that provide a Tokio runtime.
 pub struct ReqwestTransport {
     client: reqwest::Client,
 }
 
 impl ReqwestTransport {
+    /// Creates a transport configured not to follow HTTP redirects.
     pub fn new() -> Result<Self> {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())

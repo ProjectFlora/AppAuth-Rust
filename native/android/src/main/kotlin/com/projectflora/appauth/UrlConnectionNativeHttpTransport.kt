@@ -19,6 +19,12 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 import kotlin.coroutines.resumeWithException
 
+/**
+ * `HttpURLConnection`-based UniFFI transport that does not follow redirects.
+ *
+ * The implementation disconnects active connections when the coroutine or
+ * shared cancellation handle is cancelled.
+ */
 class UrlConnectionNativeHttpTransport : NativeHttpTransport {
     override suspend fun execute(
         request: FfiHttpRequest,

@@ -48,6 +48,7 @@ const RESERVED_END_SESSION_PARAMETERS: &[&str] = &[
 ];
 
 #[derive(Clone)]
+/// Authorization, token, OIDC, registration, and end-session endpoint configuration.
 pub struct ServiceConfiguration {
     authorization_endpoint: Url,
     token_endpoint: Url,
@@ -59,6 +60,7 @@ pub struct ServiceConfiguration {
 }
 
 impl ServiceConfiguration {
+    /// Creates a configuration from explicit authorization and token endpoints.
     pub fn new(authorization_endpoint: Url, token_endpoint: Url) -> Result<Self> {
         validate_endpoint(&authorization_endpoint)?;
         validate_endpoint(&token_endpoint)?;
@@ -74,18 +76,21 @@ impl ServiceConfiguration {
         })
     }
 
+    /// Adds an HTTPS end-session endpoint.
     pub fn with_end_session_endpoint(mut self, endpoint: Url) -> Result<Self> {
         validate_logout_endpoint(&endpoint)?;
         self.end_session_endpoint = Some(endpoint);
         Ok(self)
     }
 
+    /// Adds an HTTPS dynamic client registration endpoint.
     pub fn with_registration_endpoint(mut self, endpoint: Url) -> Result<Self> {
         validate_registration_endpoint(&endpoint)?;
         self.registration_endpoint = Some(endpoint);
         Ok(self)
     }
 
+    /// Configures the issuer and JWKS endpoint used to validate ID Tokens.
     pub fn with_oidc_validation_endpoints(mut self, issuer: Url, jwks_uri: Url) -> Result<Self> {
         validate_issuer(&issuer)?;
         validate_oidc_endpoint(&jwks_uri)?;
@@ -95,6 +100,10 @@ impl ServiceConfiguration {
         Ok(self)
     }
 
+    /// Loads and validates OpenID Provider metadata for `issuer`.
+    ///
+    /// The transport must not follow redirects. Discovery is required when the
+    /// issuer and JWKS endpoint are needed for ID Token validation.
     pub async fn discover(
         issuer: Url,
         transport: &dyn HttpTransport,
@@ -157,26 +166,32 @@ impl ServiceConfiguration {
         })
     }
 
+    /// Returns the configured authorization endpoint.
     pub fn authorization_endpoint(&self) -> &Url {
         &self.authorization_endpoint
     }
 
+    /// Returns the configured token endpoint.
     pub fn token_endpoint(&self) -> &Url {
         &self.token_endpoint
     }
 
+    /// Returns the configured end-session endpoint, if any.
     pub fn end_session_endpoint(&self) -> Option<&Url> {
         self.end_session_endpoint.as_ref()
     }
 
+    /// Returns the configured client registration endpoint, if any.
     pub fn registration_endpoint(&self) -> Option<&Url> {
         self.registration_endpoint.as_ref()
     }
 
+    /// Returns the configured OIDC issuer, if any.
     pub fn issuer(&self) -> Option<&Url> {
         self.issuer.as_ref()
     }
 
+    /// Returns the configured JWKS endpoint, if any.
     pub fn jwks_uri(&self) -> Option<&Url> {
         self.jwks_uri.as_ref()
     }
@@ -192,6 +207,29 @@ struct DiscoveryMetadata {
     jwks_uri: Option<String>,
 }
 
+/// Parameters used to create an Authorization Code + PKCE request.
+///
+/// ```
+/// use appauth_rust::{AuthorizationRequest, ServiceConfiguration};
+/// use url::Url;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let configuration = ServiceConfiguration::new(
+///     Url::parse("https://issuer.example/authorize")?,
+///     Url::parse("https://issuer.example/token")?,
+/// )?;
+/// let session = AuthorizationRequest::new(
+///     configuration,
+///     "native-client",
+///     Url::parse("com.example.app:/oauth/callback")?,
+///     vec!["profile".to_owned()],
+/// )?
+/// .begin()?;
+/// let authorization_url = session.authorization_url();
+/// # let _ = authorization_url;
+/// # Ok(())
+/// # }
+/// ```
 pub struct AuthorizationRequest {
     configuration: ServiceConfiguration,
     client_id: String,
@@ -202,6 +240,10 @@ pub struct AuthorizationRequest {
 }
 
 impl AuthorizationRequest {
+    /// Creates an authorization request.
+    ///
+    /// Requests containing the `openid` scope require issuer and JWKS
+    /// configuration so returned ID Tokens can be validated.
     pub fn new(
         configuration: ServiceConfiguration,
         client_id: impl Into<String>,
@@ -237,6 +279,7 @@ impl AuthorizationRequest {
         })
     }
 
+    /// Adds a provider-specific authorization request parameter.
     pub fn with_additional_parameter(
         mut self,
         name: impl Into<String>,
@@ -253,6 +296,7 @@ impl AuthorizationRequest {
         Ok(self)
     }
 
+    /// Adds a provider-specific parameter to the token exchange request.
     pub fn with_additional_token_parameter(
         mut self,
         name: impl Into<String>,
@@ -264,6 +308,7 @@ impl AuthorizationRequest {
         Ok(self)
     }
 
+    /// Generates state, an optional OIDC nonce, and an S256 PKCE challenge.
     pub fn begin(self) -> Result<AuthorizationSession> {
         let mut authorization_url = self.configuration.authorization_endpoint.clone();
         reject_reserved_endpoint_parameters(&authorization_url)?;
@@ -311,6 +356,7 @@ impl AuthorizationRequest {
     }
 }
 
+/// A prepared authorization request and the session data needed to finish it.
 pub struct AuthorizationSession {
     authorization_url: Url,
     redirect_uri: Url,
@@ -326,15 +372,20 @@ pub struct AuthorizationSession {
 }
 
 impl AuthorizationSession {
+    /// Returns the URL to open in an external user agent.
     pub fn authorization_url(&self) -> &Url {
         &self.authorization_url
     }
 
+    /// Returns the generated OIDC nonce, or `None` when `openid` was not requested.
     pub fn nonce(&self) -> Option<&str> {
         self.nonce.as_deref()
     }
 
     /// Creates authentication state while retaining this session's OIDC nonce.
+    ///
+    /// Prefer this method over [`AuthenticationState::new`] after a successful
+    /// code exchange so the nonce remains available during later refreshes.
     pub fn authentication_state(
         &self,
         token_response: TokenResponse,
@@ -342,6 +393,10 @@ impl AuthorizationSession {
         AuthenticationState::new_with_oidc_nonce(token_response, self.nonce.clone())
     }
 
+    /// Validates a callback URL and extracts its authorization response.
+    ///
+    /// The redirect URI and state must match this session. OAuth error
+    /// responses are returned as [`AuthError::AuthorizationServer`].
     pub fn parse_redirect(&self, redirect: &Url) -> Result<AuthorizationResponse> {
         validate_redirect_uri_match(&self.redirect_uri, redirect)?;
 
@@ -401,6 +456,7 @@ impl AuthorizationSession {
         ))
     }
 
+    /// Exchanges a validated authorization code and verifies any returned ID Token.
     pub async fn exchange_code(
         &self,
         transport: &dyn HttpTransport,
@@ -469,6 +525,7 @@ impl AuthorizationSession {
     }
 }
 
+/// A dynamic client registration request for a native public client.
 pub struct ClientRegistrationRequest {
     registration_endpoint: Url,
     redirect_uris: Vec<Url>,
@@ -477,6 +534,9 @@ pub struct ClientRegistrationRequest {
 }
 
 impl ClientRegistrationRequest {
+    /// Creates a request using the configured registration endpoint.
+    ///
+    /// At least one unique redirect URI is required.
     pub fn new(configuration: &ServiceConfiguration, redirect_uris: Vec<Url>) -> Result<Self> {
         let registration_endpoint =
             configuration
@@ -509,6 +569,7 @@ impl ClientRegistrationRequest {
         })
     }
 
+    /// Sets the optional display name sent to the registration endpoint.
     pub fn with_client_name(mut self, client_name: impl Into<String>) -> Result<Self> {
         let client_name = client_name.into();
         if client_name.trim().is_empty() {
@@ -520,6 +581,7 @@ impl ClientRegistrationRequest {
         Ok(self)
     }
 
+    /// Sets a per-request bearer token for a protected registration endpoint.
     pub fn with_initial_access_token(
         mut self,
         initial_access_token: impl Into<String>,
@@ -530,6 +592,7 @@ impl ClientRegistrationRequest {
         Ok(self)
     }
 
+    /// Registers the public client and returns its client ID.
     pub async fn register(
         self,
         transport: &dyn HttpTransport,
@@ -604,16 +667,19 @@ struct ClientRegistrationMetadata<'a> {
     client_name: Option<&'a str>,
 }
 
+/// The client identifier returned by dynamic registration.
 pub struct ClientRegistrationResponse {
     client_id: String,
 }
 
 impl ClientRegistrationResponse {
+    /// Returns the registered public client ID.
     pub fn client_id(&self) -> &str {
         &self.client_id
     }
 }
 
+/// Parameters for an OpenID Connect RP-Initiated Logout request.
 pub struct EndSessionRequest {
     end_session_endpoint: Url,
     client_id: String,
@@ -622,6 +688,7 @@ pub struct EndSessionRequest {
 }
 
 impl EndSessionRequest {
+    /// Creates a logout request using the configured end-session endpoint.
     pub fn new(configuration: &ServiceConfiguration, client_id: impl Into<String>) -> Result<Self> {
         let client_id = client_id.into();
         if client_id.trim().is_empty() {
@@ -647,6 +714,7 @@ impl EndSessionRequest {
         })
     }
 
+    /// Adds an optional ID Token hint to the logout request.
     pub fn with_id_token_hint(mut self, id_token_hint: impl Into<String>) -> Result<Self> {
         let id_token_hint = id_token_hint.into();
         if id_token_hint.trim().is_empty() {
@@ -658,12 +726,14 @@ impl EndSessionRequest {
         Ok(self)
     }
 
+    /// Sets a callback URI; when set, a random state is generated and validated.
     pub fn with_post_logout_redirect_uri(mut self, redirect_uri: Url) -> Result<Self> {
         validate_redirect_uri(&redirect_uri)?;
         self.post_logout_redirect_uri = Some(redirect_uri);
         Ok(self)
     }
 
+    /// Builds the logout URL and returns a session for validating its callback.
     pub fn begin(self) -> Result<EndSessionSession> {
         let state = self
             .post_logout_redirect_uri
@@ -693,6 +763,7 @@ impl EndSessionRequest {
     }
 }
 
+/// A prepared logout URL and optional callback-validation state.
 pub struct EndSessionSession {
     end_session_url: Url,
     post_logout_redirect_uri: Option<Url>,
@@ -700,10 +771,12 @@ pub struct EndSessionSession {
 }
 
 impl EndSessionSession {
+    /// Returns the URL to open in an external user agent.
     pub fn end_session_url(&self) -> &Url {
         &self.end_session_url
     }
 
+    /// Validates the post-logout redirect and returns its state and extra parameters.
     pub fn parse_redirect(&self, redirect: &Url) -> Result<EndSessionResponse> {
         let expected_redirect_uri =
             self.post_logout_redirect_uri
@@ -750,21 +823,25 @@ impl EndSessionSession {
     }
 }
 
+/// A validated end-session callback.
 pub struct EndSessionResponse {
     state: String,
     additional_parameters: BTreeMap<String, String>,
 }
 
 impl EndSessionResponse {
+    /// Returns the validated state value.
     pub fn state(&self) -> &str {
         &self.state
     }
 
+    /// Returns unrecognized response parameters without interpreting them.
     pub fn additional_parameters(&self) -> &BTreeMap<String, String> {
         &self.additional_parameters
     }
 }
 
+/// A validated authorization callback containing an authorization code.
 pub struct AuthorizationResponse {
     code: String,
     state: String,
@@ -772,29 +849,39 @@ pub struct AuthorizationResponse {
 }
 
 impl AuthorizationResponse {
+    /// Returns the authorization code.
     pub fn code(&self) -> &str {
         &self.code
     }
 
+    /// Returns the state matched against the originating session.
     pub fn state(&self) -> &str {
         &self.state
     }
 
+    /// Returns unrecognized response parameters without interpreting them.
     pub fn additional_parameters(&self) -> &BTreeMap<String, String> {
         &self.additional_parameters
     }
 }
 
 #[derive(Serialize, Deserialize)]
+/// Token values returned by an OAuth token endpoint.
 pub struct TokenResponse {
+    /// The bearer access token.
     pub access_token: String,
+    /// The token type, typically `Bearer`.
     pub token_type: String,
+    /// Access-token lifetime in seconds, if supplied.
     pub expires_in: Option<u64>,
+    /// Refresh token, if supplied.
     pub refresh_token: Option<String>,
+    /// Granted scopes, if supplied.
     pub scope: Option<String>,
     /// Raw ID Token value. Tokens returned by code exchange are verified before return.
     pub id_token: Option<String>,
     #[serde(default)]
+    /// Unrecognized token response values preserved as JSON.
     pub additional_parameters: BTreeMap<String, Value>,
 }
 
@@ -809,11 +896,17 @@ pub struct AuthenticationState {
 
 impl AuthenticationState {
     /// Creates state and records expiry relative to the current system time.
+    ///
+    /// Use [`AuthorizationSession::authentication_state`] when the state
+    /// follows an OIDC authorization and must retain that request's nonce.
     pub fn new(token_response: TokenResponse) -> Result<Self> {
         Self::new_with_oidc_nonce(token_response, None)
     }
 
     /// Creates state while retaining the nonce used for the OIDC authorization.
+    ///
+    /// This state contains sensitive tokens. The host application must encrypt
+    /// it before persisting it.
     pub fn new_with_oidc_nonce(
         token_response: TokenResponse,
         oidc_nonce: Option<String>,
@@ -858,6 +951,7 @@ impl AuthenticationState {
         })
     }
 
+    /// Returns the current token response.
     pub fn token_response(&self) -> &TokenResponse {
         &self.token_response
     }
@@ -874,6 +968,9 @@ impl AuthenticationState {
     }
 
     /// Refreshes explicitly and only updates this state after a successful response.
+    ///
+    /// No automatic refresh is performed. If the operation fails, the existing
+    /// state remains unchanged.
     pub async fn refresh(
         &mut self,
         configuration: &ServiceConfiguration,
@@ -891,6 +988,10 @@ impl AuthenticationState {
         .await
     }
 
+    /// Refreshes using additional token endpoint parameters.
+    ///
+    /// No automatic refresh is performed. If the operation fails, the existing
+    /// state remains unchanged.
     pub async fn refresh_with_additional_parameters(
         &mut self,
         configuration: &ServiceConfiguration,

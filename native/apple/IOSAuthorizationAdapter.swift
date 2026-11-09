@@ -2,15 +2,25 @@
   import AuthenticationServices
   import Foundation
 
+  /// Errors raised while preparing or running an iOS browser authorization.
   public enum IOSAuthorizationAdapterError: Error {
+    /// An authorization session is already active on this adapter.
     case authorizationSessionAlreadyRunning
+    /// The system could not start the authentication session.
     case authorizationSessionCouldNotStart
+    /// The generated authorization URL could not be represented as a URL.
     case invalidAuthorizationURL
+    /// The configured callback URI is invalid or unsupported.
     case invalidCallbackURL
+    /// The system returned neither a callback URL nor an error.
     case missingCallbackURL
   }
 
   @MainActor
+  /// Runs authorization in `ASWebAuthenticationSession` and exchanges the callback code.
+  ///
+  /// The host application must register its custom callback scheme or configure
+  /// the associated domain used for verified HTTPS callbacks.
   public final class IOSAuthorizationAdapter {
     private let presentationContextProvider: any ASWebAuthenticationPresentationContextProviding
     private let prefersEphemeralWebBrowserSession: Bool
@@ -18,6 +28,10 @@
     private var activeCancellation: FfiCancellationHandle?
     private var isRunning = false
 
+    /// Creates an adapter using the host application's presentation context.
+    ///
+    /// Set `prefersEphemeralWebBrowserSession` to avoid sharing browser cookies
+    /// with the user's regular browsing session.
     public init(
       presentationContextProvider: any ASWebAuthenticationPresentationContextProviding,
       prefersEphemeralWebBrowserSession: Bool = false
@@ -26,6 +40,10 @@
       self.prefersEphemeralWebBrowserSession = prefersEphemeralWebBrowserSession
     }
 
+    /// Launches the system authentication session and completes code exchange.
+    ///
+    /// Only one operation may run on an adapter at a time. Cancelling the Swift
+    /// task or calling `cancel()` cancels the browser session and core request.
     public func authorize(
       configuration: FfiServiceConfiguration,
       options: FfiAuthorizationOptions,
@@ -79,6 +97,7 @@
       }
     }
 
+    /// Cancels the active browser session and any in-flight core request.
     public func cancel() {
       activeCancellation?.cancel()
       activeSession?.cancel()
