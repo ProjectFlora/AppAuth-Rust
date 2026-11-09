@@ -66,6 +66,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked --lib --target x86_64-pc-windows-msvc
+      - run: cargo test --locked --lib --target x86_64-pc-windows-msvc
+      - run: dotnet build native/windows/dotnet/AppAuthWindows.csproj --configuration Release
 
   android_adapters:
     name: Android adapters validation
