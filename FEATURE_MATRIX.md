@@ -64,8 +64,13 @@ Kotlin `suspend`.
 The documented limitations to account for are that cancellation is not
 built-in, UniFFI does not package the platform library, and Swift 6 support is
 partial (including known `Sendable` limitations for async code). The spike did
-not validate runtime cancellation behavior or Apple/Android packaging; these
-remain open implementation tasks. UniFFI is adopted for the initial
+not validate runtime cancellation or Apple/Android packaging. Since then,
+platform cancellation has been implemented, and CI builds an Apple XCFramework
+and an Android AAR and checks the packaged Rust libraries. CI also exercises
+iOS simulator authorization, macOS loopback authorization, and Android Custom
+Tab authorization flows against local mock providers. These checks do not
+replace live identity-provider interoperability testing or published release
+artifacts. UniFFI is adopted for the initial
 Swift/Kotlin binding approach.
 
 The initial distribution decision is to pin generation to UniFFI 0.32.2 and

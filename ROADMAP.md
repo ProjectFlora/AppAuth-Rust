@@ -98,10 +98,11 @@ This roadmap tracks work remaining for the initial scope in
 4. **Integrate initial native platforms (complete):** Add external-browser
    and redirect integrations for iOS/iPadOS, macOS, and Android while keeping
    UI and OS lifecycle concerns outside the shared protocol core.
-5. **Add Windows desktop integration (in progress; v1 target):** Add external-browser
-   launch and loopback redirect handling for `x86_64-pc-windows-msvc`. At each
-   release, review Microsoft's supported Windows client versions and update
-   the documented support matrix and validation targets accordingly.
+5. **Add Windows desktop integration (complete; v1 target):** Provide the
+   Windows C ABI, system-browser launch, loopback redirect handling, and
+   cancellation for `x86_64-pc-windows-msvc`. At each release, review
+   Microsoft's supported Windows client versions and update the documented
+   support matrix and validation targets accordingly.
 6. **Validate and prepare a release:** Add unit and protocol integration tests,
    platform build/flow tests, security-focused edge-case coverage, examples,
    API documentation, and a release/support matrix.
@@ -112,14 +113,18 @@ parsing, explicit refresh with serializable authentication state, additional
 token parameters, RP-Initiated Logout, public-client dynamic registration, and
 OIDC ID Token validation. The UniFFI facade and reproducible binding generation
 are in place. Initial iOS/iPadOS and macOS authorization adapters are
-implemented and covered by SDK type-checking and a macOS loopback smoke test.
-The Android authorization adapter is implemented with App Links/custom-scheme
-selection, unit-tested redirect handling, and emulator-tested callback
-activity routing. The Windows C ABI and loopback authorization flow are
-implemented with unit coverage; CI is configured to build and test the Windows
-target. CI also packages an Apple XCFramework and verifies Rust libraries are
-packaged in the Android release AAR. Full authorization through real external
-browsers and live identity providers, and release validation, remain.
+implemented and covered by SDK type-checking. CI exercises iOS simulator
+authorization against a local mock provider and runs a macOS loopback
+authorization flow against a local mock provider. The Android authorization
+adapter is implemented with App Links/custom-scheme selection, unit-tested
+redirect handling, and an API 34 emulator test that exercises authorization
+through a Custom Tab, callback activity, and code exchange against a local mock
+provider. The Windows C ABI implements system-browser launch, loopback
+authorization, and cancellation; unit tests exercise the flow with a simulated
+browser callback, and CI builds/tests the Windows target and builds the .NET
+wrapper. CI also packages an Apple XCFramework and verifies Rust libraries are
+packaged in the Android release AAR. Live identity-provider interoperability
+and release validation remain.
 
 ## Initial validation checkpoints
 

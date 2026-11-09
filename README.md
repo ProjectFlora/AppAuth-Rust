@@ -169,8 +169,10 @@ remaining release-candidate checks are complete.
   `URLSessionNativeHttpTransport` refuses HTTP redirects and forwards
   cancellation to `URLSession`.
 - Run `scripts/check-apple-adapters.sh` to regenerate the bindings, type-check
-  the adapters against the iOS and macOS SDKs, and smoke-test the macOS
-  loopback listener.
+  the adapters against the iOS and macOS SDKs, and run a macOS loopback
+  authorization flow against a local mock provider. CI also runs
+  `scripts/check-ios-authorization-flow.sh` on an arm64 Apple host to exercise
+  the iOS simulator adapter against a local mock provider.
 
 ## Apple binary package
 
@@ -272,9 +274,9 @@ remaining release-candidate checks are complete.
 
 - This workflow artifact is for CI validation and expires after 14 days.
   Versioned GitHub Release packages and checksums are still pending.
-- Android callback activity routing is exercised on an API 34 emulator.
-  Complete authorization through an external browser and a live identity
-  provider is not yet tested end-to-end.
+- Android authorization through a Custom Tab, callback activity, and code
+  exchange is exercised against a local mock provider on an API 34 emulator.
+  Live identity-provider interoperability is not yet tested end-to-end.
 
 ## Windows adapter
 
