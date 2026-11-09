@@ -51,11 +51,11 @@ This roadmap tracks work remaining for the initial scope in
 - **Cancellation contract:** Expose an explicit, idempotent operation
   cancellation handle and a distinct cancellation result; propagate
   cancellation to active work where supported.
-- **Rust support:** Set Rust 1.88 as the MSRV based on the currently locked
-  dependency set and test it in CI. Support the documented initial-release
-  target triples in [README.md](README.md); Linux is for development and CI
-  only. Keep one Rust core crate and add a workspace only if separate Rust
-  crates become necessary.
+- **Rust support:** Set Rust 1.99.1 as the MSRV to match the version currently
+  used by CI and test it there. Support the documented initial-release target
+  triples in [README.md](README.md); Linux is for development and CI only.
+  Keep one Rust core crate and add a workspace only if separate Rust crates
+  become necessary.
 - **Initial support matrix:** As checked on 2026-11-08, set iOS/iPadOS minimum
   to 18 and macOS minimum to 15 based on Apple's current security-updated
   generations. Set Android API 34 as a provisional minimum based on current
