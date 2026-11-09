@@ -57,7 +57,9 @@
       switch state {
       case .ready:
         guard let port = listener.port?.rawValue else {
-          readyContinuation?.resume(throwing: MacOSMockOAuthProviderError.listenerUnavailable)
+          readyContinuation?.resume(
+            throwing: MacOSMockOAuthProviderError.listenerUnavailable
+          )
           readyContinuation = nil
           return
         }
@@ -173,8 +175,7 @@
 
     private func authorize(target: String, on connection: NWConnection) {
       guard let components = URLComponents(string: "http://127.0.0.1\(target)"),
-        let clientID = uniqueValue("client_id", in: components),
-        clientID == "macos-smoke-client",
+        uniqueValue("client_id", in: components) == "macos-smoke-client",
         uniqueValue("response_type", in: components) == "code",
         uniqueValue("scope", in: components) == "profile",
         uniqueValue("code_challenge_method", in: components) == "S256",
@@ -182,10 +183,7 @@
         let state = uniqueValue("state", in: components),
         let redirectURI = uniqueValue("redirect_uri", in: components),
         var redirect = URLComponents(string: redirectURI),
-        redirect.scheme == "http",
-        redirect.host == "127.0.0.1",
-        redirect.path == "/oauth/callback",
-        redirect.port != nil
+        Self.supportsRedirect(redirect)
       else {
         respond(status: 400, reason: "Bad Request", body: "", on: connection)
         return
@@ -245,6 +243,16 @@
         return nil
       }
       return matches[0].value
+    }
+
+    private static func supportsRedirect(_ components: URLComponents) -> Bool {
+      components.scheme == "http"
+        && components.host == "127.0.0.1"
+        && components.path == "/oauth/callback"
+        && components.port != nil
+        && components.user == nil
+        && components.password == nil
+        && components.fragment == nil
     }
 
     private static func pkceChallenge(for verifier: String) -> String {
