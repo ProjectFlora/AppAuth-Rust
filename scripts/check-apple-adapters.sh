@@ -8,6 +8,7 @@ output_dir=target/uniffi
 scripts/generate-bindings.sh "$output_dir"
 xcrun swift-format lint --strict \
     native/apple/IOSAuthorizationAdapter.swift \
+    native/apple/IOSAuthorizationFlowSmoke.swift \
     native/apple/MacOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
     native/apple/URLSessionNativeHttpTransport.swift \
@@ -22,8 +23,8 @@ swiftc \
     -typecheck \
     "$swift_file" \
     native/apple/IOSAuthorizationAdapter.swift \
-    native/apple/MacOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
+    native/apple/MacOSAuthorizationAdapter.swift \
     native/apple/URLSessionNativeHttpTransport.swift
 
 swiftc \
@@ -33,8 +34,8 @@ swiftc \
     -typecheck \
     "$swift_file" \
     native/apple/IOSAuthorizationAdapter.swift \
-    native/apple/MacOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
+    native/apple/MacOSAuthorizationAdapter.swift \
     native/apple/URLSessionNativeHttpTransport.swift
 
 mkdir -p target/apple
@@ -58,8 +59,8 @@ swiftc \
     -Xlinker "$repo_root/target/debug" \
     -o target/apple/mac-authorization-flow-smoke \
     "$swift_file" \
-    native/apple/MacOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
+    native/apple/MacOSAuthorizationAdapter.swift \
     native/apple/URLSessionNativeHttpTransport.swift \
     native/apple/MacOSAuthorizationFlowSmoke.swift
 target/apple/mac-authorization-flow-smoke

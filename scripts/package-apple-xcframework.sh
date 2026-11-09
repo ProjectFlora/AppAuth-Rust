@@ -104,11 +104,12 @@ xcrun swiftc \
     -lappauth_rust_macos \
     -o "$repo_root/target/apple/mac-authorization-flow-smoke-static" \
     "$generated/swift/appauth_rust.swift" \
-    "$repo_root/native/apple/MacOSAuthorizationAdapter.swift" \
     "$repo_root/native/apple/MacOSMockOAuthProvider.swift" \
+    "$repo_root/native/apple/MacOSAuthorizationAdapter.swift" \
     "$repo_root/native/apple/URLSessionNativeHttpTransport.swift" \
     "$repo_root/native/apple/MacOSAuthorizationFlowSmoke.swift"
 "$repo_root/target/apple/mac-authorization-flow-smoke-static"
+scripts/check-ios-authorization-flow.sh
 
 ditto -c -k --sequesterRsrc --keepParent \
     "$package_root" \
