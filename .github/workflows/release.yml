@@ -71,6 +71,8 @@ jobs:
       - name: Remove cached XCFramework package output
         run: rm -rf target/apple/release-package
       - run: scripts/package-apple-xcframework.sh "${{ needs.validate_version.outputs.version }}"
+      - name: Run iOS authorization flow on simulator
+        run: scripts/check-ios-authorization-flow.sh
       - uses: actions/upload-artifact@v4
         with:
           name: release-apple
