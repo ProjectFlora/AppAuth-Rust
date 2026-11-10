@@ -19,6 +19,7 @@ confirmation.
 | Additional authorization and token request parameters | Supported | Supported | Initial — agreed; constrain reserved/security-sensitive parameters |
 | Additional response parameters | Exposed by token response models | Exposed by token response models | Initial — agreed; preserve unrecognized values opaquely without interpreting them |
 | OIDC end-session / logout | Supported | Supported | Initial — agreed |
+| OAuth 2.0 Token Revocation | Supported | Supported | Initial — explicit Rust, Swift/Kotlin, and Windows C ABI |
 | Dynamic client registration | Supported | Supported | Initial — agreed for public clients; do not embed client secrets |
 | Browser selection/custom user agent | Custom external user agents | Browser matching and custom-tab selection | Later — platform-specific |
 | Native application API | Native Objective-C/Swift APIs | Native Java/Kotlin APIs | Initial — agreed; thin Swift/Kotlin adapters and a Windows C ABI around the Rust core |

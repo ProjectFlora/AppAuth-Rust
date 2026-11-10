@@ -6,6 +6,12 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+### Added
+
+- OAuth 2.0 Token Revocation (RFC 7009) through discovered or explicitly
+  configured HTTPS endpoints for Rust, UniFFI, and Windows C ABI public-client
+  APIs.
+
 ### Documentation
 
 - Align distribution documentation with the published v0.2.0 assets, including

@@ -17,8 +17,8 @@ use tokio::{
 use url::Url;
 
 use crate::{
-    AuthError, AuthenticationState, AuthorizationRequest, CancellationHandle, ReqwestTransport,
-    ServiceConfiguration,
+    revoke_token, AuthError, AuthenticationState, AuthorizationRequest, CancellationHandle,
+    ReqwestTransport, RevocationTokenType, ServiceConfiguration,
 };
 
 const MAX_REQUEST_SIZE: usize = 16 * 1024;
@@ -48,6 +48,23 @@ struct WindowsAuthorizationRequest {
     additional_parameters: Vec<WindowsParameter>,
     #[serde(default)]
     additional_token_parameters: Vec<WindowsParameter>,
+}
+
+#[cfg(any(windows, test))]
+#[derive(Debug, Deserialize)]
+struct WindowsRevocationRequest {
+    #[serde(default)]
+    issuer: Option<String>,
+    #[serde(default)]
+    authorization_endpoint: Option<String>,
+    #[serde(default)]
+    token_endpoint: Option<String>,
+    #[serde(default)]
+    revocation_endpoint: Option<String>,
+    client_id: String,
+    token: String,
+    #[serde(default)]
+    token_type_hint: Option<String>,
 }
 
 #[cfg(any(windows, test))]
@@ -90,6 +107,9 @@ pub struct AppAuthWindowsAuthorizationResult {
     status: i32,
     value: CString,
 }
+
+#[cfg(windows)]
+pub type AppAuthWindowsRevocationResult = AppAuthWindowsAuthorizationResult;
 
 #[cfg(windows)]
 impl AppAuthWindowsAuthorizationResult {
@@ -194,6 +214,71 @@ where
         .exchange_code(&transport, &response, cancellation)
         .await?;
     Ok(authorization.authentication_state(tokens)?)
+}
+
+#[cfg(any(windows, test))]
+async fn revoke_with_windows_request(
+    request: WindowsRevocationRequest,
+    cancellation: CancellationHandle,
+) -> std::result::Result<(), WindowsAuthorizationError> {
+    if cancellation.is_cancelled() {
+        return Err(AuthError::Cancelled.into());
+    }
+    let transport = ReqwestTransport::new()?;
+    let configuration = match (request.authorization_endpoint, request.token_endpoint) {
+        (Some(authorization_endpoint), Some(token_endpoint)) => {
+            let authorization_endpoint = Url::parse(&authorization_endpoint)
+                .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?;
+            let token_endpoint = Url::parse(&token_endpoint)
+                .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?;
+            let revocation_endpoint = request
+                .revocation_endpoint
+                .ok_or(WindowsAuthorizationError::InvalidEndpoint)?;
+            ServiceConfiguration::new(authorization_endpoint, token_endpoint)?
+                .with_revocation_endpoint(
+                    Url::parse(&revocation_endpoint)
+                        .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
+                )?
+        }
+        (None, None) => {
+            let issuer = request
+                .issuer
+                .ok_or(WindowsAuthorizationError::InvalidIssuer)?;
+            let issuer =
+                Url::parse(&issuer).map_err(|_| WindowsAuthorizationError::InvalidIssuer)?;
+            let configuration =
+                ServiceConfiguration::discover(issuer, &transport, cancellation.clone()).await?;
+            match request.revocation_endpoint {
+                Some(revocation_endpoint) => configuration.with_revocation_endpoint(
+                    Url::parse(&revocation_endpoint)
+                        .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
+                )?,
+                None => configuration,
+            }
+        }
+        _ => return Err(WindowsAuthorizationError::InvalidEndpoint),
+    };
+    let token_type_hint = match request.token_type_hint.as_deref() {
+        None => None,
+        Some("access_token") => Some(RevocationTokenType::AccessToken),
+        Some("refresh_token") => Some(RevocationTokenType::RefreshToken),
+        Some(_) => {
+            return Err(AuthError::InvalidConfiguration(
+                "token type hint must be access_token or refresh_token",
+            )
+            .into());
+        }
+    };
+    revoke_token(
+        &configuration,
+        &request.client_id,
+        &request.token,
+        token_type_hint,
+        &transport,
+        cancellation,
+    )
+    .await?;
+    Ok(())
 }
 
 async fn wait_for_callback(
@@ -398,6 +483,18 @@ fn authorize(
 }
 
 #[cfg(windows)]
+fn revoke(
+    request: WindowsRevocationRequest,
+    cancellation: CancellationHandle,
+) -> std::result::Result<(), WindowsAuthorizationError> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
+        .block_on(revoke_with_windows_request(request, cancellation))
+}
+
+#[cfg(windows)]
 fn result(status: i32, value: impl Into<String>) -> *mut AppAuthWindowsAuthorizationResult {
     AppAuthWindowsAuthorizationResult::new(status, value)
 }
@@ -416,6 +513,24 @@ fn run_authorize(
             Ok(state) => result(STATUS_SUCCESS, state),
             Err(error) => result(STATUS_ERROR, error.to_string()),
         },
+        Err(WindowsAuthorizationError::Core(AuthError::Cancelled)) => {
+            result(STATUS_CANCELLED, AuthError::Cancelled.to_string())
+        }
+        Err(error) => result(STATUS_ERROR, error.to_string()),
+    }
+}
+
+#[cfg(windows)]
+fn run_revoke(
+    request_json: &str,
+    cancellation: CancellationHandle,
+) -> *mut AppAuthWindowsRevocationResult {
+    let request = match serde_json::from_str::<WindowsRevocationRequest>(request_json) {
+        Ok(request) => request,
+        Err(error) => return result(STATUS_ERROR, error.to_string()),
+    };
+    match revoke(request, cancellation) {
+        Ok(()) => result(STATUS_SUCCESS, ""),
         Err(WindowsAuthorizationError::Core(AuthError::Cancelled)) => {
             result(STATUS_CANCELLED, AuthError::Cancelled.to_string())
         }
@@ -525,6 +640,43 @@ pub unsafe extern "C" fn appauth_windows_authorize(
     run_authorize(&request_json, cancellation)
 }
 
+/// Requests token revocation synchronously and returns a result handle.
+///
+/// The UTF-8 JSON request contains either an `issuer` for discovery, or both
+/// `authorization_endpoint` and `token_endpoint` with a
+/// `revocation_endpoint`, plus `client_id` and `token`. An explicit
+/// `revocation_endpoint` overrides a discovered endpoint. `token_type_hint`
+/// is optional and must be `access_token` or `refresh_token`.
+///
+/// This operation does not delete local authentication state. Call it on a
+/// worker thread and delete local state regardless of success or failure.
+///
+/// # Safety
+///
+/// `request_json_utf8` must be null or a valid NUL-terminated UTF-8 string.
+/// `cancellation` must be null or a live handle returned by
+/// [`appauth_windows_cancellation_new`] that remains alive until this function
+/// returns.
+#[cfg(windows)]
+#[no_mangle]
+pub unsafe extern "C" fn appauth_windows_revoke(
+    request_json_utf8: *const c_char,
+    cancellation: *const AppAuthWindowsCancellationHandle,
+) -> *mut AppAuthWindowsRevocationResult {
+    if cancellation.is_null() {
+        return result(STATUS_ERROR, "cancellation handle must not be null");
+    }
+    let request_json = match copy_utf8_string(request_json_utf8) {
+        Ok(request_json) => request_json,
+        Err(error) => return result(STATUS_ERROR, error),
+    };
+    let cancellation = match cancellation.as_ref() {
+        Some(cancellation) => cancellation.cancellation.clone(),
+        None => return result(STATUS_ERROR, "cancellation handle must not be null"),
+    };
+    run_revoke(&request_json, cancellation)
+}
+
 /// Returns the status of an authorization result.
 ///
 /// Values are `0` for success, `1` for failure, and `2` for cancellation. A
@@ -595,6 +747,26 @@ mod tests {
         assert!(parse_redirect_template("http://localhost/oauth/callback").is_err());
         assert!(parse_redirect_template("http://127.0.0.1:8080/oauth/callback").is_err());
         assert!(parse_redirect_template("https://127.0.0.1/oauth/callback").is_err());
+    }
+
+    #[tokio::test]
+    async fn revocation_honors_cancellation_before_network_setup() {
+        let cancellation = CancellationHandle::new();
+        cancellation.cancel();
+        let request = WindowsRevocationRequest {
+            issuer: None,
+            authorization_endpoint: None,
+            token_endpoint: None,
+            revocation_endpoint: None,
+            client_id: "native-client".to_owned(),
+            token: "refresh-token".to_owned(),
+            token_type_hint: Some("refresh_token".to_owned()),
+        };
+
+        assert!(matches!(
+            revoke_with_windows_request(request, cancellation).await,
+            Err(WindowsAuthorizationError::Core(AuthError::Cancelled))
+        ));
     }
 
     #[test]

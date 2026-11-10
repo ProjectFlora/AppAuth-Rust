@@ -51,6 +51,51 @@ public static class AppAuthWindows
         }, CancellationToken.None);
     }
 
+    /// <summary>
+    /// Requests OAuth 2.0 token revocation on a worker thread.
+    /// This does not delete local authentication state.
+    /// </summary>
+    public static Task RevokeAsync(
+        string requestJson,
+        CancellationToken cancellationToken = default)
+    {
+        if (requestJson is null)
+        {
+            throw new ArgumentNullException(nameof(requestJson));
+        }
+
+        return Task.Run(() =>
+        {
+            var cancellationPointer = NativeMethods.CreateCancellation();
+            if (cancellationPointer == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("The native cancellation handle could not be created.");
+            }
+            using var cancellation = new NativeMethods.CancellationHandle(cancellationPointer);
+            using var registration = cancellationToken.Register(
+                () => NativeMethods.Cancel(cancellation));
+            var resultPointer = NativeMethods.Revoke(requestJson, cancellation);
+            if (resultPointer == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("The native revocation call returned no result.");
+            }
+            using var result = new NativeMethods.AuthorizationResultHandle(resultPointer);
+
+            var valuePointer = NativeMethods.ResultValue(result);
+            var value = Marshal.PtrToStringUTF8(valuePointer)
+                ?? throw new InvalidOperationException("The native revocation result is empty.");
+            switch (NativeMethods.ResultStatus(result))
+            {
+                case 0:
+                    return;
+                case 2:
+                    throw new OperationCanceledException(cancellationToken);
+                default:
+                    throw new InvalidOperationException(value);
+            }
+        }, CancellationToken.None);
+    }
+
     private static class NativeMethods
     {
         private const string Library = "appauth_rust.dll";
@@ -70,6 +115,12 @@ public static class AppAuthWindows
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
             EntryPoint = "appauth_windows_authorize")]
         internal static extern IntPtr Authorize(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string requestJson,
+            CancellationHandle cancellation);
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
+            EntryPoint = "appauth_windows_revoke")]
+        internal static extern IntPtr Revoke(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string requestJson,
             CancellationHandle cancellation);
 

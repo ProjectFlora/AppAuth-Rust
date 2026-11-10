@@ -28,9 +28,10 @@ pub mod windows;
 uniffi::setup_scaffolding!();
 
 pub use authorization::{
-    AuthenticationState, AuthorizationRequest, AuthorizationResponse, AuthorizationSession,
-    ClientRegistrationRequest, ClientRegistrationResponse, EndSessionRequest, EndSessionResponse,
-    EndSessionSession, ServiceConfiguration, TokenResponse,
+    revoke_token, AuthenticationState, AuthorizationRequest, AuthorizationResponse,
+    AuthorizationSession, ClientRegistrationRequest, ClientRegistrationResponse, EndSessionRequest,
+    EndSessionResponse, EndSessionSession, RevocationTokenType, ServiceConfiguration,
+    TokenResponse,
 };
 pub use cancellation::CancellationHandle;
 pub use error::{AuthError, Result};

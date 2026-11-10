@@ -16,6 +16,7 @@ extern "C" {
 
 typedef struct AppAuthWindowsCancellationHandle AppAuthWindowsCancellationHandle;
 typedef struct AppAuthWindowsAuthorizationResult AppAuthWindowsAuthorizationResult;
+typedef AppAuthWindowsAuthorizationResult AppAuthWindowsRevocationResult;
 
 enum AppAuthWindowsAuthorizationStatus {
     APPAUTH_WINDOWS_AUTHORIZATION_SUCCESS = 0,
@@ -40,6 +41,16 @@ appauth_windows_cancellation_free(AppAuthWindowsCancellationHandle *handle);
  */
 APPAUTH_WINDOWS_API AppAuthWindowsAuthorizationResult *
 appauth_windows_authorize(
+    const char *request_json_utf8,
+    const AppAuthWindowsCancellationHandle *cancellation);
+
+/*
+ * Blocks while revoking a token. Pass UTF-8 JSON with either issuer discovery
+ * or authorization_endpoint, token_endpoint, and revocation_endpoint, plus
+ * client_id, token, and optional token_type_hint.
+ */
+APPAUTH_WINDOWS_API AppAuthWindowsRevocationResult *
+appauth_windows_revoke(
     const char *request_json_utf8,
     const AppAuthWindowsCancellationHandle *cancellation);
 

@@ -5,9 +5,9 @@ use std::{
 };
 
 use appauth_rust::{
-    AuthError, AuthenticationState, AuthorizationRequest, CancellationHandle,
+    revoke_token, AuthError, AuthenticationState, AuthorizationRequest, CancellationHandle,
     ClientRegistrationRequest, EndSessionRequest, HttpRequest, HttpResponse, HttpTransport,
-    ServiceConfiguration,
+    RevocationTokenType, ServiceConfiguration,
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -142,6 +142,7 @@ async fn discovery_authorization_oidc_and_refresh_form_one_public_api_flow() {
             "issuer": issuer.as_str(),
             "authorization_endpoint": "https://issuer.example/tenant/authorize",
             "token_endpoint": "https://issuer.example/tenant/token",
+            "revocation_endpoint": "https://issuer.example/tenant/revoke",
             "jwks_uri": "https://issuer.example/tenant/keys",
         }),
     );
@@ -263,6 +264,30 @@ async fn discovery_authorization_oidc_and_refresh_form_one_public_api_flow() {
     assert!(refresh
         .iter()
         .any(|(name, value)| name == "grant_type" && value == "refresh_token"));
+
+    transport.push_json(StatusCode::OK, json!({}));
+    revoke_token(
+        &configuration,
+        client_id,
+        "initial-refresh",
+        Some(RevocationTokenType::RefreshToken),
+        &transport,
+        CancellationHandle::new(),
+    )
+    .await
+    .unwrap();
+    let revocation = transport.requests().pop().unwrap();
+    assert_eq!(revocation.method, Method::POST);
+    assert_eq!(revocation.url.path(), "/tenant/revoke");
+    let revocation: Vec<_> = url::form_urlencoded::parse(&revocation.body)
+        .into_owned()
+        .collect();
+    assert!(revocation
+        .iter()
+        .any(|(name, value)| name == "token" && value == "initial-refresh"));
+    assert!(revocation
+        .iter()
+        .any(|(name, value)| name == "token_type_hint" && value == "refresh_token"));
 }
 
 #[tokio::test]
