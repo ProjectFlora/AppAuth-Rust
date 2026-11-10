@@ -143,10 +143,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
-      - name: Generate coverage summary
+      - name: Generate LCOV report
+        run: cargo llvm-cov --workspace --all-targets --all-features --lcov --output-path lcov.info
+      - name: Report coverage summary
         id: coverage_summary
         run: |
-          cargo llvm-cov --workspace --all-targets --all-features --summary-only | tee coverage-summary.txt
+          cargo llvm-cov report | tee coverage-summary.txt
           cat coverage-summary.txt >> "$GITHUB_STEP_SUMMARY"
           line_coverage=$(awk '$1 == "TOTAL" { print $10; exit }' coverage-summary.txt)
           function_coverage=$(awk '$1 == "TOTAL" { print $7; exit }' coverage-summary.txt)
@@ -154,8 +156,6 @@ jobs:
           test -n "$function_coverage"
           echo "line_coverage=$line_coverage" >> "$GITHUB_OUTPUT"
           echo "function_coverage=$function_coverage" >> "$GITHUB_OUTPUT"
-      - name: Generate LCOV report
-        run: cargo llvm-cov --workspace --all-targets --all-features --lcov --output-path lcov.info
       - uses: actions/upload-artifact@v4
         with:
           name: lcov-coverage

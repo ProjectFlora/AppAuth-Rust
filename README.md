@@ -177,6 +177,46 @@ Use the exact downloaded asset name when verifying another package. GitHub
 Release assets are the persistent distribution channel; the CI validation
 artifacts expire after 14 days.
 
+## Release consumer validation
+
+Each release candidate is installed into minimal consumer fixtures before it
+can be published. These fixtures use only the generated release archive, not
+the repository's native build output:
+
+- Apple compiles and runs a macOS Swift host, then links the same generated
+  Swift API and XCFramework for the iOS simulator.
+- Android installs the AAR as a local Gradle dependency and calls its Kotlin
+  API on an x86_64 API 34 emulator. The release job separately verifies that
+  the AAR contains both `arm64-v8a` and `x86_64` libraries.
+- Windows builds and runs a C++ host linked with the import library, plus a
+  .NET host that compiles the packaged P/Invoke wrapper and loads the DLL.
+
+For a downloaded candidate, verify its SHA-256 entry before using it, then run
+the corresponding consumer check on its host platform:
+
+```sh
+grep -F '  AppAuthRust-Apple-<version>.zip' SHA256SUMS | shasum -a 256 -c -
+scripts/check-apple-release-consumer.sh AppAuthRust-Apple-<version>.zip
+```
+
+```sh
+grep -F '  appauth-rust-android-<version>.aar' SHA256SUMS | shasum -a 256 -c -
+scripts/check-android-release-consumer.sh appauth-rust-android-<version>.aar
+```
+
+```powershell
+$expected = ((Select-String SHA256SUMS -Pattern '  appauth-rust-windows-<version>\.zip$').Line -split '\s+')[0]
+$actual = (Get-FileHash appauth-rust-windows-<version>.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw 'SHA-256 mismatch' }
+scripts/check-windows-release-consumer.ps1 -Package appauth-rust-windows-<version>.zip
+```
+
+The PowerShell verification parses the portable `shasum`-format checksum file
+and fails before running the consumer check when the value differs.
+
+Run the **Published release consumer validation** workflow with a published
+version to repeat these checks against the immutable GitHub Release assets.
+
 ## Apple adapters
 
 - `native/apple/IOSAuthorizationAdapter.swift` runs authorization in

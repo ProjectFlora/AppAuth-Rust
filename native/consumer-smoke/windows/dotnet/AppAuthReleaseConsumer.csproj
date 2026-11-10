@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AppAuthPackage Condition="'$(AppAuthPackage)' == ''">missing</AppAuthPackage>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(AppAuthPackage)/dotnet/AppAuthWindows.cs" Link="AppAuthWindows.cs" />
+    <None Include="$(AppAuthPackage)/appauth_rust.dll" Link="appauth_rust.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
