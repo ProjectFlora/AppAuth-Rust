@@ -39,6 +39,9 @@ class AndroidExternalBrowserAuthorizationTest {
     @Test
     fun customTabAuthorizationReturnsThroughCallbackAndExchangesCode() = runBlocking {
         MockAuthorizationServer().use { server ->
+            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            prepareChrome(device)
+
             val healthConnection =
                 URL("${server.baseUrl}/health").openConnection() as HttpURLConnection
             try {
@@ -50,7 +53,6 @@ class AndroidExternalBrowserAuthorizationTest {
             val scenario = ActivityScenario.launch(AndroidAuthorizationFlowTestActivity::class.java)
             try {
                 val result = CompletableDeferred<Result<uniffi.appauth_rust.FfiAuthenticationState>>()
-                val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
                 val redirectUri = "com.example.app:/oauth/callback"
                 scenario.onActivity { activity ->
                     activity.authorize(
@@ -72,7 +74,6 @@ class AndroidExternalBrowserAuthorizationTest {
                     ) { result.complete(it) }
                 }
 
-                continueChromeSetup(device)
                 val authorizationParameters =
                     withTimeoutOrNull(30_000) {
                         select<Map<String, String>> {
@@ -130,20 +131,34 @@ class AndroidExternalBrowserAuthorizationTest {
         }
     }
 
+    private fun prepareChrome(device: UiDevice) {
+        device.executeShellCommand("am start -a android.intent.action.VIEW -d about:blank -p com.android.chrome")
+        assertTrue(
+            "Chrome did not open before the authorization flow",
+            device.wait(Until.hasObject(By.pkg("com.android.chrome")), 20_000),
+        )
+
+        val setupDeadline = System.currentTimeMillis() + 15_000
+        val setupLabels = listOf("Accept & continue", "No thanks", "Use without an account")
+        while (System.currentTimeMillis() < setupDeadline) {
+            val setupButton = setupLabels.firstNotNullOfOrNull { label ->
+                device.findObject(By.text(label))
+            }
+            if (setupButton == null) {
+                Thread.sleep(500)
+            } else {
+                setupButton.click()
+            }
+        }
+        device.pressBack()
+    }
+
     private fun confirmExternalAppLaunch(device: UiDevice) {
         val labels = listOf("Just once", "Open", "Continue")
         for (label in labels) {
             if (device.wait(Until.hasObject(By.text(label)), 2_000)) {
                 device.findObject(By.text(label))?.click()
                 return
-            }
-        }
-    }
-
-    private fun continueChromeSetup(device: UiDevice) {
-        for (label in listOf("Accept & continue", "No thanks", "Use without an account")) {
-            if (device.wait(Until.hasObject(By.text(label)), 2_000)) {
-                device.findObject(By.text(label))?.click()
             }
         }
     }
