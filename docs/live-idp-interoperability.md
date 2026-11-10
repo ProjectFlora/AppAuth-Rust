@@ -36,10 +36,10 @@ failed result must link to an issue that explains the constraint or fix.
   Rust `ReqwestTransport` uses the WebPKI root set and does not trust a
   self-signed or locally generated certificate by default.
 - Provision a dedicated HTTPS test domain before testing iOS/iPadOS and
-  Android verified links. It is currently **not yet selected**.
-- Publish `apple-app-site-association` for the iOS/iPadOS application
-  identifier and `assetlinks.json` containing the Android release-signing
-  certificate fingerprint before verified-link testing.
+  Android verified links. Follow the [HTTPS callback domain
+  procedure](https-callback-domain.md); it includes association-file templates
+  and required DNS, TLS, and static-hosting ownership records. The domain is
+  currently **not yet selected**.
 - Register each provider redirect URI according to its native-app registration
   policy. Confirm that its loopback registration permits the adapter's
   dynamically assigned port; a provider that requires a fixed port is a

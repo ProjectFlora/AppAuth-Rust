@@ -1,0 +1,17 @@
+{
+  "webcredentials": {
+    "apps": [
+      "<APPLE_TEAM_ID>.<IOS_BUNDLE_ID>"
+    ]
+  },
+  "applinks": {
+    "details": [
+      {
+        "appID": "<APPLE_TEAM_ID>.<IOS_BUNDLE_ID>",
+        "paths": [
+          "/oauth/callback"
+        ]
+      }
+    ]
+  }
+}
