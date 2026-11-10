@@ -66,7 +66,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: scripts/check-apple-targets.sh
       - run: scripts/check-apple-adapters.sh
       - name: Remove cached XCFramework package output
         run: rm -rf target/apple/release-package
@@ -184,10 +183,66 @@ jobs:
           path: dist/appauth-rust-windows-${{ needs.validate_version.outputs.version }}.zip
           if-no-files-found: error
 
+  apple_consumer:
+    name: Validate Apple release consumer
+    needs: [validate_version, apple]
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apple
+          path: dist
+      - run: scripts/check-apple-release-consumer.sh dist/AppAuthRust-Apple-${{ needs.validate_version.outputs.version }}.zip
+
+  android_consumer:
+    name: Validate Android release consumer
+    needs: [validate_version, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable Android emulator hardware acceleration
+        run: sudo chmod a+rw /dev/kvm
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-android
+          path: dist
+      - name: Run Android release consumer on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis_playstore
+          disable-linux-hw-accel: false
+          disable-animations: true
+          script: scripts/check-android-release-consumer.sh dist/appauth-rust-android-${{ needs.validate_version.outputs.version }}.aar
+
+  windows_consumer:
+    name: Validate Windows release consumers
+    needs: [validate_version, windows]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: dist
+      - shell: pwsh
+        run: scripts/check-windows-release-consumer.ps1 -Package dist/appauth-rust-windows-${{ needs.validate_version.outputs.version }}.zip
+
   publish:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     name: Publish GitHub Release
-    needs: [validate_version, apple, android, api_docs, windows]
+    needs: [validate_version, apple, android, api_docs, windows, apple_consumer, android_consumer, windows_consumer]
     runs-on: ubuntu-latest
     permissions:
       contents: write

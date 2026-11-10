@@ -1,0 +1,96 @@
+name: Published release consumer validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published release version to validate
+        required: true
+        default: 0.2.0
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  apple:
+    name: Validate published Apple consumer
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify Apple release archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          mkdir dist
+          gh release download "v$RELEASE_VERSION" \
+            --pattern "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
+            --pattern SHA256SUMS \
+            --dir dist
+          cd dist
+          grep -F "  AppAuthRust-Apple-$RELEASE_VERSION.zip" SHA256SUMS | shasum -a 256 -c -
+      - run: scripts/check-apple-release-consumer.sh dist/AppAuthRust-Apple-${{ inputs.version }}.zip
+
+  android:
+    name: Validate published Android consumer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable Android emulator hardware acceleration
+        run: sudo chmod a+rw /dev/kvm
+      - name: Download and verify Android release archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          mkdir dist
+          gh release download "v$RELEASE_VERSION" \
+            --pattern "appauth-rust-android-$RELEASE_VERSION.aar" \
+            --pattern SHA256SUMS \
+            --dir dist
+          cd dist
+          grep -F "  appauth-rust-android-$RELEASE_VERSION.aar" SHA256SUMS | shasum -a 256 -c -
+      - name: Run Android release consumer on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis_playstore
+          disable-linux-hw-accel: false
+          disable-animations: true
+          script: scripts/check-android-release-consumer.sh dist/appauth-rust-android-${{ inputs.version }}.aar
+
+  windows:
+    name: Validate published Windows consumers
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify Windows release archive
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          gh release download "v$env:RELEASE_VERSION" `
+            --pattern "appauth-rust-windows-$env:RELEASE_VERSION.zip" `
+            --pattern SHA256SUMS `
+            --dir dist
+          $asset = "appauth-rust-windows-$env:RELEASE_VERSION.zip"
+          $expected = ((Select-String "dist/SHA256SUMS" -Pattern "  $([regex]::Escape($asset))$").Line -split '\s+')[0]
+          $actual = (Get-FileHash "dist/$asset" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "SHA-256 mismatch for $asset"
+          }
+      - shell: pwsh
+        run: scripts/check-windows-release-consumer.ps1 -Package dist/appauth-rust-windows-${{ inputs.version }}.zip
