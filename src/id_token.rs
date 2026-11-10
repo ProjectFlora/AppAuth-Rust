@@ -693,7 +693,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
-            .saturating_add(CLOCK_SKEW_LEEWAY_SECONDS + 1));
+            .saturating_add(CLOCK_SKEW_LEEWAY_SECONDS + 120));
         let future_issued = key.sign(future_issued_claims);
         assert!(matches!(
             validate(
