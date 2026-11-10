@@ -103,7 +103,18 @@ jobs:
           target: google_apis_playstore
           disable-linux-hw-accel: false
           disable-animations: true
-          script: ./native/android/gradlew -p native/android connectedDebugAndroidTest
+          script: |
+            if ! ./native/android/gradlew -p native/android connectedDebugAndroidTest; then
+              echo "::group::Android emulator diagnostics"
+              adb devices -l || true
+              adb shell getprop || true
+              adb shell dumpsys activity activities || true
+              adb shell dumpsys window windows || true
+              adb exec-out uiautomator dump /dev/tty || true
+              adb logcat -d -t 500 || true
+              echo "::endgroup::"
+              exit 1
+            fi
       - run: ./native/android/gradlew -p native/android assembleRelease
       - name: Verify Android native libraries in AAR
         run: |
