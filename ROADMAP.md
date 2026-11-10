@@ -69,9 +69,11 @@ This roadmap tracks work remaining for the initial scope in
   supplied and expose unrecognized response parameters to callers as raw
   additional values, without interpreting them; future additions require an
   explicit scope decision and interoperability evidence.
-- **Live identity-provider validation:** Track the required providers,
-  platforms, flows, prerequisites, and results in
-  [docs/live-idp-interoperability.md](docs/live-idp-interoperability.md).
+- **Live identity-provider interoperability:** Do not operate dedicated IdP,
+  Keycloak, or mobile callback-domain infrastructure solely for the initial
+  release. Record the resulting unverified provider and real-device coverage
+  in [docs/live-idp-interoperability.md](docs/live-idp-interoperability.md);
+  ordinary pull-request CI remains limited to local mock providers.
 
 ## Open decisions
 
@@ -94,9 +96,9 @@ This roadmap tracks work remaining for the initial scope in
   - Reassess and settle provisional platform minimums, including Android API
     level, Apple security-supported OS generations, and the Windows support
     matrix.
-  - Validate authorization against live identity providers on supported
-    platforms, including real browser launch and callback behavior where
-    applicable.
+  - Keep live identity-provider and real-device interoperability explicitly
+    documented as unverified; do not represent those integrations as validated
+    compatibility guarantees.
   - Complete security-focused protocol and platform edge-case coverage, and
     ensure CI is green for all declared targets and packages.
   - Validate installation and use of each release artifact, publish complete
@@ -148,7 +150,7 @@ authorization, and cancellation; unit tests exercise the flow with a simulated
 browser callback, and CI builds/tests the Windows target and builds the .NET
 wrapper. CI also packages an Apple XCFramework and verifies Rust libraries are
 packaged in the Android release AAR. Live identity-provider interoperability
-and release validation remain.
+remains explicitly unverified.
 
 ## Initial validation checkpoints
 
