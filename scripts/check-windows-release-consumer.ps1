@@ -10,9 +10,12 @@ $workDir = Join-Path ([System.IO.Path]::GetTempPath()) ("appauth-rust-release-co
 
 try {
     Expand-Archive -Path $Package -DestinationPath $workDir
-    $packageRoot = Get-ChildItem -Path $workDir -Directory | Select-Object -First 1
-    if ($null -eq $packageRoot) {
-        throw "Windows release archive has no package directory."
+    $packageRoot = Get-Item $workDir
+    if (-not (Test-Path (Join-Path $packageRoot.FullName "include/appauth_windows.h"))) {
+        $packageRoot = Get-ChildItem -Path $workDir -Directory | Select-Object -First 1
+    }
+    if ($null -eq $packageRoot -or -not (Test-Path (Join-Path $packageRoot.FullName "include/appauth_windows.h"))) {
+        throw "Windows release archive has no package root with include/appauth_windows.h."
     }
 
     $cppBuild = Join-Path $workDir "cpp-build"
