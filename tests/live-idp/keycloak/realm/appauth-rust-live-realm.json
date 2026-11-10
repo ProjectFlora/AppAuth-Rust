@@ -1,0 +1,24 @@
+{
+  "realm": "appauth-rust-live",
+  "enabled": true,
+  "displayName": "AppAuth-Rust Live Validation",
+  "clients": [
+    {
+      "clientId": "appauth-rust-desktop",
+      "name": "AppAuth-Rust desktop validation",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://127.0.0.1/*"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ]
+}

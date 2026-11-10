@@ -69,6 +69,9 @@ This roadmap tracks work remaining for the initial scope in
   supplied and expose unrecognized response parameters to callers as raw
   additional values, without interpreting them; future additions require an
   explicit scope decision and interoperability evidence.
+- **Live identity-provider validation:** Track the required providers,
+  platforms, flows, prerequisites, and results in
+  [docs/live-idp-interoperability.md](docs/live-idp-interoperability.md).
 
 ## Open decisions
 

@@ -20,6 +20,7 @@ rustc-ice-*.txt
 .gradle/
 **/build/
 local.properties
+tests/live-idp/keycloak/.env
 
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
