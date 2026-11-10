@@ -1,12 +1,19 @@
-# Live identity-provider interoperability validation
+# Live identity-provider interoperability status
 
-This document records the live identity-provider validation required before
-the 1.0.0 release. It complements the local mock-provider checks in CI; it
-does not introduce provider-specific behavior into the library.
+This document records live identity-provider interoperability that is
+explicitly unverified for the 1.0.0 release. It complements the local
+mock-provider checks in CI; it does not introduce provider-specific behavior
+into the library.
 
-## Scope and acceptance criteria
+## Scope and recording policy
 
-Validate these providers:
+The project does not operate dedicated IdP tenants, Keycloak hosting, or
+mobile callback-domain infrastructure solely for library validation.
+Consequently, no live provider or real-device result is required for 1.0.0,
+and the matrix below remains **not verified**.
+
+If a future release explicitly scopes a live interoperability effort, validate
+these providers:
 
 | Provider | Purpose |
 | --- | --- |
@@ -20,12 +27,16 @@ library completes its documented validation. Record the provider tenant or
 realm only by a non-sensitive label; never record a token, credential, client
 secret, or test user's identifying information.
 
-Each result must include the date, AppAuth-Rust revision or release candidate,
-OS and browser version, redirect type, ID Token signing algorithm, and a
-status of **passed**, **limited**, **failed**, or **not tested**. A limited or
-failed result must link to an issue that explains the constraint or fix.
+Any future result must include the date, AppAuth-Rust revision or release
+candidate, OS and browser version, redirect type, ID Token signing algorithm,
+and a status of **passed**, **limited**, **failed**, or **not verified**. A
+limited or failed result must link to an issue that explains the constraint or
+fix.
 
-## Test environment prerequisites
+## Prerequisites for future live validation
+
+The following requirements apply only if the project resumes live
+interoperability validation:
 
 - Create isolated test tenants or realms and native **public** clients for
   each provider. Do not configure a client secret.
@@ -80,7 +91,7 @@ docker compose --env-file tests/live-idp/keycloak/.env \
   -f tests/live-idp/keycloak/docker-compose.yml down
 ```
 
-## Required validation cases
+## Cases for future live validation
 
 | ID | Flow | Expected result |
 | --- | --- | --- |
@@ -96,9 +107,21 @@ negative cases and algorithms that no selected live provider issues. Live
 testing verifies actual discovery metadata, key material, browser behavior,
 and callback delivery.
 
+## CI boundary
+
+Ordinary pull-request CI uses local mock providers only. It must not depend on
+live IdP availability or access live-tenant credentials.
+
+No live IdP workflow is part of the current release scope. Do not add one
+without an explicit decision to operate the required environments and to
+define credential ownership, rotation, and log-safety controls.
+
+GitHub-hosted simulator and emulator jobs are regression checks; they do not
+establish real-device verified-link or App Link interoperability.
+
 ## Platform redirect coverage
 
-| Platform | Required redirect validation |
+| Platform | Expected redirect validation if live testing resumes |
 | --- | --- |
 | iOS / iPadOS | Verified HTTPS callback with the associated domain on a real device; custom URI scheme fallback. |
 | Android | Verified App Link with the release-signing certificate on a real device; custom URI scheme fallback. |
@@ -108,29 +131,31 @@ and callback delivery.
 Simulator and emulator checks remain useful regression tests but do not
 replace the real-device verified-link results above.
 
-## Results matrix
+## Unverified interoperability matrix
 
-Update this matrix for every release candidate. An unexecuted row remains
-**not tested** and cannot be treated as a pass.
+The project does not claim live-provider interoperability for these rows.
+They must not be represented as passed or as a supported integration without
+recorded validation evidence.
 
 | Provider | Platform | Redirect | Cases | Status | Evidence / limitation |
 | --- | --- | --- | --- | --- | --- |
-| Keycloak | iOS / iPadOS | HTTPS verified link | LIP-01–06 | not tested | Blocked: trusted Keycloak HTTPS deployment and test domain not selected |
-| Keycloak | Android | App Link | LIP-01–06 | not tested | Blocked: trusted Keycloak HTTPS deployment and test domain not selected |
-| Keycloak | macOS | Loopback | LIP-01–06 | not tested | Blocked: trusted Keycloak HTTPS deployment not provisioned |
-| Keycloak | Windows | Loopback | LIP-01–06 | not tested | Blocked: trusted Keycloak HTTPS deployment not provisioned |
-| Microsoft Entra ID | iOS / iPadOS | HTTPS verified link | LIP-01–06 | not tested | Blocked: test domain not selected |
-| Microsoft Entra ID | Android | App Link | LIP-01–06 | not tested | Blocked: test domain not selected |
-| Microsoft Entra ID | macOS | Loopback | LIP-01–06 | not tested | |
-| Microsoft Entra ID | Windows | Loopback | LIP-01–06 | not tested | |
-| Auth0 | iOS / iPadOS | HTTPS verified link | LIP-01–06 | not tested | Blocked: test domain not selected |
-| Auth0 | Android | App Link | LIP-01–06 | not tested | Blocked: test domain not selected |
-| Auth0 | macOS | Loopback | LIP-01–06 | not tested | |
-| Auth0 | Windows | Loopback | LIP-01–06 | not tested | |
+| Keycloak | iOS / iPadOS | HTTPS verified link | LIP-01–06 | not verified | Dedicated IdP and callback-domain infrastructure is not operated |
+| Keycloak | Android | App Link | LIP-01–06 | not verified | Dedicated IdP and callback-domain infrastructure is not operated |
+| Keycloak | macOS | Loopback | LIP-01–06 | not verified | Dedicated IdP infrastructure is not operated |
+| Keycloak | Windows | Loopback | LIP-01–06 | not verified | Dedicated IdP infrastructure is not operated |
+| Microsoft Entra ID | iOS / iPadOS | HTTPS verified link | LIP-01–06 | not verified | Dedicated IdP and callback-domain infrastructure is not operated |
+| Microsoft Entra ID | Android | App Link | LIP-01–06 | not verified | Dedicated IdP and callback-domain infrastructure is not operated |
+| Microsoft Entra ID | macOS | Loopback | LIP-01–06 | not verified | Dedicated IdP test tenant is not operated |
+| Microsoft Entra ID | Windows | Loopback | LIP-01–06 | not verified | Dedicated IdP test tenant is not operated |
+| Auth0 | iOS / iPadOS | HTTPS verified link | LIP-01–06 | not verified | Dedicated IdP and callback-domain infrastructure is not operated |
+| Auth0 | Android | App Link | LIP-01–06 | not verified | Dedicated IdP and callback-domain infrastructure is not operated |
+| Auth0 | macOS | Loopback | LIP-01–06 | not verified | Dedicated IdP test tenant is not operated |
+| Auth0 | Windows | Loopback | LIP-01–06 | not verified | Dedicated IdP test tenant is not operated |
 
-## Release gate
+## Release status
 
-Before 1.0.0, complete LIP-01–06 for every matrix row, or document a
-provider or platform limitation with an approved disposition. Open failures
-must be fixed or explicitly excluded from the final support matrix; missing
-results are not an approved disposition.
+Live identity-provider interoperability is not a 1.0.0 release gate. The
+unverified matrix is a documented limitation, not evidence of compatibility.
+If the project resumes live validation, record its evidence and limitations in
+this document before representing a provider or platform integration as
+validated.
