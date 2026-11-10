@@ -1,0 +1,13 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:?copy .env.example to .env and set KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?copy .env.example to .env and set KEYCLOAK_ADMIN_PASSWORD}
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./realm:/opt/keycloak/data/import:ro
