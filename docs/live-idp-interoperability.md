@@ -32,6 +32,9 @@ failed result must link to an issue that explains the constraint or fix.
 - Create non-production test users. Keep their credentials in the team's
   approved secret store, not in this repository, GitHub Issues, workflow
   variables, or test output.
+- Use a publicly trusted HTTPS Keycloak deployment for OIDC validation. The
+  Rust `ReqwestTransport` uses the WebPKI root set and does not trust a
+  self-signed or locally generated certificate by default.
 - Provision a dedicated HTTPS test domain before testing iOS/iPadOS and
   Android verified links. It is currently **not yet selected**.
 - Publish `apple-app-site-association` for the iOS/iPadOS application
@@ -49,7 +52,10 @@ failed result must link to an issue that explains the constraint or fix.
 The repository includes a local Keycloak configuration at
 `tests/live-idp/keycloak`. It imports the `appauth-rust-live` realm and its
 `appauth-rust-desktop` public client. That client permits loopback redirects
-on `127.0.0.1` and requires S256 PKCE.
+on `127.0.0.1` and requires S256 PKCE. This service is HTTP-only and is for
+client-registration and redirect-configuration development only. It must not
+be used to mark discovery, ID Token, or JWKS validation as passed: OIDC
+discovery and JWKS endpoints require HTTPS.
 
 1. Copy `tests/live-idp/keycloak/.env.example` to
    `tests/live-idp/keycloak/.env` and replace the administrator password with
@@ -63,8 +69,9 @@ on `127.0.0.1` and requires S256 PKCE.
 
 3. Open `http://127.0.0.1:8080`, create a non-production test user in the
    `appauth-rust-live` realm, and give it a local-only password.
-4. Run the desktop loopback flow with the `appauth-rust-desktop` client.
-   Record the non-sensitive result in the matrix below.
+4. Verify the non-sensitive client and redirect configuration. Run the
+   acceptance cases only against a Keycloak deployment with a publicly trusted
+   HTTPS endpoint, then record the result in the matrix below.
 
 Stop and remove the local service when finished:
 
@@ -108,10 +115,10 @@ Update this matrix for every release candidate. An unexecuted row remains
 
 | Provider | Platform | Redirect | Cases | Status | Evidence / limitation |
 | --- | --- | --- | --- | --- | --- |
-| Keycloak | iOS / iPadOS | HTTPS verified link | LIP-01–06 | not tested | Blocked: test domain not selected |
-| Keycloak | Android | App Link | LIP-01–06 | not tested | Blocked: test domain not selected |
-| Keycloak | macOS | Loopback | LIP-01–06 | not tested | |
-| Keycloak | Windows | Loopback | LIP-01–06 | not tested | |
+| Keycloak | iOS / iPadOS | HTTPS verified link | LIP-01–06 | not tested | Blocked: trusted Keycloak HTTPS deployment and test domain not selected |
+| Keycloak | Android | App Link | LIP-01–06 | not tested | Blocked: trusted Keycloak HTTPS deployment and test domain not selected |
+| Keycloak | macOS | Loopback | LIP-01–06 | not tested | Blocked: trusted Keycloak HTTPS deployment not provisioned |
+| Keycloak | Windows | Loopback | LIP-01–06 | not tested | Blocked: trusted Keycloak HTTPS deployment not provisioned |
 | Microsoft Entra ID | iOS / iPadOS | HTTPS verified link | LIP-01–06 | not tested | Blocked: test domain not selected |
 | Microsoft Entra ID | Android | App Link | LIP-01–06 | not tested | Blocked: test domain not selected |
 | Microsoft Entra ID | macOS | Loopback | LIP-01–06 | not tested | |
