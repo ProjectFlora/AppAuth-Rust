@@ -1,3 +1,4 @@
+using System;
 using ProjectFlora.AppAuthRust;
 
 try
