@@ -52,6 +52,7 @@ const RESERVED_END_SESSION_PARAMETERS: &[&str] = &[
 pub struct ServiceConfiguration {
     authorization_endpoint: Url,
     token_endpoint: Url,
+    revocation_endpoint: Option<Url>,
     end_session_endpoint: Option<Url>,
     registration_endpoint: Option<Url>,
     issuer: Option<Url>,
@@ -68,12 +69,20 @@ impl ServiceConfiguration {
         Ok(Self {
             authorization_endpoint,
             token_endpoint,
+            revocation_endpoint: None,
             end_session_endpoint: None,
             registration_endpoint: None,
             issuer: None,
             jwks_uri: None,
             jwks_cache: JwksCache::default(),
         })
+    }
+
+    /// Adds an HTTPS OAuth 2.0 token revocation endpoint.
+    pub fn with_revocation_endpoint(mut self, endpoint: Url) -> Result<Self> {
+        validate_revocation_endpoint(&endpoint)?;
+        self.revocation_endpoint = Some(endpoint);
+        Ok(self)
     }
 
     /// Adds an HTTPS end-session endpoint.
@@ -144,6 +153,11 @@ impl ServiceConfiguration {
             .as_deref()
             .map(parse_discovered_endpoint)
             .transpose()?;
+        let revocation_endpoint = metadata
+            .revocation_endpoint
+            .as_deref()
+            .map(parse_discovered_endpoint)
+            .transpose()?;
         let registration_endpoint = metadata
             .registration_endpoint
             .as_deref()
@@ -158,6 +172,7 @@ impl ServiceConfiguration {
         Ok(Self {
             authorization_endpoint,
             token_endpoint,
+            revocation_endpoint,
             end_session_endpoint,
             registration_endpoint,
             issuer: Some(issuer),
@@ -174,6 +189,11 @@ impl ServiceConfiguration {
     /// Returns the configured token endpoint.
     pub fn token_endpoint(&self) -> &Url {
         &self.token_endpoint
+    }
+
+    /// Returns the configured token revocation endpoint, if any.
+    pub fn revocation_endpoint(&self) -> Option<&Url> {
+        self.revocation_endpoint.as_ref()
     }
 
     /// Returns the configured end-session endpoint, if any.
@@ -202,6 +222,7 @@ struct DiscoveryMetadata {
     issuer: String,
     authorization_endpoint: String,
     token_endpoint: String,
+    revocation_endpoint: Option<String>,
     end_session_endpoint: Option<String>,
     registration_endpoint: Option<String>,
     jwks_uri: Option<String>,
@@ -885,6 +906,67 @@ pub struct TokenResponse {
     pub additional_parameters: BTreeMap<String, Value>,
 }
 
+/// Hint identifying the type of token submitted for revocation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RevocationTokenType {
+    /// An OAuth access token.
+    AccessToken,
+    /// An OAuth refresh token.
+    RefreshToken,
+}
+
+impl RevocationTokenType {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::AccessToken => "access_token",
+            Self::RefreshToken => "refresh_token",
+        }
+    }
+}
+
+/// Requests invalidation of an access token or refresh token under RFC 7009.
+///
+/// The configuration must include a discovered or explicitly configured
+/// revocation endpoint. This operation never deletes local authentication
+/// state; callers remain responsible for deleting it regardless of the result.
+pub async fn revoke_token(
+    configuration: &ServiceConfiguration,
+    client_id: &str,
+    token: &str,
+    token_type_hint: Option<RevocationTokenType>,
+    transport: &dyn HttpTransport,
+    cancellation: CancellationHandle,
+) -> Result<()> {
+    if client_id.trim().is_empty() {
+        return Err(AuthError::InvalidConfiguration(
+            "client ID must not be empty",
+        ));
+    }
+    if token.trim().is_empty() {
+        return Err(AuthError::InvalidConfiguration(
+            "token to revoke must not be empty",
+        ));
+    }
+    let endpoint =
+        configuration
+            .revocation_endpoint
+            .as_ref()
+            .ok_or(AuthError::InvalidConfiguration(
+                "service configuration has no token revocation endpoint",
+            ))?;
+
+    let body = {
+        let mut form = form_urlencoded::Serializer::new(String::new());
+        form.append_pair("token", token)
+            .append_pair("client_id", client_id);
+        if let Some(token_type_hint) = token_type_hint {
+            form.append_pair("token_type_hint", token_type_hint.as_str());
+        }
+        form.finish().into_bytes()
+    };
+    send_revocation_request(endpoint, body, transport, cancellation).await
+}
+
 /// Serializable token state. The host application remains responsible for secure storage.
 #[derive(Serialize, Deserialize)]
 pub struct AuthenticationState {
@@ -1122,6 +1204,47 @@ async fn send_token_request(
     parse_token_response(&response.body)
 }
 
+async fn send_revocation_request(
+    revocation_endpoint: &Url,
+    body: Vec<u8>,
+    transport: &dyn HttpTransport,
+    cancellation: CancellationHandle,
+) -> Result<()> {
+    let mut headers = HeaderMap::new();
+    headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/x-www-form-urlencoded"),
+    );
+
+    let response = transport
+        .execute(
+            HttpRequest {
+                method: Method::POST,
+                url: revocation_endpoint.clone(),
+                headers,
+                body,
+            },
+            cancellation,
+        )
+        .await?;
+    if response.status.is_success() {
+        return Ok(());
+    }
+    if let Ok(value) = serde_json::from_slice::<Value>(&response.body) {
+        if let Some(code) = value.get("error").and_then(Value::as_str) {
+            return Err(AuthError::AuthorizationServer {
+                code: code.to_owned(),
+                description: value
+                    .get("error_description")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+            });
+        }
+    }
+    Err(AuthError::HttpStatus(response.status))
+}
+
 fn parse_token_response(body: &[u8]) -> Result<TokenResponse> {
     let mut object: Map<String, Value> = serde_json::from_slice(body)
         .map_err(|_| AuthError::InvalidTokenResponse("response is not a JSON object"))?;
@@ -1260,6 +1383,15 @@ fn validate_registration_endpoint(endpoint: &Url) -> Result<()> {
     if endpoint.scheme() != "https" || validate_endpoint(endpoint).is_err() {
         return Err(AuthError::InvalidConfiguration(
             "client registration endpoint must use HTTPS without user info or fragments",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_revocation_endpoint(endpoint: &Url) -> Result<()> {
+    if endpoint.scheme() != "https" || validate_endpoint(endpoint).is_err() {
+        return Err(AuthError::InvalidConfiguration(
+            "token revocation endpoint must use HTTPS without user info or fragments",
         ));
     }
     Ok(())
@@ -2545,6 +2677,119 @@ mod tests {
             )
             .await,
             Err(AuthError::HttpStatus(status)) if status == StatusCode::SERVICE_UNAVAILABLE
+        ));
+    }
+
+    #[tokio::test]
+    async fn revocation_uses_the_configured_endpoint_and_public_client_form() {
+        let configuration = service_configuration()
+            .with_revocation_endpoint(Url::parse("https://issuer.example/revoke").unwrap())
+            .unwrap();
+        let transport = test_transport(StatusCode::OK, b"");
+
+        revoke_token(
+            &configuration,
+            "native-client",
+            "refresh-token",
+            Some(RevocationTokenType::RefreshToken),
+            &transport,
+            CancellationHandle::new(),
+        )
+        .await
+        .unwrap();
+
+        let request = transport.request.lock().unwrap().take().unwrap();
+        let form: BTreeMap<_, _> = form_urlencoded::parse(&request.body).into_owned().collect();
+        assert_eq!(request.method, Method::POST);
+        assert_eq!(request.url.as_str(), "https://issuer.example/revoke");
+        assert_eq!(
+            request.headers.get(header::CONTENT_TYPE).unwrap(),
+            "application/x-www-form-urlencoded"
+        );
+        assert_eq!(
+            form.get("client_id").map(String::as_str),
+            Some("native-client")
+        );
+        assert_eq!(form.get("token").map(String::as_str), Some("refresh-token"));
+        assert_eq!(
+            form.get("token_type_hint").map(String::as_str),
+            Some("refresh_token")
+        );
+        assert!(!form.contains_key("client_secret"));
+    }
+
+    #[tokio::test]
+    async fn revocation_requires_an_endpoint_and_surfaces_server_errors() {
+        let transport = test_transport(
+            StatusCode::BAD_REQUEST,
+            br#"{"error":"unsupported_token_type","error_description":"not supported"}"#,
+        );
+        let configuration = service_configuration()
+            .with_revocation_endpoint(Url::parse("https://issuer.example/revoke").unwrap())
+            .unwrap();
+        assert!(matches!(
+            revoke_token(
+                &configuration,
+                "native-client",
+                "access-token",
+                Some(RevocationTokenType::AccessToken),
+                &transport,
+                CancellationHandle::new(),
+            )
+            .await,
+            Err(AuthError::AuthorizationServer { code, .. }) if code == "unsupported_token_type"
+        ));
+
+        let transport = test_transport(StatusCode::OK, b"");
+        assert!(matches!(
+            revoke_token(
+                &service_configuration(),
+                "native-client",
+                "access-token",
+                None,
+                &transport,
+                CancellationHandle::new(),
+            )
+            .await,
+            Err(AuthError::InvalidConfiguration(
+                "service configuration has no token revocation endpoint"
+            ))
+        ));
+        assert!(transport.request.lock().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn revocation_propagates_transport_cancellation() {
+        struct CancellationAwareTransport;
+
+        #[async_trait]
+        impl HttpTransport for CancellationAwareTransport {
+            async fn execute(
+                &self,
+                _request: HttpRequest,
+                cancellation: CancellationHandle,
+            ) -> Result<HttpResponse> {
+                cancellation.cancelled().await;
+                Err(AuthError::Cancelled)
+            }
+        }
+
+        let configuration = service_configuration()
+            .with_revocation_endpoint(Url::parse("https://issuer.example/revoke").unwrap())
+            .unwrap();
+        let cancellation = CancellationHandle::new();
+        cancellation.cancel();
+        assert!(matches!(
+            revoke_token(
+                &configuration,
+                "native-client",
+                "refresh-token",
+                None,
+                &CancellationAwareTransport,
+                cancellation,
+            )
+            .await,
+            Err(AuthError::Cancelled)
         ));
     }
 

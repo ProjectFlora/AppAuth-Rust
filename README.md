@@ -15,6 +15,7 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
   refresh.
 - Include OpenID Connect ID Token validation in the initial release.
 - Include OIDC end-session and dynamic client registration for public clients.
+- Support optional OAuth 2.0 Token Revocation endpoints for public clients.
 - Allow additional authorization and token request parameters.
 - Preserve unrecognized response parameters as opaque values without
   interpreting provider-specific semantics.
@@ -90,6 +91,25 @@ versions and Android device reach immediately before release.
   core generates state and validates the registered callback URI and returned
   state.
 - The host application launches the external browser and handles its lifecycle.
+
+## Token revocation
+
+- Use the discovered `revocation_endpoint` or configure one explicitly; it
+  must use HTTPS. Providers without this optional endpoint cannot use
+  revocation.
+- Call `revoke_token` explicitly with an access or refresh token and the
+  public client ID. The request never includes a client secret; callers may
+  provide the optional `access_token` or `refresh_token` type hint.
+- A successful HTTP response completes the operation. OAuth error responses,
+  HTTP failures, transport failures, and explicit cancellation are returned to
+  the caller without changing any local authentication state.
+- Revocation is distinct from RP-Initiated Logout and local state deletion.
+  The host application must delete its local authentication state regardless
+  of a revocation request's success, failure, or cancellation. It owns retry
+  policy for transient failures.
+- Swift and Kotlin receive this operation through the UniFFI API. The current
+  Windows C ABI exposes token revocation through a blocking worker-thread API.
+  It does not expose refresh or end-session.
 
 ## Dynamic client registration
 

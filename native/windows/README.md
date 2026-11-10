@@ -99,3 +99,29 @@ VB.NET can call the same C ABI with P/Invoke.
 The adapter currently targets the `x86_64-pc-windows-msvc` Rust target. The
 supported Windows client versions are those supported by Microsoft at each
 release; review the matrix and validation targets for every release.
+
+## Token revocation
+
+Call `appauth_windows_revoke` on a worker thread with the same cancellation
+handle lifecycle as authorization. Its JSON request uses either `issuer` to
+discover the optional `revocation_endpoint`, or explicit authorization,
+token, and revocation endpoints. The latter is useful when discovery is not
+available:
+
+```json
+{
+  "authorization_endpoint": "https://issuer.example/authorize",
+  "token_endpoint": "https://issuer.example/token",
+  "revocation_endpoint": "https://issuer.example/revoke",
+  "client_id": "native-client",
+  "token": "refresh-token",
+  "token_type_hint": "refresh_token"
+}
+```
+
+`token_type_hint` may be `access_token` or `refresh_token`; omit it when the
+provider does not require a hint. The returned status and value use
+`appauth_windows_authorization_result_*`, and a successful result has an empty
+value. Revocation does not delete local authentication state: delete local
+state even when the network request fails or is cancelled. The .NET wrapper
+exposes the same operation as `AppAuthWindows.RevokeAsync`.

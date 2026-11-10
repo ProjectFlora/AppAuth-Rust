@@ -5,9 +5,10 @@ use http::{header::HeaderName, HeaderMap, HeaderValue, StatusCode};
 use url::Url;
 
 use crate::{
-    AuthError, AuthenticationState, AuthorizationRequest, AuthorizationResponse,
+    revoke_token, AuthError, AuthenticationState, AuthorizationRequest, AuthorizationResponse,
     AuthorizationSession, CancellationHandle, ClientRegistrationRequest, EndSessionRequest,
-    HttpRequest, HttpResponse, HttpTransport, Result, ServiceConfiguration, TokenResponse,
+    HttpRequest, HttpResponse, HttpTransport, Result, RevocationTokenType, ServiceConfiguration,
+    TokenResponse,
 };
 
 /// Errors exposed to Swift and Kotlin callers.
@@ -302,6 +303,16 @@ impl FfiServiceConfiguration {
         Ok(Arc::new(Self { inner }))
     }
 
+    /// Adds an HTTPS OAuth 2.0 token revocation endpoint.
+    pub fn with_revocation_endpoint(
+        &self,
+        endpoint: String,
+    ) -> std::result::Result<Arc<Self>, FfiError> {
+        let endpoint = parse_url(&endpoint, "token revocation endpoint")?;
+        let inner = self.inner.clone().with_revocation_endpoint(endpoint)?;
+        Ok(Arc::new(Self { inner }))
+    }
+
     /// Adds an HTTPS dynamic client registration endpoint.
     pub fn with_registration_endpoint(
         &self,
@@ -322,6 +333,11 @@ impl FfiServiceConfiguration {
         self.inner.token_endpoint().to_string()
     }
 
+    /// Returns the configured token revocation endpoint URL, if any.
+    pub fn revocation_endpoint(&self) -> Option<String> {
+        self.inner.revocation_endpoint().map(ToString::to_string)
+    }
+
     /// Returns the configured issuer URL, if any.
     pub fn issuer(&self) -> Option<String> {
         self.inner.issuer().map(ToString::to_string)
@@ -331,6 +347,42 @@ impl FfiServiceConfiguration {
     pub fn jwks_uri(&self) -> Option<String> {
         self.inner.jwks_uri().map(ToString::to_string)
     }
+}
+
+/// Requests invalidation of an access token or refresh token under RFC 7009.
+///
+/// This does not delete local authentication state. The host application must
+/// delete state regardless of whether the network operation succeeds.
+#[uniffi::export]
+pub async fn revoke(
+    configuration: Arc<FfiServiceConfiguration>,
+    client_id: String,
+    token: String,
+    token_type_hint: Option<String>,
+    transport: Arc<dyn NativeHttpTransport>,
+    cancellation: Arc<FfiCancellationHandle>,
+) -> std::result::Result<(), FfiError> {
+    let token_type_hint = match token_type_hint.as_deref() {
+        None => None,
+        Some("access_token") => Some(RevocationTokenType::AccessToken),
+        Some("refresh_token") => Some(RevocationTokenType::RefreshToken),
+        Some(_) => {
+            return Err(FfiError::InvalidRequest(
+                "token type hint must be access_token or refresh_token".to_owned(),
+            ));
+        }
+    };
+    let transport = NativeTransport { inner: transport };
+    revoke_token(
+        &configuration.inner,
+        &client_id,
+        &token,
+        token_type_hint,
+        &transport,
+        cancellation.inner.clone(),
+    )
+    .await?;
+    Ok(())
 }
 
 /// A string-valued OAuth parameter.
