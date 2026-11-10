@@ -69,14 +69,21 @@ platform cancellation has been implemented, and CI builds an Apple XCFramework
 and an Android AAR and checks the packaged Rust libraries. CI also exercises
 iOS simulator authorization, macOS loopback authorization, and Android Custom
 Tab authorization flows against local mock providers. These checks do not
-replace live identity-provider interoperability testing or published release
-artifacts. UniFFI is adopted for the initial
+replace live identity-provider interoperability testing. The CI validation
+artifacts expire after 14 days; versioned GitHub Release assets are the
+persistent distribution channel. UniFFI is adopted for the initial
 Swift/Kotlin binding approach.
 
-The initial distribution decision is to pin generation to UniFFI 0.32.2 and
-use proc macros to define the native-facing Rust API. Publish versioned Apple
-XCFramework, Android AAR, and Windows DLL/C ABI packages with checksums through
-GitHub Releases. The XCFramework contains the generated Swift API and Rust
+Generation is pinned to UniFFI 0.32.2 and uses proc macros to define the
+native-facing Rust API. The published
+[v0.1.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.1.0)
+contains the Apple XCFramework, Android AAR, Rust API reference, and
+`SHA256SUMS`, without a Windows package. The published
+[v0.2.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.2.0)
+includes those assets and adds the Windows DLL/C ABI package. See
+[Download and verify v0.2.0](README.md#download-and-verify-v020) for exact asset
+names, download links, and checksum verification using the same release's
+`SHA256SUMS`. The XCFramework contains the generated Swift API and Rust
 library; the AAR contains the generated Kotlin API and Android Rust libraries;
 the Windows package contains the DLL, import library, C header, and .NET
 wrapper. Compiled binaries stay out of the source repository. Maven Central,

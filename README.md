@@ -142,9 +142,9 @@ versions and Android device reach immediately before release.
 
 The crate is not published on crates.io, and native packages are not published
 through Swift Package Manager, Maven Central, or Carthage. Binary distribution
-uses versioned GitHub Releases. The published v0.1.0 release contains the
+uses versioned GitHub Releases. The published [v0.1.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.1.0) contains the
 Apple XCFramework, Android AAR, API reference, and checksums; it predates the
-Windows adapter. The v0.2.0 release adds the Windows DLL/C ABI package with
+Windows adapter. The published [v0.2.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.2.0) adds the Windows DLL/C ABI package with
 C/C++ and .NET interop files.
 The release workflow accepts only SemVer tags that point to `main` and match
 the crate version. A manual workflow run validates and packages a release
@@ -152,6 +152,30 @@ candidate without publishing; pushing its matching version tag publishes the
 assets and SHA-256 checksums. Releases before 1.0.0 are pre-1.0 and may have
 documented interoperability or support-policy gaps; see `CHANGELOG.md` and
 `ROADMAP.md`.
+
+## Download and verify v0.2.0
+
+The following versioned assets are available from GitHub Releases, independently
+of the temporary CI validation artifacts:
+
+| Asset | Download |
+| --- | --- |
+| Apple XCFramework and generated Swift API | [AppAuthRust-Apple-0.2.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/AppAuthRust-Apple-0.2.0.zip) |
+| Android AAR | [appauth-rust-android-0.2.0.aar](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/appauth-rust-android-0.2.0.aar) |
+| Windows DLL/C ABI and C++/.NET interop files | [appauth-rust-windows-0.2.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/appauth-rust-windows-0.2.0.zip) |
+| Rust API reference | [AppAuthRust-API-Docs-0.2.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/AppAuthRust-API-Docs-0.2.0.zip) |
+| SHA-256 checksums for all four assets | [SHA256SUMS](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/SHA256SUMS) |
+
+Download the desired asset and `SHA256SUMS` from the same release. For example,
+from the directory containing the Android AAR and checksum file:
+
+```sh
+grep -F '  appauth-rust-android-0.2.0.aar' SHA256SUMS | shasum -a 256 -c -
+```
+
+Use the exact downloaded asset name when verifying another package. GitHub
+Release assets are the persistent distribution channel; the CI validation
+artifacts expire after 14 days.
 
 ## Apple adapters
 
@@ -186,7 +210,8 @@ documented interoperability or support-policy gaps; see `CHANGELOG.md` and
   iOS simulator, and universal macOS, the generated Swift API source, and an
   installation guide. See [Swift XCFramework installation](docs/swift-xcframework.md).
   The CI `apple-xcframework` artifact is for validation and expires after
-  14 days. Versioned GitHub Release assets and checksums remain pending.
+  14 days. Use the published Apple archive and `SHA256SUMS` linked in
+  [Download and verify v0.2.0](#download-and-verify-v020) for distribution.
 
 ## Android adapter
 
@@ -261,22 +286,24 @@ documented interoperability or support-policy gaps; see `CHANGELOG.md` and
   verifies both entries and uploads the AAR as a workflow artifact. The
   current output is
   `native/android/build/outputs/aar/appauth-rust-android-release.aar`.
-- The CI `android-aar` artifact can be copied into an Android app's `libs`
-  directory and consumed with `implementation(files("libs/appauth-rust-android-release.aar"))`.
+- Download `appauth-rust-android-0.2.0.aar` from the
+  [published release](#download-and-verify-v020), verify its checksum, and copy
+  it into the Android app's `libs` directory.
   Because a raw AAR has no dependency metadata, also declare the runtime
   dependencies used by this module:
 
   ```kotlin
   dependencies {
-      implementation(files("libs/appauth-rust-android-release.aar"))
+      implementation(files("libs/appauth-rust-android-0.2.0.aar"))
       implementation("net.java.dev.jna:jna:5.12.0@aar")
       implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
       implementation("androidx.browser:browser:1.8.0")
   }
   ```
 
-- This workflow artifact is for CI validation and expires after 14 days.
-  Versioned GitHub Release packages and checksums are still pending.
+- The CI `android-aar` artifact uses the build output name
+  `appauth-rust-android-release.aar` and expires after 14 days. The versioned
+  GitHub Release AAR and `SHA256SUMS` are the persistent distribution artifacts.
 - Android authorization through a Custom Tab, callback activity, and code
   exchange is exercised against a local mock provider on an API 34 emulator.
   Live identity-provider interoperability is not yet tested end-to-end.
@@ -341,14 +368,15 @@ documented interoperability or support-policy gaps; see `CHANGELOG.md` and
   protocol implementation behind that API. Pin both the UniFFI runtime and
   binding generator to 0.32.2, matching the validated binding spike. Generate
   Swift and Kotlin bindings reproducibly; do not hand-edit generated files.
-- For the initial release, publish a versioned Apple XCFramework archive,
-  Android AAR, and Windows DLL/C ABI package as GitHub Release assets. The
+- v0.2.0 publishes a versioned Apple XCFramework archive, Android AAR,
+  Windows DLL/C ABI package, API reference, and `SHA256SUMS` as
+  [GitHub Release assets](#download-and-verify-v020). The
   XCFramework contains the generated
   Swift API and Rust library for the documented Apple targets; the AAR contains
   the generated Kotlin API and Rust libraries for Android `arm64-v8a` and
-  `x86_64`. Include checksums and instructions for adding the XCFramework in
+  `x86_64`. Installation instructions cover adding the XCFramework in
   Xcode, the AAR as a local Gradle dependency, and the Windows DLL/import
-  library in C++ or .NET applications. Keep compiled platform binaries out of
+  library in C++ or .NET applications. Compiled platform binaries stay out of
   the source repository.
 - Evaluate Maven Central, Swift Package Manager, and Carthage as later
   distribution channels; they are not initial-release requirements.

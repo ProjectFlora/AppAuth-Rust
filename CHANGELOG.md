@@ -6,6 +6,12 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+### Documentation
+
+- Align distribution documentation with the published v0.2.0 assets, including
+  download links, checksum verification, and the distinction between persistent
+  release assets and temporary CI validation artifacts.
+
 ## [0.2.0] - 2026-11-10
 
 ### Added

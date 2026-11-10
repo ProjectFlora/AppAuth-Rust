@@ -8,15 +8,15 @@ other Apple platforms are not included.
 ## Download and verify
 
 Download `AppAuthRust-Apple-<version>.zip` and `SHA256SUMS` from the same
-GitHub Release. From the directory containing both files, verify the archive:
+[GitHub Release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.2.0). From the directory containing both files, verify the archive:
 
 ```sh
-VERSION=0.1.0
+VERSION=0.2.0
 grep -F "AppAuthRust-Apple-$VERSION.zip" SHA256SUMS | shasum -a 256 -c
 unzip "AppAuthRust-Apple-$VERSION.zip"
 ```
 
-Replace `0.1.0` with the release version you downloaded. The archive extracts
+Replace `0.2.0` with the release version you downloaded. The archive extracts
 to `AppAuthRust-Apple/`.
 
 ## Add the package to Xcode
