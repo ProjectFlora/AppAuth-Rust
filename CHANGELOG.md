@@ -6,7 +6,7 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-11-11
+## [0.3.0] - 2026-11-12
 
 ### Added
 
