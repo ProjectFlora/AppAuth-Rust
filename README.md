@@ -165,7 +165,9 @@ through Swift Package Manager, Maven Central, or Carthage. Binary distribution
 uses versioned GitHub Releases. The published [v0.1.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.1.0) contains the
 Apple XCFramework, Android AAR, API reference, and checksums; it predates the
 Windows adapter. The published [v0.2.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.2.0) adds the Windows DLL/C ABI package with
-C/C++ and .NET interop files.
+C/C++ and .NET interop files. The published [v0.3.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.3.0)
+adds token revocation to the Rust, UniFFI, and Windows C ABI public-client
+APIs.
 The release workflow accepts only SemVer tags that point to `main` and match
 the crate version. A manual workflow run validates and packages a release
 candidate without publishing; pushing its matching version tag publishes the
@@ -173,24 +175,24 @@ assets and SHA-256 checksums. Releases before 1.0.0 are pre-1.0 and may have
 documented interoperability or support-policy gaps; see `CHANGELOG.md` and
 `ROADMAP.md`.
 
-## Download and verify v0.2.0
+## Download and verify v0.3.0
 
 The following versioned assets are available from GitHub Releases, independently
 of the temporary CI validation artifacts:
 
 | Asset | Download |
 | --- | --- |
-| Apple XCFramework and generated Swift API | [AppAuthRust-Apple-0.2.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/AppAuthRust-Apple-0.2.0.zip) |
-| Android AAR | [appauth-rust-android-0.2.0.aar](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/appauth-rust-android-0.2.0.aar) |
-| Windows DLL/C ABI and C++/.NET interop files | [appauth-rust-windows-0.2.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/appauth-rust-windows-0.2.0.zip) |
-| Rust API reference | [AppAuthRust-API-Docs-0.2.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/AppAuthRust-API-Docs-0.2.0.zip) |
-| SHA-256 checksums for all four assets | [SHA256SUMS](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.2.0/SHA256SUMS) |
+| Apple XCFramework and generated Swift API | [AppAuthRust-Apple-0.3.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.3.0/AppAuthRust-Apple-0.3.0.zip) |
+| Android AAR | [appauth-rust-android-0.3.0.aar](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.3.0/appauth-rust-android-0.3.0.aar) |
+| Windows DLL/C ABI and C++/.NET interop files | [appauth-rust-windows-0.3.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.3.0/appauth-rust-windows-0.3.0.zip) |
+| Rust API reference | [AppAuthRust-API-Docs-0.3.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.3.0/AppAuthRust-API-Docs-0.3.0.zip) |
+| SHA-256 checksums for all four assets | [SHA256SUMS](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.3.0/SHA256SUMS) |
 
 Download the desired asset and `SHA256SUMS` from the same release. For example,
 from the directory containing the Android AAR and checksum file:
 
 ```sh
-grep -F '  appauth-rust-android-0.2.0.aar' SHA256SUMS | shasum -a 256 -c -
+grep -F '  appauth-rust-android-0.3.0.aar' SHA256SUMS | shasum -a 256 -c -
 ```
 
 Use the exact downloaded asset name when verifying another package. GitHub
@@ -264,14 +266,14 @@ version to repeat these checks against the immutable GitHub Release assets.
 ## Apple binary package
 
 - Build a package for a specific version with
-  `scripts/package-apple-xcframework.sh 0.2.0`. It creates
-  `target/apple/release-package/AppAuthRust-Apple-0.2.0.zip`, containing an
+  `scripts/package-apple-xcframework.sh 0.3.0`. It creates
+  `target/apple/release-package/AppAuthRust-Apple-0.3.0.zip`, containing an
   `AppAuthRust.xcframework` with static Rust libraries for iOS device,
   iOS simulator, and universal macOS, the generated Swift API source, and an
   installation guide. See [Swift XCFramework installation](docs/swift-xcframework.md).
   The CI `apple-xcframework` artifact is for validation and expires after
   14 days. Use the published Apple archive and `SHA256SUMS` linked in
-  [Download and verify v0.2.0](#download-and-verify-v020) for distribution.
+  [Download and verify v0.3.0](#download-and-verify-v030) for distribution.
 
 ## Android adapter
 
@@ -346,15 +348,15 @@ version to repeat these checks against the immutable GitHub Release assets.
   verifies both entries and uploads the AAR as a workflow artifact. The
   current output is
   `native/android/build/outputs/aar/appauth-rust-android-release.aar`.
-- Download `appauth-rust-android-0.2.0.aar` from the
-  [published release](#download-and-verify-v020), verify its checksum, and copy
+- Download `appauth-rust-android-0.3.0.aar` from the
+  [published release](#download-and-verify-v030), verify its checksum, and copy
   it into the Android app's `libs` directory.
   Because a raw AAR has no dependency metadata, also declare the runtime
   dependencies used by this module:
 
   ```kotlin
   dependencies {
-      implementation(files("libs/appauth-rust-android-0.2.0.aar"))
+      implementation(files("libs/appauth-rust-android-0.3.0.aar"))
       implementation("net.java.dev.jna:jna:5.12.0@aar")
       implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
       implementation("androidx.browser:browser:1.8.0")
@@ -428,9 +430,9 @@ version to repeat these checks against the immutable GitHub Release assets.
   protocol implementation behind that API. Pin both the UniFFI runtime and
   binding generator to 0.32.2, matching the validated binding spike. Generate
   Swift and Kotlin bindings reproducibly; do not hand-edit generated files.
-- v0.2.0 publishes a versioned Apple XCFramework archive, Android AAR,
+- v0.3.0 publishes a versioned Apple XCFramework archive, Android AAR,
   Windows DLL/C ABI package, API reference, and `SHA256SUMS` as
-  [GitHub Release assets](#download-and-verify-v020). The
+  [GitHub Release assets](#download-and-verify-v030). The
   XCFramework contains the generated
   Swift API and Rust library for the documented Apple targets; the AAR contains
   the generated Kotlin API and Rust libraries for Android `arm64-v8a` and

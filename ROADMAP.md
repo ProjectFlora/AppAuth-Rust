@@ -90,8 +90,9 @@ This roadmap tracks work remaining for the initial scope in
   feature set or compatibility guarantees are complete. They may be published
   as regular GitHub Releases while known gaps remain; release notes must state
   the status and limitations.
-- v0.2.0 is the current implementation snapshot. It adds the Windows desktop
-  adapter and release package to the previously published v0.1.0 assets.
+- v0.3.0 is the current implementation snapshot. It adds token revocation to
+  the previously published v0.2.0 assets, which include the Windows desktop
+  adapter and release package.
 - Do not declare 1.0.0 ready until all of these conditions are met:
   - Reassess and settle provisional platform minimums, including Android API
     level, Apple security-supported OS generations, and the Windows support

@@ -6,6 +6,8 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-11
+
 ### Added
 
 - OAuth 2.0 Token Revocation (RFC 7009) through discovered or explicitly
@@ -14,9 +16,27 @@ policies are still evolving. Each release records its known limitations.
 
 ### Documentation
 
-- Align distribution documentation with the published v0.2.0 assets, including
+- Align distribution documentation with the published v0.3.0 assets, including
   download links, checksum verification, and the distinction between persistent
   release assets and temporary CI validation artifacts.
+
+### Distribution
+
+- Published as a regular GitHub Release while remaining a pre-1.0 version.
+  Release assets include Apple XCFramework, Android AAR, Windows DLL/C ABI
+  package, API documentation, and SHA-256 checksums.
+
+### Known limitations
+
+- Live identity-provider interoperability has not been validated, including
+  token revocation.
+- macOS and Windows tests do not automate the real system-browser flow.
+- The Windows C ABI exposes authorization and token revocation, but not
+  refresh or end-session.
+- Release consumer fixtures exercise token revocation only in the Windows .NET
+  host; the Apple and Android fixtures do not.
+- Platform minimums and provider interoperability policies remain subject to
+  the 1.0.0 readiness criteria in `ROADMAP.md`.
 
 ## [0.2.0] - 2026-11-10
 
