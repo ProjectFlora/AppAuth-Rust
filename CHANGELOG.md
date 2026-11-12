@@ -6,6 +6,16 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+### Added
+
+- Token refresh through the Windows C ABI `appauth_windows_refresh` and the
+  .NET `AppAuthWindows.RefreshAsync` wrapper. A successful result returns the
+  updated serialized authentication state, which the host must persist.
+- OIDC end-session (RP-Initiated Logout) through the Windows C ABI
+  `appauth_windows_end_session` and the .NET `AppAuthWindows.EndSessionAsync`
+  wrapper. This brings the Windows C ABI to parity with the UniFFI operation
+  surface: authorization, refresh, end-session, and revocation.
+
 ## [0.3.0] - 2026-11-12
 
 ### Added

@@ -107,9 +107,8 @@ versions and Android device reach immediately before release.
   The host application must delete its local authentication state regardless
   of a revocation request's success, failure, or cancellation. It owns retry
   policy for transient failures.
-- Swift and Kotlin receive this operation through the UniFFI API. The current
-  Windows C ABI exposes token revocation through a blocking worker-thread API.
-  It does not expose refresh or end-session.
+- Swift and Kotlin receive this operation through the UniFFI API. The Windows
+  C ABI exposes token revocation through a blocking worker-thread API.
 
 ## Dynamic client registration
 
@@ -147,9 +146,9 @@ versions and Android device reach immediately before release.
   follow redirects and receives the shared cancellation handle for every
   request. The Rust `ReqwestTransport` remains available to Rust callers that
   provide a Tokio runtime.
-- Windows desktop applications use the C ABI in `native/windows/include` to
-  run authorization in the system browser and receive a loopback callback.
-  The ABI is callable from C++ and from .NET through P/Invoke; see
+- Windows desktop applications use the C ABI in `native/windows/include` for
+  authorization, token refresh, OIDC end-session, and token revocation. The ABI
+  is callable from C++ and from .NET through P/Invoke; see
   [`native/windows/README.md`](native/windows/README.md).
 - Generate the public Rust API reference locally with
   `cargo doc --locked --no-deps`; the HTML output is written to
@@ -374,14 +373,17 @@ version to repeat these checks against the immutable GitHub Release assets.
 
 - `native/windows` provides a blocking C ABI for C++ and .NET hosts. It
   discovers provider configuration, starts a loopback listener on
-  `127.0.0.1`, opens the external browser, validates the callback through the
-  shared Rust core, and exchanges the authorization code.
-- The C# `AuthorizeAsync` wrapper in `native/windows/dotnet` runs the blocking
-  ABI on a worker and connects .NET cancellation to the native cancellation
-  handle. C++ and VB.NET hosts can call the C ABI directly.
-- Call authorization from a worker thread. A C-compatible cancellation handle
-  cancels the callback wait and in-flight HTTP operations. Successful results
-  contain serialized token state and must be stored securely.
+  `127.0.0.1`, opens the external browser, and validates callbacks through the
+  shared Rust core. It exposes authorization, token refresh, OIDC end-session,
+  and token revocation.
+- The C# wrappers in `native/windows/dotnet` (`AuthorizeAsync`,
+  `RefreshAsync`, `EndSessionAsync`, and `RevokeAsync`) run the blocking ABI on
+  a worker and connect .NET cancellation to the native cancellation handle.
+  C++ and VB.NET hosts can call the C ABI directly.
+- Call each operation from a worker thread. A C-compatible cancellation handle
+  cancels the callback wait and in-flight HTTP operations. Successful
+  authorization and refresh results contain serialized token state and must be
+  stored securely.
 - Build the Windows shared library and run its adapter tests with:
 
   ```powershell

@@ -1,10 +1,11 @@
 use std::{
+    collections::{BTreeMap, BTreeSet},
     io,
     net::{Ipv4Addr, SocketAddrV4},
     time::Duration,
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 #[cfg(windows)]
 use std::{
     ffi::{c_char, CStr, CString},
@@ -18,7 +19,7 @@ use url::Url;
 
 use crate::{
     revoke_token, AuthError, AuthenticationState, AuthorizationRequest, CancellationHandle,
-    ReqwestTransport, RevocationTokenType, ServiceConfiguration,
+    EndSessionRequest, ReqwestTransport, RevocationTokenType, ServiceConfiguration,
 };
 
 const MAX_REQUEST_SIZE: usize = 16 * 1024;
@@ -68,7 +69,49 @@ struct WindowsRevocationRequest {
 }
 
 #[cfg(any(windows, test))]
+#[derive(Deserialize)]
+struct WindowsRefreshRequest {
+    #[serde(default)]
+    issuer: Option<String>,
+    #[serde(default)]
+    authorization_endpoint: Option<String>,
+    #[serde(default)]
+    token_endpoint: Option<String>,
+    #[serde(default)]
+    jwks_uri: Option<String>,
+    client_id: String,
+    state: AuthenticationState,
+    #[serde(default)]
+    additional_parameters: Vec<WindowsParameter>,
+}
+
+#[cfg(any(windows, test))]
 #[derive(Debug, Deserialize)]
+struct WindowsEndSessionRequest {
+    #[serde(default)]
+    issuer: Option<String>,
+    #[serde(default)]
+    authorization_endpoint: Option<String>,
+    #[serde(default)]
+    token_endpoint: Option<String>,
+    #[serde(default)]
+    end_session_endpoint: Option<String>,
+    client_id: String,
+    #[serde(default)]
+    id_token_hint: Option<String>,
+    #[serde(default)]
+    post_logout_redirect_uri: Option<String>,
+}
+
+#[cfg(any(windows, test))]
+#[derive(Debug, Serialize)]
+struct WindowsEndSessionResponse {
+    state: String,
+    additional_parameters: Vec<WindowsParameter>,
+}
+
+#[cfg(any(windows, test))]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct WindowsParameter {
     name: String,
     value: String,
@@ -85,6 +128,8 @@ enum WindowsAuthorizationError {
     InvalidEndpoint,
     #[error("redirect URI must be an unported http://127.0.0.1 loopback URI")]
     InvalidRedirectUri,
+    #[error("parameter names must be unique")]
+    DuplicateParameter,
     #[cfg(windows)]
     #[error("the system browser could not be opened")]
     BrowserCouldNotBeOpened,
@@ -107,6 +152,14 @@ pub struct AppAuthWindowsAuthorizationResult {
     status: i32,
     value: CString,
 }
+
+/// Opaque result returned by [`appauth_windows_refresh`].
+#[cfg(windows)]
+pub type AppAuthWindowsRefreshResult = AppAuthWindowsAuthorizationResult;
+
+/// Opaque result returned by [`appauth_windows_end_session`].
+#[cfg(windows)]
+pub type AppAuthWindowsEndSessionResult = AppAuthWindowsAuthorizationResult;
 
 #[cfg(windows)]
 pub type AppAuthWindowsRevocationResult = AppAuthWindowsAuthorizationResult;
@@ -139,6 +192,133 @@ fn parse_redirect_template(template: &str) -> std::result::Result<Url, WindowsAu
 }
 
 #[cfg(any(windows, test))]
+fn ensure_unique_parameter_names(
+    parameters: &[WindowsParameter],
+) -> std::result::Result<(), WindowsAuthorizationError> {
+    let mut names = BTreeSet::new();
+    if parameters
+        .iter()
+        .any(|parameter| !names.insert(parameter.name.as_str()))
+    {
+        return Err(WindowsAuthorizationError::DuplicateParameter);
+    }
+    Ok(())
+}
+
+/// The endpoint attachment performed while building a service configuration.
+#[cfg(any(windows, test))]
+#[derive(Debug, Copy, Clone)]
+enum ConfigurationKind {
+    /// Authorization and token refresh: attach OIDC validation endpoints.
+    Oidc,
+    /// Token revocation: attach the revocation endpoint.
+    Revocation,
+    /// End-session: attach the end-session endpoint.
+    EndSession,
+}
+
+/// Endpoint strings selected by a request, shared by all blocking operations.
+#[cfg(any(windows, test))]
+#[derive(Debug, Clone, Copy)]
+struct EndpointSelection<'a> {
+    issuer: Option<&'a str>,
+    authorization_endpoint: Option<&'a str>,
+    token_endpoint: Option<&'a str>,
+    /// JWKS URI for ID Token validation; only used by `Oidc` operations.
+    jwks_uri: Option<&'a str>,
+    /// Revocation or end-session endpoint; only used by those operations.
+    named_endpoint: Option<&'a str>,
+}
+
+/// Builds the service configuration shared by all blocking operations.
+///
+/// Either both `authorization_endpoint` and `token_endpoint` must be supplied
+/// for explicit configuration, or `issuer` for discovery; a single endpoint is
+/// rejected. `Oidc` operations additionally take `jwks_uri`, which must be
+/// paired with `issuer` when endpoints are explicit. `Revocation` and
+/// `EndSession` take the endpoint they attach, which is required with explicit
+/// endpoints and overrides the discovered endpoint.
+#[cfg(any(windows, test))]
+async fn build_configuration(
+    kind: ConfigurationKind,
+    endpoints: EndpointSelection<'_>,
+    transport: &ReqwestTransport,
+    cancellation: &CancellationHandle,
+) -> std::result::Result<ServiceConfiguration, WindowsAuthorizationError> {
+    let EndpointSelection {
+        issuer,
+        authorization_endpoint,
+        token_endpoint,
+        jwks_uri,
+        named_endpoint,
+    } = endpoints;
+    match (authorization_endpoint, token_endpoint) {
+        (Some(authorization_endpoint), Some(token_endpoint)) => {
+            let authorization_endpoint = Url::parse(authorization_endpoint)
+                .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?;
+            let token_endpoint = Url::parse(token_endpoint)
+                .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?;
+            let named_endpoint = match kind {
+                ConfigurationKind::Oidc => None,
+                ConfigurationKind::Revocation | ConfigurationKind::EndSession => {
+                    Some(named_endpoint.ok_or(WindowsAuthorizationError::InvalidEndpoint)?)
+                }
+            };
+            let configuration = ServiceConfiguration::new(authorization_endpoint, token_endpoint)?;
+            Ok(match kind {
+                ConfigurationKind::Oidc => match (issuer, jwks_uri) {
+                    (Some(issuer), Some(jwks_uri)) => configuration
+                        .with_oidc_validation_endpoints(
+                            Url::parse(issuer)
+                                .map_err(|_| WindowsAuthorizationError::InvalidIssuer)?,
+                            Url::parse(jwks_uri)
+                                .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
+                        )?,
+                    (None, None) => configuration,
+                    _ => return Err(WindowsAuthorizationError::InvalidIssuer),
+                },
+                ConfigurationKind::Revocation => configuration.with_revocation_endpoint(
+                    Url::parse(named_endpoint.ok_or(WindowsAuthorizationError::InvalidEndpoint)?)
+                        .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
+                )?,
+                ConfigurationKind::EndSession => configuration.with_end_session_endpoint(
+                    Url::parse(named_endpoint.ok_or(WindowsAuthorizationError::InvalidEndpoint)?)
+                        .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
+                )?,
+            })
+        }
+        (None, None) => {
+            if matches!(kind, ConfigurationKind::Oidc) && jwks_uri.is_some() {
+                return Err(WindowsAuthorizationError::InvalidIssuer);
+            }
+            let issuer = issuer.ok_or(WindowsAuthorizationError::InvalidIssuer)?;
+            let issuer =
+                Url::parse(issuer).map_err(|_| WindowsAuthorizationError::InvalidIssuer)?;
+            let configuration =
+                ServiceConfiguration::discover(issuer, transport, cancellation.clone()).await?;
+            Ok(match kind {
+                ConfigurationKind::Oidc => configuration,
+                ConfigurationKind::Revocation => match named_endpoint {
+                    Some(endpoint) => configuration.with_revocation_endpoint(
+                        Url::parse(endpoint)
+                            .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
+                    )?,
+                    None => configuration,
+                },
+                ConfigurationKind::EndSession => match named_endpoint {
+                    Some(endpoint) => configuration.with_end_session_endpoint(
+                        Url::parse(endpoint)
+                            .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
+                    )?,
+                    None => configuration,
+                },
+            })
+        }
+        _ => Err(WindowsAuthorizationError::InvalidEndpoint),
+    }
+}
+
+#[cfg(any(windows, test))]
 async fn authorize_with_browser<F>(
     request: WindowsAuthorizationRequest,
     cancellation: CancellationHandle,
@@ -151,36 +331,19 @@ where
         return Err(AuthError::Cancelled.into());
     }
     let transport = ReqwestTransport::new()?;
-    let configuration = match (request.authorization_endpoint, request.token_endpoint) {
-        (Some(authorization_endpoint), Some(token_endpoint)) => {
-            let authorization_endpoint = Url::parse(&authorization_endpoint)
-                .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?;
-            let token_endpoint = Url::parse(&token_endpoint)
-                .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?;
-            let configuration = ServiceConfiguration::new(authorization_endpoint, token_endpoint)?;
-            match (request.issuer, request.jwks_uri) {
-                (Some(issuer), Some(jwks_uri)) => configuration.with_oidc_validation_endpoints(
-                    Url::parse(&issuer).map_err(|_| WindowsAuthorizationError::InvalidIssuer)?,
-                    Url::parse(&jwks_uri)
-                        .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
-                )?,
-                (None, None) => configuration,
-                _ => return Err(WindowsAuthorizationError::InvalidIssuer),
-            }
-        }
-        (None, None) => {
-            if request.jwks_uri.is_some() {
-                return Err(WindowsAuthorizationError::InvalidIssuer);
-            }
-            let issuer = request
-                .issuer
-                .ok_or(WindowsAuthorizationError::InvalidIssuer)?;
-            let issuer =
-                Url::parse(&issuer).map_err(|_| WindowsAuthorizationError::InvalidIssuer)?;
-            ServiceConfiguration::discover(issuer, &transport, cancellation.clone()).await?
-        }
-        _ => return Err(WindowsAuthorizationError::InvalidEndpoint),
-    };
+    let configuration = build_configuration(
+        ConfigurationKind::Oidc,
+        EndpointSelection {
+            issuer: request.issuer.as_deref(),
+            authorization_endpoint: request.authorization_endpoint.as_deref(),
+            token_endpoint: request.token_endpoint.as_deref(),
+            jwks_uri: request.jwks_uri.as_deref(),
+            named_endpoint: None,
+        },
+        &transport,
+        &cancellation,
+    )
+    .await?;
     let redirect_template = parse_redirect_template(&request.redirect_uri)?;
 
     let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)).await?;
@@ -217,6 +380,113 @@ where
 }
 
 #[cfg(any(windows, test))]
+async fn refresh_with_windows_request(
+    request: WindowsRefreshRequest,
+    cancellation: CancellationHandle,
+) -> std::result::Result<AuthenticationState, WindowsAuthorizationError> {
+    if cancellation.is_cancelled() {
+        return Err(AuthError::Cancelled.into());
+    }
+    let transport = ReqwestTransport::new()?;
+    let configuration = build_configuration(
+        ConfigurationKind::Oidc,
+        EndpointSelection {
+            issuer: request.issuer.as_deref(),
+            authorization_endpoint: request.authorization_endpoint.as_deref(),
+            token_endpoint: request.token_endpoint.as_deref(),
+            jwks_uri: request.jwks_uri.as_deref(),
+            named_endpoint: None,
+        },
+        &transport,
+        &cancellation,
+    )
+    .await?;
+    ensure_unique_parameter_names(&request.additional_parameters)?;
+    let additional_parameters: BTreeMap<String, String> = request
+        .additional_parameters
+        .into_iter()
+        .map(|parameter| (parameter.name, parameter.value))
+        .collect();
+    let mut state = request.state;
+    state
+        .refresh_with_additional_parameters(
+            &configuration,
+            &request.client_id,
+            &additional_parameters,
+            &transport,
+            cancellation,
+        )
+        .await?;
+    Ok(state)
+}
+
+#[cfg(any(windows, test))]
+async fn end_session_with_browser<F>(
+    request: WindowsEndSessionRequest,
+    cancellation: CancellationHandle,
+    open_browser: F,
+) -> std::result::Result<Option<WindowsEndSessionResponse>, WindowsAuthorizationError>
+where
+    F: FnOnce(&Url) -> std::result::Result<(), WindowsAuthorizationError>,
+{
+    if cancellation.is_cancelled() {
+        return Err(AuthError::Cancelled.into());
+    }
+    let transport = ReqwestTransport::new()?;
+    let configuration = build_configuration(
+        ConfigurationKind::EndSession,
+        EndpointSelection {
+            issuer: request.issuer.as_deref(),
+            authorization_endpoint: request.authorization_endpoint.as_deref(),
+            token_endpoint: request.token_endpoint.as_deref(),
+            jwks_uri: None,
+            named_endpoint: request.end_session_endpoint.as_deref(),
+        },
+        &transport,
+        &cancellation,
+    )
+    .await?;
+
+    let mut end_session_request = EndSessionRequest::new(&configuration, request.client_id)?;
+    if let Some(id_token_hint) = request.id_token_hint {
+        end_session_request = end_session_request.with_id_token_hint(id_token_hint)?;
+    }
+    let Some(post_logout_redirect_uri) = request.post_logout_redirect_uri else {
+        let session = end_session_request.begin()?;
+        open_browser(session.end_session_url())?;
+        return Ok(None);
+    };
+
+    let redirect_template = parse_redirect_template(&post_logout_redirect_uri)?;
+    let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)).await?;
+    let port = listener.local_addr()?.port();
+    let mut redirect_uri = redirect_template;
+    redirect_uri
+        .set_port(Some(port))
+        .map_err(|_| WindowsAuthorizationError::InvalidRedirectUri)?;
+    end_session_request =
+        end_session_request.with_post_logout_redirect_uri(redirect_uri.clone())?;
+    let session = end_session_request.begin()?;
+    open_browser(session.end_session_url())?;
+
+    let callback =
+        wait_for_callback(listener, redirect_uri.path(), port, cancellation.clone()).await?;
+    let response = session.parse_redirect(&callback)?;
+    let additional_parameters = response
+        .additional_parameters()
+        .iter()
+        .map(|(name, value)| WindowsParameter {
+            name: name.clone(),
+            value: value.clone(),
+        })
+        .collect();
+    Ok(Some(WindowsEndSessionResponse {
+        state: response.state().to_owned(),
+        additional_parameters,
+    }))
+}
+
+#[cfg(any(windows, test))]
 async fn revoke_with_windows_request(
     request: WindowsRevocationRequest,
     cancellation: CancellationHandle,
@@ -225,39 +495,19 @@ async fn revoke_with_windows_request(
         return Err(AuthError::Cancelled.into());
     }
     let transport = ReqwestTransport::new()?;
-    let configuration = match (request.authorization_endpoint, request.token_endpoint) {
-        (Some(authorization_endpoint), Some(token_endpoint)) => {
-            let authorization_endpoint = Url::parse(&authorization_endpoint)
-                .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?;
-            let token_endpoint = Url::parse(&token_endpoint)
-                .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?;
-            let revocation_endpoint = request
-                .revocation_endpoint
-                .ok_or(WindowsAuthorizationError::InvalidEndpoint)?;
-            ServiceConfiguration::new(authorization_endpoint, token_endpoint)?
-                .with_revocation_endpoint(
-                    Url::parse(&revocation_endpoint)
-                        .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
-                )?
-        }
-        (None, None) => {
-            let issuer = request
-                .issuer
-                .ok_or(WindowsAuthorizationError::InvalidIssuer)?;
-            let issuer =
-                Url::parse(&issuer).map_err(|_| WindowsAuthorizationError::InvalidIssuer)?;
-            let configuration =
-                ServiceConfiguration::discover(issuer, &transport, cancellation.clone()).await?;
-            match request.revocation_endpoint {
-                Some(revocation_endpoint) => configuration.with_revocation_endpoint(
-                    Url::parse(&revocation_endpoint)
-                        .map_err(|_| WindowsAuthorizationError::InvalidEndpoint)?,
-                )?,
-                None => configuration,
-            }
-        }
-        _ => return Err(WindowsAuthorizationError::InvalidEndpoint),
-    };
+    let configuration = build_configuration(
+        ConfigurationKind::Revocation,
+        EndpointSelection {
+            issuer: request.issuer.as_deref(),
+            authorization_endpoint: request.authorization_endpoint.as_deref(),
+            token_endpoint: request.token_endpoint.as_deref(),
+            jwks_uri: None,
+            named_endpoint: request.revocation_endpoint.as_deref(),
+        },
+        &transport,
+        &cancellation,
+    )
+    .await?;
     let token_type_hint = match request.token_type_hint.as_deref() {
         None => None,
         Some("access_token") => Some(RevocationTokenType::AccessToken),
@@ -483,6 +733,34 @@ fn authorize(
 }
 
 #[cfg(windows)]
+fn refresh(
+    request: WindowsRefreshRequest,
+    cancellation: CancellationHandle,
+) -> std::result::Result<AuthenticationState, WindowsAuthorizationError> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
+        .block_on(refresh_with_windows_request(request, cancellation))
+}
+
+#[cfg(windows)]
+fn end_session(
+    request: WindowsEndSessionRequest,
+    cancellation: CancellationHandle,
+) -> std::result::Result<Option<WindowsEndSessionResponse>, WindowsAuthorizationError> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
+        .block_on(end_session_with_browser(
+            request,
+            cancellation,
+            open_system_browser,
+        ))
+}
+
+#[cfg(windows)]
 fn revoke(
     request: WindowsRevocationRequest,
     cancellation: CancellationHandle,
@@ -512,6 +790,51 @@ fn run_authorize(
         Ok(state) => match serde_json::to_string(&state) {
             Ok(state) => result(STATUS_SUCCESS, state),
             Err(error) => result(STATUS_ERROR, error.to_string()),
+        },
+        Err(WindowsAuthorizationError::Core(AuthError::Cancelled)) => {
+            result(STATUS_CANCELLED, AuthError::Cancelled.to_string())
+        }
+        Err(error) => result(STATUS_ERROR, error.to_string()),
+    }
+}
+
+#[cfg(windows)]
+fn run_refresh(
+    request_json: &str,
+    cancellation: CancellationHandle,
+) -> *mut AppAuthWindowsRefreshResult {
+    let request = match serde_json::from_str::<WindowsRefreshRequest>(request_json) {
+        Ok(request) => request,
+        Err(error) => return result(STATUS_ERROR, error.to_string()),
+    };
+    match refresh(request, cancellation) {
+        Ok(state) => match serde_json::to_string(&state) {
+            Ok(state) => result(STATUS_SUCCESS, state),
+            Err(error) => result(STATUS_ERROR, error.to_string()),
+        },
+        Err(WindowsAuthorizationError::Core(AuthError::Cancelled)) => {
+            result(STATUS_CANCELLED, AuthError::Cancelled.to_string())
+        }
+        Err(error) => result(STATUS_ERROR, error.to_string()),
+    }
+}
+
+#[cfg(windows)]
+fn run_end_session(
+    request_json: &str,
+    cancellation: CancellationHandle,
+) -> *mut AppAuthWindowsEndSessionResult {
+    let request = match serde_json::from_str::<WindowsEndSessionRequest>(request_json) {
+        Ok(request) => request,
+        Err(error) => return result(STATUS_ERROR, error.to_string()),
+    };
+    match end_session(request, cancellation) {
+        Ok(response) => match response {
+            Some(response) => match serde_json::to_string(&response) {
+                Ok(response) => result(STATUS_SUCCESS, response),
+                Err(error) => result(STATUS_ERROR, error.to_string()),
+            },
+            None => result(STATUS_SUCCESS, ""),
         },
         Err(WindowsAuthorizationError::Core(AuthError::Cancelled)) => {
             result(STATUS_CANCELLED, AuthError::Cancelled.to_string())
@@ -640,6 +963,87 @@ pub unsafe extern "C" fn appauth_windows_authorize(
     run_authorize(&request_json, cancellation)
 }
 
+/// Runs token refresh synchronously and returns a result handle.
+///
+/// The UTF-8 JSON request contains either `issuer` or both
+/// `authorization_endpoint` and `token_endpoint`, plus `client_id` and the
+/// `state` object serialized by a previous successful result. Optional
+/// `additional_parameters` is an array of `{ "name", "value" }` objects added
+/// to the token request; names must be unique. With explicit endpoints, set
+/// both `issuer` and `jwks_uri` to validate a refreshed ID Token.
+///
+/// On success, the result value is the updated serialized authentication
+/// state. The host application must persist it securely so later refreshes
+/// present the current refresh token.
+///
+/// # Safety
+///
+/// `request_json_utf8` must be null or a valid NUL-terminated UTF-8 string.
+/// `cancellation` must be null or a live handle returned by
+/// [`appauth_windows_cancellation_new`] that remains alive until this function
+/// returns.
+#[cfg(windows)]
+#[no_mangle]
+pub unsafe extern "C" fn appauth_windows_refresh(
+    request_json_utf8: *const c_char,
+    cancellation: *const AppAuthWindowsCancellationHandle,
+) -> *mut AppAuthWindowsRefreshResult {
+    if cancellation.is_null() {
+        return result(STATUS_ERROR, "cancellation handle must not be null");
+    }
+    let request_json = match copy_utf8_string(request_json_utf8) {
+        Ok(request_json) => request_json,
+        Err(error) => return result(STATUS_ERROR, error),
+    };
+    let cancellation = match cancellation.as_ref() {
+        Some(cancellation) => cancellation.cancellation.clone(),
+        None => return result(STATUS_ERROR, "cancellation handle must not be null"),
+    };
+    run_refresh(&request_json, cancellation)
+}
+
+/// Runs an OIDC RP-Initiated Logout synchronously and returns a result handle.
+///
+/// The UTF-8 JSON request contains either `issuer` or both
+/// `authorization_endpoint` and `token_endpoint`, plus `client_id`. With
+/// explicit endpoints, `end_session_endpoint` is required; with discovery it
+/// overrides the discovered endpoint. `id_token_hint` is optional. When
+/// `post_logout_redirect_uri` is set, it must be an unported `http://127.0.0.1`
+/// URI: the adapter chooses an available port, opens the system browser, and
+/// validates the returned state on a loopback callback. Call this function on
+/// a worker thread; use the cancellation handle to cancel it from another
+/// thread.
+///
+/// On success with a post-logout redirect, the result value is a JSON object
+/// with the validated `state` and any `additional_parameters`. Without a
+/// redirect, the browser is opened and the result value is empty.
+///
+/// # Safety
+///
+/// `request_json_utf8` must be null or a valid NUL-terminated UTF-8 string.
+/// `cancellation` must be null or a live handle returned by
+/// [`appauth_windows_cancellation_new`] that remains alive until this function
+/// returns.
+#[cfg(windows)]
+#[no_mangle]
+pub unsafe extern "C" fn appauth_windows_end_session(
+    request_json_utf8: *const c_char,
+    cancellation: *const AppAuthWindowsCancellationHandle,
+) -> *mut AppAuthWindowsEndSessionResult {
+    if cancellation.is_null() {
+        return result(STATUS_ERROR, "cancellation handle must not be null");
+    }
+    let request_json = match copy_utf8_string(request_json_utf8) {
+        Ok(request_json) => request_json,
+        Err(error) => return result(STATUS_ERROR, error),
+    };
+    let cancellation = match cancellation.as_ref() {
+        Some(cancellation) => cancellation.cancellation.clone(),
+        None => return result(STATUS_ERROR, "cancellation handle must not be null"),
+    };
+    run_end_session(&request_json, cancellation)
+}
+
 /// Requests token revocation synchronously and returns a result handle.
 ///
 /// The UTF-8 JSON request contains either an `issuer` for discovery, or both
@@ -734,6 +1138,7 @@ pub unsafe extern "C" fn appauth_windows_authorization_result_free(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::TokenResponse;
     use tokio::{io::AsyncReadExt, task::JoinHandle};
 
     #[test]
@@ -969,6 +1374,304 @@ mod tests {
         assert_eq!(state.token_response().access_token, "access");
     }
 
+    #[tokio::test]
+    async fn refresh_honors_cancellation_before_network_setup() {
+        let cancellation = CancellationHandle::new();
+        cancellation.cancel();
+        let request = WindowsRefreshRequest {
+            issuer: None,
+            authorization_endpoint: None,
+            token_endpoint: None,
+            jwks_uri: None,
+            client_id: "native-client".to_owned(),
+            state: AuthenticationState::new(TokenResponse {
+                access_token: "access".to_owned(),
+                token_type: "Bearer".to_owned(),
+                expires_in: None,
+                refresh_token: Some("refresh-token".to_owned()),
+                scope: None,
+                id_token: None,
+                additional_parameters: BTreeMap::new(),
+            })
+            .unwrap(),
+            additional_parameters: Vec::new(),
+        };
+
+        assert!(matches!(
+            refresh_with_windows_request(request, cancellation).await,
+            Err(WindowsAuthorizationError::Core(AuthError::Cancelled))
+        ));
+    }
+
+    #[tokio::test]
+    async fn refresh_exchanges_refresh_token_and_updates_state() {
+        let provider = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let provider_port = provider.local_addr().unwrap().port();
+        let issuer = format!("http://127.0.0.1:{provider_port}");
+        let provider_task = tokio::spawn(async move {
+            let (mut stream, _) = provider.accept().await.unwrap();
+            let request = read_http_request(&mut stream).await;
+            let request = String::from_utf8(request).unwrap();
+            assert!(request.contains("POST /token HTTP/1.1"));
+            assert!(request.contains("grant_type=refresh_token"));
+            assert!(request.contains("refresh_token=old-refresh-token"));
+            assert!(request.contains("client_id=windows-client"));
+            assert!(request.contains("prompt=none"));
+            write_http_response(
+                &mut stream,
+                r#"{"access_token":"new-access","token_type":"Bearer","expires_in":3600,"refresh_token":"new-refresh-token"}"#,
+            )
+            .await;
+        });
+
+        let request = WindowsRefreshRequest {
+            issuer: None,
+            authorization_endpoint: Some(format!("{issuer}/authorize")),
+            token_endpoint: Some(format!("{issuer}/token")),
+            jwks_uri: None,
+            client_id: "windows-client".to_owned(),
+            state: AuthenticationState::new(TokenResponse {
+                access_token: "access".to_owned(),
+                token_type: "Bearer".to_owned(),
+                expires_in: None,
+                refresh_token: Some("old-refresh-token".to_owned()),
+                scope: Some("profile".to_owned()),
+                id_token: None,
+                additional_parameters: BTreeMap::new(),
+            })
+            .unwrap(),
+            additional_parameters: vec![WindowsParameter {
+                name: "prompt".to_owned(),
+                value: "none".to_owned(),
+            }],
+        };
+
+        let refreshed = refresh_with_windows_request(request, CancellationHandle::new())
+            .await
+            .unwrap();
+        provider_task.await.unwrap();
+        assert_eq!(refreshed.token_response().access_token, "new-access");
+        assert_eq!(
+            refreshed.token_response().refresh_token.as_deref(),
+            Some("new-refresh-token")
+        );
+        assert!(refreshed.expires_at().is_some());
+    }
+
+    #[tokio::test]
+    async fn refresh_rejects_duplicate_additional_parameter_names() {
+        let request = WindowsRefreshRequest {
+            issuer: None,
+            authorization_endpoint: Some("https://issuer.example/authorize".to_owned()),
+            token_endpoint: Some("https://issuer.example/token".to_owned()),
+            jwks_uri: None,
+            client_id: "native-client".to_owned(),
+            state: AuthenticationState::new(TokenResponse {
+                access_token: "access".to_owned(),
+                token_type: "Bearer".to_owned(),
+                expires_in: None,
+                refresh_token: Some("refresh-token".to_owned()),
+                scope: None,
+                id_token: None,
+                additional_parameters: BTreeMap::new(),
+            })
+            .unwrap(),
+            additional_parameters: vec![
+                WindowsParameter {
+                    name: "prompt".to_owned(),
+                    value: "none".to_owned(),
+                },
+                WindowsParameter {
+                    name: "prompt".to_owned(),
+                    value: "consent".to_owned(),
+                },
+            ],
+        };
+
+        assert!(matches!(
+            refresh_with_windows_request(request, CancellationHandle::new()).await,
+            Err(WindowsAuthorizationError::DuplicateParameter)
+        ));
+    }
+
+    #[test]
+    fn refresh_request_json_round_trips_serialized_state() {
+        let state = AuthenticationState::new(TokenResponse {
+            access_token: "access".to_owned(),
+            token_type: "Bearer".to_owned(),
+            expires_in: Some(3600),
+            refresh_token: Some("refresh-token".to_owned()),
+            scope: Some("profile".to_owned()),
+            id_token: None,
+            additional_parameters: BTreeMap::new(),
+        })
+        .unwrap();
+        let serialized_state = serde_json::to_string(&state).unwrap();
+        let state_value: serde_json::Value = serde_json::from_str(&serialized_state).unwrap();
+
+        let request: WindowsRefreshRequest = serde_json::from_value(serde_json::json!({
+            "authorization_endpoint": "https://issuer.example/authorize",
+            "token_endpoint": "https://issuer.example/token",
+            "client_id": "client",
+            "state": state_value,
+        }))
+        .unwrap();
+        assert_eq!(request.state.token_response().access_token, "access");
+        assert_eq!(
+            request.state.token_response().refresh_token.as_deref(),
+            Some("refresh-token")
+        );
+        assert!(request.state.expires_at().is_some());
+
+        let missing_token_response: std::result::Result<WindowsRefreshRequest, _> =
+            serde_json::from_value(serde_json::json!({
+                "client_id": "client",
+                "state": {}
+            }));
+        assert!(missing_token_response.is_err());
+    }
+
+    #[tokio::test]
+    async fn end_session_honors_cancellation_before_network_setup() {
+        let cancellation = CancellationHandle::new();
+        cancellation.cancel();
+        let request = WindowsEndSessionRequest {
+            issuer: None,
+            authorization_endpoint: None,
+            token_endpoint: None,
+            end_session_endpoint: None,
+            client_id: "native-client".to_owned(),
+            id_token_hint: None,
+            post_logout_redirect_uri: None,
+        };
+
+        assert!(matches!(
+            end_session_with_browser(
+                request,
+                cancellation,
+                |_| Ok::<(), WindowsAuthorizationError>(())
+            )
+            .await,
+            Err(WindowsAuthorizationError::Core(AuthError::Cancelled))
+        ));
+    }
+
+    #[tokio::test]
+    async fn end_session_without_redirect_opens_browser_and_returns_no_result() {
+        let opened = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let opened_for_browser = opened.clone();
+        let request = WindowsEndSessionRequest {
+            issuer: None,
+            authorization_endpoint: Some("https://issuer.example/authorize".to_owned()),
+            token_endpoint: Some("https://issuer.example/token".to_owned()),
+            end_session_endpoint: Some("https://issuer.example/endsession".to_owned()),
+            client_id: "native-client".to_owned(),
+            id_token_hint: Some("id-token-hint".to_owned()),
+            post_logout_redirect_uri: None,
+        };
+
+        let result = end_session_with_browser(request, CancellationHandle::new(), move |url| {
+            *opened_for_browser.lock().unwrap() = Some(url.as_str().to_owned());
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        assert!(result.is_none());
+        let opened = Url::parse(opened.lock().unwrap().as_ref().unwrap()).unwrap();
+        let query = opened.query().unwrap_or_default();
+        assert!(query.contains("client_id=native-client"));
+        assert!(query.contains("id_token_hint=id-token-hint"));
+        assert!(!query.contains("state"));
+        assert!(!query.contains("post_logout_redirect_uri"));
+    }
+
+    #[tokio::test]
+    async fn end_session_with_redirect_validates_callback() {
+        let opened = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let opened_for_browser = opened.clone();
+        let request = WindowsEndSessionRequest {
+            issuer: None,
+            authorization_endpoint: Some("https://issuer.example/authorize".to_owned()),
+            token_endpoint: Some("https://issuer.example/token".to_owned()),
+            end_session_endpoint: Some("https://issuer.example/endsession".to_owned()),
+            client_id: "native-client".to_owned(),
+            id_token_hint: None,
+            post_logout_redirect_uri: Some("http://127.0.0.1/logout/callback".to_owned()),
+        };
+        let runtime = tokio::runtime::Handle::current();
+        let response = end_session_with_browser(request, CancellationHandle::new(), move |url| {
+            let redirect = url
+                .query_pairs()
+                .find_map(|(name, value)| {
+                    (name == "post_logout_redirect_uri").then_some(value.into_owned())
+                })
+                .unwrap();
+            let state = url
+                .query_pairs()
+                .find_map(|(name, value)| (name == "state").then_some(value.into_owned()))
+                .unwrap();
+            let mut callback = Url::parse(&redirect).unwrap();
+            callback
+                .query_pairs_mut()
+                .append_pair("state", &state)
+                .append_pair("extra", "logout-extra");
+            *opened_for_browser.lock().unwrap() = Some(url.as_str().to_owned());
+            let target = format!(
+                "{}?{}",
+                callback.path(),
+                callback.query().expect("callback has query parameters")
+            );
+            let callback_port = callback.port().unwrap();
+            runtime.spawn(async move {
+                let _ = send_request(callback_port, &target).await;
+            });
+            Ok(())
+        })
+        .await
+        .unwrap()
+        .expect("a requested post-logout redirect yields a validated response");
+
+        let opened = Url::parse(opened.lock().unwrap().as_ref().unwrap()).unwrap();
+        let expected_state = opened
+            .query_pairs()
+            .find(|(name, _)| name.as_ref() == "state")
+            .map(|(_, value)| value.into_owned())
+            .unwrap();
+        assert_eq!(response.state, expected_state);
+        assert_eq!(
+            response.additional_parameters,
+            vec![WindowsParameter {
+                name: "extra".to_owned(),
+                value: "logout-extra".to_owned(),
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn end_session_requires_configured_endpoint_with_explicit_endpoints() {
+        let request = WindowsEndSessionRequest {
+            issuer: None,
+            authorization_endpoint: Some("https://issuer.example/authorize".to_owned()),
+            token_endpoint: Some("https://issuer.example/token".to_owned()),
+            end_session_endpoint: None,
+            client_id: "native-client".to_owned(),
+            id_token_hint: None,
+            post_logout_redirect_uri: None,
+        };
+
+        assert!(matches!(
+            end_session_with_browser(request, CancellationHandle::new(), |_| Ok::<
+                (),
+                WindowsAuthorizationError,
+            >(()))
+            .await,
+            Err(WindowsAuthorizationError::InvalidEndpoint)
+        ));
+    }
+
     async fn send_request(port: u16, target: &str) -> String {
         let mut stream = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
             .await
@@ -984,7 +1687,7 @@ mod tests {
         String::from_utf8(response).unwrap()
     }
 
-    async fn read_http_request(stream: &mut TcpStream) {
+    async fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
         let mut request = Vec::new();
         let mut chunk = [0; 1024];
         loop {
@@ -1015,6 +1718,7 @@ mod tests {
                 }
             }
         }
+        request
     }
 
     async fn write_http_response(stream: &mut TcpStream, body: &str) {
@@ -1055,6 +1759,72 @@ mod tests {
                     .unwrap()
             },
             "issuer URL is invalid"
+        );
+        unsafe {
+            appauth_windows_authorization_result_free(result);
+            appauth_windows_cancellation_free(cancellation);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn c_abi_refresh_returns_and_frees_an_error_result() {
+        let cancellation = appauth_windows_cancellation_new();
+        let request = CString::new(
+            r#"{
+                "issuer":"not a URL",
+                "client_id":"client",
+                "state":{
+                    "token_response":{"access_token":"access","token_type":"Bearer"},
+                    "expires_at":null
+                }
+            }"#,
+        )
+        .unwrap();
+        let result = unsafe { appauth_windows_refresh(request.as_ptr(), cancellation) };
+        assert_eq!(
+            unsafe { appauth_windows_authorization_result_status(result) },
+            STATUS_ERROR
+        );
+        assert_eq!(
+            unsafe {
+                CStr::from_ptr(appauth_windows_authorization_result_value(result))
+                    .to_str()
+                    .unwrap()
+            },
+            "issuer URL is invalid"
+        );
+        unsafe {
+            appauth_windows_authorization_result_free(result);
+            appauth_windows_cancellation_free(cancellation);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn c_abi_end_session_returns_and_frees_an_error_result() {
+        let cancellation = appauth_windows_cancellation_new();
+        let request = CString::new(
+            r#"{
+                "authorization_endpoint":"https://issuer.example/authorize",
+                "token_endpoint":"https://issuer.example/token",
+                "end_session_endpoint":"http://insecure.example/logout",
+                "client_id":"client"
+            }"#,
+        )
+        .unwrap();
+        let result = unsafe { appauth_windows_end_session(request.as_ptr(), cancellation) };
+        assert_eq!(
+            unsafe { appauth_windows_authorization_result_status(result) },
+            STATUS_ERROR
+        );
+        assert_eq!(
+            unsafe {
+                CStr::from_ptr(appauth_windows_authorization_result_value(result))
+                    .to_str()
+                    .unwrap()
+            },
+            "invalid configuration: end-session endpoint must use HTTPS without user info or fragments"
         );
         unsafe {
             appauth_windows_authorization_result_free(result);
