@@ -31,7 +31,7 @@ Completing #60 does not satisfy those remaining 1.0.0 readiness gates.
 
 | Platform | Settled minimum / policy | Release targets and package | CI validation and limits |
 | --- | --- | --- | --- |
-| iOS / iPadOS | 18; recheck Apple's security-update generations before 1.0.0 | `aarch64-apple-ios` device and `aarch64-apple-ios-sim` simulator; XCFramework; deployment target 18.0 | Build both targets and type-check adapters. Regular CI runs two configurations: oldest available iOS 18.x iPhone runtime on `macos-15`, and latest available iOS iPhone runtime on `macos-latest`. Release builds use 18.x on `macos-15`. Missing requested runtimes fail; actual runtimes are logged. Latest means the newest available runtime on the hosted image, which can lag Apple's release. Package consumer links an iOS simulator library and runs on macOS, not on iOS. No exact 18.0, iPad, or physical-device execution claim. |
+| iOS / iPadOS | 18; recheck Apple's security-update generations before 1.0.0 | `aarch64-apple-ios` device and `aarch64-apple-ios-sim` simulator; XCFramework; deployment target 18.0 | Build both targets and type-check adapters. Regular CI runs two configurations: oldest available iOS 18.x iPhone runtime on `macos-15`, and latest available iOS iPhone runtime on `xcode-27` with the newest installed stable Xcode. Release builds use 18.x on `macos-15`. Missing requested runtimes fail; actual runtimes are logged. Latest means the newest available runtime on the hosted image, which can lag Apple's release. Package consumer links an iOS simulator library and runs on macOS, not on iOS. No exact 18.0, iPad, or physical-device execution claim. |
 | macOS | 15; recheck Apple's security-update generations before 1.0.0 | `aarch64-apple-darwin` and `x86_64-apple-darwin`; universal XCFramework slice; deployment target 15.0 | `macos-15` host; build both architectures, run mock loopback flow and package consumer on the host architecture. Building the other architecture does not verify execution on it; real system-browser flow is not automated. |
 | Android | API 28 (Android 9); device-reach decision, not a security-patch guarantee; reassess reach, security bulletin, and dependencies before 1.0.0 | `aarch64-linux-android` / `arm64-v8a` and `x86_64-linux-android` / `x86_64`; AAR; Gradle minSdk and NDK API level 28 | Ubuntu host; API 28 x86_64 `google_apis_playstore` emulator for adapter and package-consumer tests; verify both native libraries in AAR. arm64 device execution is unverified. compileSdk 35 is a build requirement, not the runtime minimum. |
 | Windows | Microsoft-supported client versions, reviewed each release; concrete edition/version list in README's dated policy | `x86_64-pc-windows-msvc`; DLL, import library, C header, and .NET wrapper ZIP | `windows-latest` Server runner builds/tests and runs C++/.NET consumers. Regular CI also transfers the same package to `windows-11-arm` and runs x64 C++/.NET consumers under emulation, verifying a Windows 11 client host and logging OS/build/image. This adds neither a native ARM64 distribution target nor native x64 client-hardware coverage. Browser callbacks remain simulated; real system-browser flow is unverified. |
@@ -42,6 +42,12 @@ deferred. Unverified provider and real-device coverage remains documented in
 
 Configuration evidence:
 
+- Hosted Apple images: [Xcode 27 image](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
+  and [macOS 15 image](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md).
+  The latest lane uses the Xcode 27 image because `macos-latest` currently
+  supplies the previous iOS generation. Revisit that label as GitHub's images
+  advance. The Xcode 27 hosted image is currently a public preview; failures
+  remain visible and are not ignored.
 - Apple targets and deployment settings:
   [target builds](../scripts/check-apple-targets.sh),
   [XCFramework packaging and slice assertions](../scripts/package-apple-xcframework.sh),

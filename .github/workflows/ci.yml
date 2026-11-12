@@ -50,11 +50,28 @@ jobs:
           - ios_simulator: '18'
             runner: macos-15
           - ios_simulator: latest
-            runner: macos-latest
+            runner: xcode-27
     env:
       IOS_SIMULATOR_MAJOR_VERSION: ${{ matrix.ios_simulator }}
     steps:
       - uses: actions/checkout@v4
+      - name: Select newest installed Xcode for latest iOS
+        if: matrix.ios_simulator == 'latest'
+        run: |
+          developer_dir=$(python3 - <<'PY'
+          import glob
+          import re
+          candidates = []
+          for path in glob.glob('/Applications/Xcode*.app'):
+              match = re.fullmatch(r'/Applications/Xcode_(\d+(?:\.\d+)*)\.app', path)
+              if match:
+                  candidates.append((tuple(map(int, match[1].split('.'))), path))
+          if not candidates:
+              raise SystemExit('No stable versioned Xcode installation found')
+          print(max(candidates)[1] + '/Contents/Developer')
+          PY
+          )
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: scripts/check-apple-targets.sh
