@@ -33,6 +33,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Test iOS simulator selection policy
+        run: python3 -m unittest discover -s scripts -p test_select_ios_simulator.py
       - run: cargo test --locked --workspace --all-targets --all-features
       - run: cargo doc --locked --no-deps
       - name: Generate native bindings
@@ -41,6 +43,8 @@ jobs:
   apple_adapters:
     name: Apple adapters validation
     runs-on: macos-15
+    env:
+      IOS_SIMULATOR_MAJOR_VERSION: '18'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -86,6 +90,36 @@ jobs:
           Copy-Item "native/windows/dotnet/AppAuthWindows.csproj" "$package/dotnet"
           Compress-Archive -Path "$package/*" -DestinationPath "target/windows-audit-package.zip" -Force
           scripts/check-windows-release-consumer.ps1 -Package target/windows-audit-package.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-audit-package
+          path: target/windows-audit-package.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  windows_client:
+    name: Windows 11 client consumers (x64 emulation)
+    needs: windows_core
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-audit-package
+          path: dist
+      - name: Record and verify client host
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          if ($os.ProductType -ne 1 -or $os.Caption -notlike '*Windows 11*') {
+            throw "Expected a Windows 11 client runner: $($os.Caption)"
+          }
+          $record = "$($os.Caption), version $($os.Version), build $($os.BuildNumber); host $env:PROCESSOR_ARCHITECTURE; x64 consumers under emulation; image $env:ImageVersion"
+          Write-Output $record
+          $record | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+      - name: Execute x64 C++ and .NET consumers on Windows 11
+        shell: pwsh
+        run: scripts/check-windows-release-consumer.ps1 -Package dist/windows-audit-package.zip
 
   android_adapters:
     name: Android adapters validation
@@ -185,7 +219,7 @@ jobs:
   report:
     name: PR report
     if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    needs: [test, apple_adapters, android_adapters, windows_core, lint, coverage]
+    needs: [test, apple_adapters, android_adapters, windows_core, windows_client, lint, coverage]
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -199,6 +233,7 @@ jobs:
               ['Apple adapters validation', '${{ needs.apple_adapters.result }}'],
               ['Android adapters validation', '${{ needs.android_adapters.result }}'],
               ['Windows core target validation', '${{ needs.windows_core.result }}'],
+              ['Windows 11 client consumers (x64 emulation)', '${{ needs.windows_client.result }}'],
               ['Formatting and Clippy', '${{ needs.lint.result }}'],
             ];
             const resultLabel = result =>

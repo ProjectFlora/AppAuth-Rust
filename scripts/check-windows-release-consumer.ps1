@@ -19,7 +19,7 @@ try {
     }
 
     $cppBuild = Join-Path $workDir "cpp-build"
-    cmake -S (Join-Path $fixture "cpp") -B $cppBuild "-DAPPAUTH_PACKAGE=$($packageRoot.FullName)"
+    cmake -S (Join-Path $fixture "cpp") -B $cppBuild -A x64 "-DAPPAUTH_PACKAGE=$($packageRoot.FullName)"
     if ($LASTEXITCODE -ne 0) { throw "C++ consumer configure failed: $LASTEXITCODE" }
     cmake --build $cppBuild --config Release
     if ($LASTEXITCODE -ne 0) { throw "C++ consumer build failed: $LASTEXITCODE" }
@@ -29,6 +29,7 @@ try {
     $dotnetBuild = Join-Path $workDir "dotnet-build"
     dotnet build (Join-Path $fixture "dotnet/AppAuthReleaseConsumer.csproj") `
         --configuration Release `
+        --runtime win-x64 --self-contained true `
         "--property:AppAuthPackage=$($packageRoot.FullName)" `
         "--output=$dotnetBuild"
     if ($LASTEXITCODE -ne 0) { throw ".NET consumer build failed: $LASTEXITCODE" }

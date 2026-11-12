@@ -459,6 +459,11 @@ version to repeat these checks against the immutable GitHub Release assets.
 
 ## Minimum OS support policy
 
+The [release support matrix](docs/support-matrix.md) maps these OS decisions
+to package targets and CI coverage, records verification limits, and tracks
+the final 1.0.0 release evidence. Its source review does not replace the
+release-time lifecycle check below.
+
 | Platform | Initial minimum / support | Basis checked 2026-11-12 |
 | --- | --- | --- |
 | iOS / iPadOS | 18 | Apple listed security updates for 27.2.1, 26.7.3, and 18.7.12 on 2026-11-09; the minimum follows the oldest security-updated major generation. |
@@ -487,9 +492,12 @@ For Windows, review Microsoft's supported client versions at each release
 and update the support matrix and validation targets; the v1 target is
 currently `x86_64-pc-windows-msvc`. CI builds and tests that target on
 GitHub's hosted Windows runners (a Windows Server release), which is not one
-of the supported client editions, and its browser interaction is simulated;
-client-edition and live identity-provider coverage is recorded as unverified
-in [docs/live-idp-interoperability.md](docs/live-idp-interoperability.md).
+of the supported client editions. Regular CI additionally runs the x64
+C++/.NET package consumers on a `windows-11-arm` client runner under x64
+emulation and records the actual OS/build. Native x64 client-hardware execution
+and real system-browser interaction remain unverified. See the
+[release support matrix](docs/support-matrix.md) for coverage limits and
+[live identity-provider coverage](docs/live-idp-interoperability.md).
 
 See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for the feature-scope proposal and
 [ROADMAP.md](ROADMAP.md) for remaining design decisions and work phases.
