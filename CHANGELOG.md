@@ -8,6 +8,15 @@ policies are still evolving. Each release records its known limitations.
 
 ### Security
 
+- Complete iOS browser waits directly on cancellation and accept only one
+  completion for the active operation. Exercise duplicate/stale completion,
+  dismissal/start errors, cancellation and reuse in the simulator smoke flow.
+- Cancel native refresh while it waits for authentication-state access; cover
+  reserved/duplicate parameters through native refresh and package consumers.
+- Validate current Apple/Android/Windows package consumers in PR CI, including
+  Android callback-activity edge cases. Exclude Apple ZIP resource forks when
+  locating packages and fail Windows consumer validation on native nonzero exits.
+
 - Process Windows loopback connections concurrently (up to 32, with per-client
   time limits), so incomplete requests do not serially block callbacks. Abort
   and drain active connection tasks when the operation completes or is cancelled.

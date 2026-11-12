@@ -4,6 +4,7 @@ using ProjectFlora.AppAuthRust;
 try
 {
     await AppAuthWindows.AuthorizeAsync("{");
+    return 1;
 }
 catch (InvalidOperationException)
 {
@@ -34,5 +35,37 @@ try
 }
 catch (InvalidOperationException)
 {
-    return 0;
 }
+
+var reservedRefresh = """
+{
+  "authorization_endpoint":"https://issuer.example/authorize",
+  "token_endpoint":"https://issuer.example/token",
+  "client_id":"consumer",
+  "state":{"token_response":{"access_token":"old","token_type":"Bearer","refresh_token":"refresh"}},
+  "additional_parameters":[{"name":"client_secret","value":"must-not-send"}]
+}
+""";
+try
+{
+    await AppAuthWindows.RefreshAsync(reservedRefresh);
+    return 1;
+}
+catch (InvalidOperationException error)
+{
+    if (!error.Message.Contains("reserved", StringComparison.Ordinal)) return 1;
+}
+
+var duplicateRefresh = reservedRefresh.Replace(
+    "{\"name\":\"client_secret\",\"value\":\"must-not-send\"}",
+    "{\"name\":\"audience\",\"value\":\"first\"},{\"name\":\"audience\",\"value\":\"second\"}");
+try
+{
+    await AppAuthWindows.RefreshAsync(duplicateRefresh);
+    return 1;
+}
+catch (InvalidOperationException error)
+{
+    if (!error.Message.Contains("unique", StringComparison.Ordinal)) return 1;
+}
+return 0;

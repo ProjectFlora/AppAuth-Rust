@@ -51,6 +51,8 @@ jobs:
         run: rm -rf target/apple/release-package
       - name: Package Apple XCFramework
         run: scripts/package-apple-xcframework.sh 0.0.0-ci
+      - name: Validate current Apple package consumer
+        run: scripts/check-apple-release-consumer.sh target/apple/release-package/AppAuthRust-Apple-0.0.0-ci.zip
       - name: Run iOS authorization flow on simulator
         run: scripts/check-ios-authorization-flow.sh
       - uses: actions/upload-artifact@v4
@@ -70,6 +72,20 @@ jobs:
       - run: cargo build --locked --lib --target x86_64-pc-windows-msvc
       - run: cargo test --locked --lib --target x86_64-pc-windows-msvc
       - run: dotnet build native/windows/dotnet/AppAuthWindows.csproj --configuration Release
+      - name: Build current Windows package and validate external consumers
+        shell: pwsh
+        run: |
+          cargo build --locked --release --lib --target x86_64-pc-windows-msvc
+          $package = "target/windows-audit-package"
+          New-Item -ItemType Directory -Force "$package/include" | Out-Null
+          New-Item -ItemType Directory -Force "$package/dotnet" | Out-Null
+          Copy-Item "target/x86_64-pc-windows-msvc/release/appauth_rust.dll" $package
+          Copy-Item "target/x86_64-pc-windows-msvc/release/appauth_rust.dll.lib" $package
+          Copy-Item "native/windows/include/appauth_windows.h" "$package/include"
+          Copy-Item "native/windows/dotnet/AppAuthWindows.cs" "$package/dotnet"
+          Copy-Item "native/windows/dotnet/AppAuthWindows.csproj" "$package/dotnet"
+          Compress-Archive -Path "$package/*" -DestinationPath "target/windows-audit-package.zip" -Force
+          scripts/check-windows-release-consumer.ps1 -Package target/windows-audit-package.zip
 
   android_adapters:
     name: Android adapters validation
@@ -93,6 +109,7 @@ jobs:
           echo "ANDROID_API_LEVEL=$ANDROID_API_LEVEL" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./native/android/gradlew -p native/android testDebugUnitTest
+      - run: ./native/android/gradlew -p native/android assembleRelease
       - name: Enable Android emulator hardware acceleration
         run: sudo chmod a+rw /dev/kvm
       - name: Run Android callback tests on an emulator
@@ -103,8 +120,9 @@ jobs:
           target: google_apis_playstore
           disable-linux-hw-accel: false
           disable-animations: true
-          script: ./native/android/gradlew -p native/android connectedDebugAndroidTest || { echo "::group::Android emulator diagnostics"; adb devices -l || true; adb shell getprop || true; adb shell dumpsys activity activities || true; adb shell dumpsys window windows || true; adb exec-out uiautomator dump /dev/tty || true; adb logcat -d -t 500 || true; echo "::endgroup::"; exit 1; }
-      - run: ./native/android/gradlew -p native/android assembleRelease
+          script: |
+            ./native/android/gradlew -p native/android connectedDebugAndroidTest || { echo "::group::Android emulator diagnostics"; adb devices -l || true; adb shell getprop || true; adb shell dumpsys activity activities || true; adb shell dumpsys window windows || true; adb exec-out uiautomator dump /dev/tty || true; adb logcat -d -t 500 || true; echo "::endgroup::"; exit 1; }
+            scripts/check-android-release-consumer.sh native/android/build/outputs/aar/appauth-rust-android-release.aar
       - name: Verify Android native libraries in AAR
         run: |
           aar=native/android/build/outputs/aar/appauth-rust-android-release.aar

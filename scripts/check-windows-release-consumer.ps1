@@ -20,15 +20,20 @@ try {
 
     $cppBuild = Join-Path $workDir "cpp-build"
     cmake -S (Join-Path $fixture "cpp") -B $cppBuild "-DAPPAUTH_PACKAGE=$($packageRoot.FullName)"
+    if ($LASTEXITCODE -ne 0) { throw "C++ consumer configure failed: $LASTEXITCODE" }
     cmake --build $cppBuild --config Release
+    if ($LASTEXITCODE -ne 0) { throw "C++ consumer build failed: $LASTEXITCODE" }
     & (Join-Path $cppBuild "Release/appauth_release_consumer.exe")
+    if ($LASTEXITCODE -ne 0) { throw "C++ consumer execution failed: $LASTEXITCODE" }
 
     $dotnetBuild = Join-Path $workDir "dotnet-build"
     dotnet build (Join-Path $fixture "dotnet/AppAuthReleaseConsumer.csproj") `
         --configuration Release `
         "--property:AppAuthPackage=$($packageRoot.FullName)" `
         "--output=$dotnetBuild"
+    if ($LASTEXITCODE -ne 0) { throw ".NET consumer build failed: $LASTEXITCODE" }
     & (Join-Path $dotnetBuild "AppAuthReleaseConsumer.exe")
+    if ($LASTEXITCODE -ne 0) { throw ".NET consumer execution failed: $LASTEXITCODE" }
 } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $workDir
 }

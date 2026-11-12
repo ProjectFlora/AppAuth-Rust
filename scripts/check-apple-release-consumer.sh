@@ -18,7 +18,9 @@ work_dir=$(mktemp -d)
 trap 'rm -rf "$work_dir"' EXIT
 
 unzip -q "$archive" -d "$work_dir"
-package_root=$(find "$work_dir" -type d -name AppAuthRust-Apple -print -quit)
+# ditto may include a parallel __MACOSX resource-fork tree with the same name.
+# Only the actual package contains bindings and libraries.
+package_root=$(find "$work_dir" -path "$work_dir/__MACOSX" -prune -o -type d -name AppAuthRust-Apple -print -quit)
 if [[ -z "$package_root" ]]; then
     echo "Apple release archive does not contain AppAuthRust-Apple/" >&2
     exit 1

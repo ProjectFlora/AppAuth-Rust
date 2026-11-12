@@ -642,9 +642,12 @@ impl FfiAuthenticationState {
             .map(|parameter| (parameter.name, parameter.value))
             .collect();
         let transport = NativeTransport { inner: transport };
-        self.inner
-            .lock()
-            .await
+        let mut state = tokio::select! {
+            biased;
+            _ = cancellation.inner.cancelled() => return Err(FfiError::Cancelled),
+            state = self.inner.lock() => state,
+        };
+        state
             .refresh_with_additional_parameters(
                 &configuration.inner,
                 &client_id,
@@ -1038,6 +1041,156 @@ mod tests {
             .await,
             Err(FfiError::Cancelled)
         ));
+        assert!(transport.request.lock().unwrap().is_none());
+    }
+
+    fn refresh_state() -> Arc<FfiAuthenticationState> {
+        FfiAuthenticationState::from_json(r#"{"token_response":{"access_token":"old","token_type":"Bearer","refresh_token":"refresh"}}"#.into()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn native_refresh_rejects_reserved_and_duplicate_parameters_without_mutating_state() {
+        let configuration = FfiServiceConfiguration::new(
+            "https://issuer.example/authorize".into(),
+            "https://issuer.example/token".into(),
+        )
+        .unwrap();
+        let transport = Arc::new(RecordingTransport {
+            request: Mutex::new(None),
+            response: Err(FfiError::Transport),
+        });
+        let state = refresh_state();
+        let before = state.to_json().await.unwrap();
+        for name in [
+            "",
+            "client_assertion",
+            "client_assertion_type",
+            "client_id",
+            "client_secret",
+            "code",
+            "code_verifier",
+            "grant_type",
+            "redirect_uri",
+            "refresh_token",
+            "scope",
+        ] {
+            assert!(matches!(
+                state
+                    .refresh(
+                        configuration.clone(),
+                        "client".into(),
+                        vec![FfiParameter {
+                            name: name.into(),
+                            value: "override".into()
+                        }],
+                        transport.clone(),
+                        FfiCancellationHandle::new()
+                    )
+                    .await,
+                Err(FfiError::InvalidRequest(_))
+            ));
+        }
+        let duplicates = ["first", "second"]
+            .into_iter()
+            .map(|value| FfiParameter {
+                name: "audience".into(),
+                value: value.into(),
+            })
+            .collect();
+        assert!(matches!(
+            state
+                .refresh(
+                    configuration,
+                    "client".into(),
+                    duplicates,
+                    transport.clone(),
+                    FfiCancellationHandle::new()
+                )
+                .await,
+            Err(FfiError::InvalidRequest(_))
+        ));
+        assert!(transport.request.lock().unwrap().is_none());
+        assert_eq!(state.to_json().await.unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn native_refresh_preserves_allowed_extension_and_omitted_refresh_token() {
+        let configuration = FfiServiceConfiguration::new(
+            "https://issuer.example/authorize".into(),
+            "https://issuer.example/token".into(),
+        )
+        .unwrap();
+        let transport = Arc::new(RecordingTransport {
+            request: Mutex::new(None),
+            response: Ok(FfiHttpResponse {
+                status: 200,
+                headers: vec![],
+                body: br#"{"access_token":"new","token_type":"Bearer"}"#.to_vec(),
+            }),
+        });
+        let state = refresh_state();
+        state
+            .refresh(
+                configuration,
+                "client".into(),
+                vec![FfiParameter {
+                    name: "audience".into(),
+                    value: "resource+/=&".into(),
+                }],
+                transport.clone(),
+                FfiCancellationHandle::new(),
+            )
+            .await
+            .unwrap();
+        let request = transport.request.lock().unwrap().take().unwrap();
+        let form: std::collections::BTreeMap<_, _> = url::form_urlencoded::parse(&request.body)
+            .into_owned()
+            .collect();
+        assert_eq!(form["audience"], "resource+/=&");
+        assert_eq!(form["grant_type"], "refresh_token");
+        assert_eq!(form["refresh_token"], "refresh");
+        let response = state.token_response().await;
+        assert_eq!(response.access_token, "new");
+        assert_eq!(response.refresh_token.as_deref(), Some("refresh"));
+    }
+
+    #[tokio::test]
+    async fn native_refresh_cancellation_does_not_wait_for_another_state_operation() {
+        let configuration = FfiServiceConfiguration::new(
+            "https://issuer.example/authorize".into(),
+            "https://issuer.example/token".into(),
+        )
+        .unwrap();
+        let transport = Arc::new(RecordingTransport {
+            request: Mutex::new(None),
+            response: Err(FfiError::Transport),
+        });
+        let state = refresh_state();
+        let before = state.to_json().await.unwrap();
+        let held = state.inner.lock().await;
+        let cancellation = FfiCancellationHandle::new();
+        let waiting = state.refresh(
+            configuration,
+            "client".into(),
+            vec![],
+            transport.clone(),
+            cancellation.clone(),
+        );
+        tokio::pin!(waiting);
+        std::future::poll_fn(|cx| {
+            assert!(std::future::Future::poll(waiting.as_mut(), cx).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        cancellation.cancel();
+        assert!(matches!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), waiting)
+                .await
+                .unwrap(),
+            Err(FfiError::Cancelled)
+        ));
+        drop(held);
+        assert_eq!(state.to_json().await.unwrap(), before);
         assert!(transport.request.lock().unwrap().is_none());
     }
 

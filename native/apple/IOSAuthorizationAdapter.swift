@@ -17,6 +17,39 @@
   }
 
   @MainActor
+  protocol IOSBrowserSession: AnyObject {
+    var presentationContextProvider: (any ASWebAuthenticationPresentationContextProviding)? {
+      get set
+    }
+    var prefersEphemeralWebBrowserSession: Bool { get set }
+    func start() -> Bool
+    func cancel()
+  }
+
+  extension ASWebAuthenticationSession: IOSBrowserSession {}
+
+  typealias IOSBrowserCompletion = @Sendable (URL?, (any Error)?) -> Void
+  typealias IOSBrowserSessionFactory =
+    @MainActor (
+      URL, ASWebAuthenticationSession.Callback, @escaping IOSBrowserCompletion
+    ) -> any IOSBrowserSession
+
+  @MainActor
+  private final class IOSBrowserWait {
+    private var continuation: CheckedContinuation<URL, any Error>?
+
+    init(_ continuation: CheckedContinuation<URL, any Error>) {
+      self.continuation = continuation
+    }
+
+    func finish(_ result: Result<URL, any Error>) {
+      guard let continuation else { return }
+      self.continuation = nil
+      continuation.resume(with: result)
+    }
+  }
+
+  @MainActor
   /// Runs authorization in `ASWebAuthenticationSession` and exchanges the callback code.
   ///
   /// The host application must register its custom callback scheme or configure
@@ -24,7 +57,9 @@
   public final class IOSAuthorizationAdapter {
     private let presentationContextProvider: any ASWebAuthenticationPresentationContextProviding
     private let prefersEphemeralWebBrowserSession: Bool
-    private var activeSession: ASWebAuthenticationSession?
+    private let browserSessionFactory: IOSBrowserSessionFactory
+    private var activeSession: (any IOSBrowserSession)?
+    private var activeWait: IOSBrowserWait?
     private var activeCancellation: FfiCancellationHandle?
     private var isRunning = false
 
@@ -32,10 +67,27 @@
     ///
     /// Set `prefersEphemeralWebBrowserSession` to avoid sharing browser cookies
     /// with the user's regular browsing session.
-    public init(
+    public convenience init(
       presentationContextProvider: any ASWebAuthenticationPresentationContextProviding,
       prefersEphemeralWebBrowserSession: Bool = false
     ) {
+      self.init(
+        presentationContextProvider: presentationContextProvider,
+        prefersEphemeralWebBrowserSession: prefersEphemeralWebBrowserSession,
+        browserSessionFactory: { url, callback, completion in
+          ASWebAuthenticationSession(url: url, callback: callback, completionHandler: completion)
+        }
+      )
+    }
+
+    // Internal seam: tests replace only browser presentation, keeping the same
+    // authorization, callback validation, cancellation and code-exchange path.
+    init(
+      presentationContextProvider: any ASWebAuthenticationPresentationContextProviding,
+      prefersEphemeralWebBrowserSession: Bool,
+      browserSessionFactory: @escaping IOSBrowserSessionFactory
+    ) {
+      self.browserSessionFactory = browserSessionFactory
       self.presentationContextProvider = presentationContextProvider
       self.prefersEphemeralWebBrowserSession = prefersEphemeralWebBrowserSession
     }
@@ -92,16 +144,28 @@
       } onCancel: { [weak self] in
         cancellation.cancel()
         Task { @MainActor [weak self] in
-          guard self?.activeCancellation === cancellation else { return }
-          self?.activeSession?.cancel()
+          self?.cancelBrowser(cancellation: cancellation)
         }
       }
     }
 
     /// Cancels the active browser session and any in-flight core request.
     public func cancel() {
-      activeCancellation?.cancel()
-      activeSession?.cancel()
+      guard let cancellation = activeCancellation else { return }
+      cancellation.cancel()
+      cancelBrowser(cancellation: cancellation)
+    }
+
+    private func cancelBrowser(cancellation: FfiCancellationHandle) {
+      guard activeCancellation === cancellation else { return }
+      let session = activeSession
+      activeSession = nil
+      let wait = activeWait
+      activeWait = nil
+      // Explicit cancellation must complete even if the OS does not invoke the
+      // session completion handler. Clear identity before a synchronous callback.
+      wait?.finish(.failure(FfiError.Cancelled))
+      session?.cancel()
     }
 
     private func authenticate(
@@ -112,25 +176,26 @@
       guard !cancellation.isCancelled() else { throw FfiError.Cancelled }
       return try await withCheckedThrowingContinuation {
         (continuation: CheckedContinuation<URL, any Error>) in
-        let session = ASWebAuthenticationSession(
-          url: authorizationURL,
-          callback: callback
-        ) { [weak self] callbackURL, error in
-          self?.activeSession = nil
-
-          if let callbackURL {
-            continuation.resume(returning: callbackURL)
-          } else if let webError = error as? ASWebAuthenticationSessionError,
-            webError.code == .canceledLogin
-          {
-            cancellation.cancel()
-            continuation.resume(throwing: FfiError.Cancelled)
-          } else if let error {
-            continuation.resume(throwing: error)
-          } else {
-            continuation.resume(
-              throwing: IOSAuthorizationAdapterError.missingCallbackURL
-            )
+        let wait = IOSBrowserWait(continuation)
+        activeWait = wait
+        let session = browserSessionFactory(authorizationURL, callback) {
+          [weak self, weak wait] callbackURL, error in
+          Task { @MainActor [weak self, weak wait] in
+            guard let self, let wait, self.activeWait === wait else { return }
+            self.activeSession = nil
+            self.activeWait = nil
+            if let callbackURL {
+              wait.finish(.success(callbackURL))
+            } else if let webError = error as? ASWebAuthenticationSessionError,
+              webError.code == .canceledLogin
+            {
+              cancellation.cancel()
+              wait.finish(.failure(FfiError.Cancelled))
+            } else if let error {
+              wait.finish(.failure(error))
+            } else {
+              wait.finish(.failure(IOSAuthorizationAdapterError.missingCallbackURL))
+            }
           }
         }
         session.presentationContextProvider = presentationContextProvider
@@ -139,9 +204,8 @@
 
         guard session.start() else {
           activeSession = nil
-          continuation.resume(
-            throwing: IOSAuthorizationAdapterError.authorizationSessionCouldNotStart
-          )
+          activeWait = nil
+          wait.finish(.failure(IOSAuthorizationAdapterError.authorizationSessionCouldNotStart))
           return
         }
       }
