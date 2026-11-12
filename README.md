@@ -459,8 +459,11 @@ version to repeat these checks against the immutable GitHub Release assets.
   Xcode, the AAR as a local Gradle dependency, and the Windows DLL/import
   library in C++ or .NET applications. Compiled platform binaries stay out of
   the source repository.
-- Evaluate Maven Central, Swift Package Manager, and Carthage as later
-  distribution channels; they are not initial-release requirements.
+- Maven Central, Swift Package Manager, and Carthage were evaluated as later
+  distribution channels in
+  [docs/distribution-channels.md](docs/distribution-channels.md): Maven
+  Central (Android) and Swift Package Manager (Apple) are adopted, Carthage
+  was declined; none are initial-release requirements.
 
 ## Minimum OS support policy
 

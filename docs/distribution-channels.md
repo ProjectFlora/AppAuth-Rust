@@ -11,8 +11,10 @@ are tracked as follow-up issues.
 
 All three native packages ship exclusively as versioned GitHub Release assets
 with SHA-256 checksums, validated against minimal consumer fixtures before
-publication and re-validated after publication (see
-[README.md](../README.md)). The assets are immutable per release version.
+publication (see [README.md](../README.md)). The release pipeline stops at
+publication: published assets are immutable per release version and can be
+re-validated on demand by manually running the "Published release consumer
+validation" workflow against a published version.
 
 Consumer onboarding is manual on every platform:
 
@@ -146,13 +148,15 @@ Conclusions for the SPM channel:
   binary target can point directly at the current
   `AppAuthRust-Apple-<version>.zip` asset. A slimmer zip remains an optional
   optimization.
-- The release binary's minimum OS versions are **iOS 18 / macOS 15** (the
-  macOS value is pinned in the package script; the iOS value currently comes
-  from the Rust toolchain's implicit default). The SPM manifest must declare
-  platform minimums at least as high, matching the documented support range.
-  Pinning the iOS deployment target explicitly in the package script is a
-  follow-up hardening item so the binary floor stays stable across Rust
-  releases.
+- The release binary's minimum OS versions are **iOS 18 / macOS 15**, both
+  explicitly pinned in `scripts/package-apple-xcframework.sh` (`export
+  IPHONEOS_DEPLOYMENT_TARGET=18.0` / `MACOSX_DEPLOYMENT_TARGET=15.0` before
+  the `cargo build` calls). The v0.4.0 release slices confirm the pins
+  (device 18.0, simulator 18.0, macOS 15.0); the Rust toolchain's implicit
+  defaults (10.0 / 14.0 on the current MSRV toolchain) fall below the
+  documented floor, so the explicit pins are load-bearing. The SPM manifest
+  must declare platform minimums at least as high, matching the documented
+  support range.
 - The v0.4.0 generated Swift is not Swift 6 strict-concurrency clean. A
   production manifest pinned to Swift 5 language mode
   (`swiftLanguageMode(.v5)`) compiles correctly for consumers on any tools
@@ -266,5 +270,5 @@ document:
   (tools 6.0, iOS 18 / macOS 15 minimums, Swift 5 language-mode pin, binary
   target `url:` + checksum at the existing zip asset), manifest placement
   (SPM requires the manifest at the repository root for remote git
-  dependencies), release pipeline assembly, pinning the iOS deployment
-  target in the Apple package script, and consumer documentation updates.
+  dependencies), release pipeline assembly, and consumer documentation
+  updates.
