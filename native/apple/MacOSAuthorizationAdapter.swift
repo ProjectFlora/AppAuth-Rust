@@ -185,7 +185,8 @@
     }
 
     func start() async throws -> UInt16 {
-      try await withCheckedThrowingContinuation { continuation in
+      guard !isStopped, !Task.isCancelled else { throw FfiError.Cancelled }
+      return try await withCheckedThrowingContinuation { continuation in
         readyContinuation = continuation
         listener.start(queue: queue)
       }

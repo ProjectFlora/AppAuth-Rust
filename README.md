@@ -27,7 +27,8 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 - Use an asynchronous HTTP transport abstraction, with a Rust `reqwest`
   implementation by default and the option for native adapters to provide
   their own transport. Rust callers provide the Tokio runtime used by the
-  default transport.
+  default transport. The supplied Swift/Kotlin HTTP transports disable platform
+  HTTP caching; JWKS caching and freshness are handled by the Rust core.
 - Use the external browser for authorization; do not embed the flow in a
   WebView.
 - Keep OAuth/OIDC protocol handling in the shared Rust core.
@@ -104,9 +105,14 @@ before the 1.0.0 tag; the pre-1.0 release policy in
 - Call `revoke_token` explicitly with an access or refresh token and the
   public client ID. The request never includes a client secret; callers may
   provide the optional `access_token` or `refresh_token` type hint.
-- A successful HTTP response completes the operation. OAuth error responses,
-  HTTP failures, transport failures, and explicit cancellation are returned to
-  the caller without changing any local authentication state.
+- HTTP 200 completes the operation, including for an already-invalid token;
+  its body is ignored as required by RFC 7009. Other status codes do not confirm
+  revocation. Valid OAuth error objects on HTTP 400/401 are returned as
+  authorization-server errors; malformed/ambiguous bodies and other statuses
+  remain HTTP errors. HTTP 503 remains observable even with an OAuth-shaped
+  body. Transport failures and explicit cancellation are also returned without
+  changing local authentication state. The API does not expose Retry-After or
+  retry automatically; the host owns retry policy.
 - Revocation is distinct from RP-Initiated Logout and local state deletion.
   The host application must delete its local authentication state regardless
   of a revocation request's success, failure, or cancellation. It owns retry

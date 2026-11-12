@@ -14,6 +14,8 @@
     private var expectedRedirectURI: String?
     private var expectedState: String?
     private var tokenExchangeVerified = false
+    private var transportCacheRequests = 0
+    private var transportRedirectTargets = 0
 
     init() throws {
       let parameters = NWParameters.tcp
@@ -51,6 +53,11 @@
       else {
         throw MacOSMockOAuthProviderError.incompleteAuthorizationFlow
       }
+    }
+
+    func verifyTransportChecks() {
+      precondition(transportCacheRequests == 2)
+      precondition(transportRedirectTargets == 0)
     }
 
     private func update(_ state: NWListener.State) {
@@ -145,7 +152,19 @@
       }
       let method = String(fields[0])
       let target = String(fields[1])
-      if method == "GET", target.hasPrefix("/authorize?") {
+      if method == "GET", target == "/transport-redirect" {
+        respond(
+          status: 302, reason: "Found", body: "", headers: ["Location": "/transport-final"],
+          on: connection)
+      } else if method == "GET", target == "/transport-final" {
+        transportRedirectTargets += 1
+        respond(status: 200, reason: "OK", body: "unexpected", on: connection)
+      } else if method == "GET", target == "/transport-cache" {
+        transportCacheRequests += 1
+        respond(
+          status: 200, reason: "OK", body: "version-\(transportCacheRequests)",
+          headers: ["Cache-Control": "max-age=300"], on: connection)
+      } else if method == "GET", target.hasPrefix("/authorize?") {
         authorize(target: target, on: connection)
       } else if method == "POST", target == "/token" {
         exchangeToken(body: body, on: connection)

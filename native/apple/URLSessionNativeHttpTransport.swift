@@ -17,12 +17,16 @@ public final class URLSessionNativeHttpTransport: NativeHttpTransport, @unchecke
   private let redirectDelegate: NoRedirectDelegate
   private let session: URLSession
 
-  /// Creates a transport with the supplied session configuration.
+  /// Creates a transport with a copy of the supplied session configuration.
+  /// HTTP caching is disabled so JWKS freshness is controlled by the Rust core.
   public init(configuration: URLSessionConfiguration = .ephemeral) {
     let redirectDelegate = NoRedirectDelegate()
     self.redirectDelegate = redirectDelegate
+    let transportConfiguration = configuration.copy() as! URLSessionConfiguration
+    transportConfiguration.urlCache = nil
+    transportConfiguration.requestCachePolicy = .reloadIgnoringLocalCacheData
     self.session = URLSession(
-      configuration: configuration,
+      configuration: transportConfiguration,
       delegate: redirectDelegate,
       delegateQueue: nil
     )
