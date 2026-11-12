@@ -21,7 +21,8 @@ mod transport;
 /// UniFFI types and functions shared by the Swift and Kotlin adapters.
 pub mod ffi;
 
-/// Windows desktop authorization through the external browser and loopback redirect.
+/// Windows desktop C ABI for authorization, token refresh, end-session, and
+/// token revocation through the external browser and loopback redirects.
 #[cfg(any(windows, test))]
 pub mod windows;
 
