@@ -6,6 +6,8 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-12
+
 ### Added
 
 - Token refresh through the Windows C ABI `appauth_windows_refresh` and the
@@ -15,6 +17,26 @@ policies are still evolving. Each release records its known limitations.
   `appauth_windows_end_session` and the .NET `AppAuthWindows.EndSessionAsync`
   wrapper. This brings the Windows C ABI to parity with the UniFFI operation
   surface: authorization, refresh, end-session, and revocation.
+
+### Distribution
+
+- Published as a regular GitHub Release while remaining a pre-1.0 version.
+  Release assets include Apple XCFramework, Android AAR, Windows DLL/C ABI
+  package, API documentation, and SHA-256 checksums.
+
+### Known limitations
+
+- Live identity-provider interoperability has not been validated, including
+  token revocation.
+- macOS and Windows tests do not automate the real system-browser flow.
+- The Windows C ABI exposes authorization, refresh, end-session, and token
+  revocation, matching the UniFFI operation surface.
+- Release consumer fixtures exercise refresh and end-session error paths in
+  the Windows C++ and .NET hosts and token revocation in the Windows .NET
+  host only; the Apple and Android fixtures only construct the configuration
+  object.
+- Platform minimums and provider interoperability policies remain subject to
+  the 1.0.0 readiness criteria in `ROADMAP.md`.
 
 ## [0.3.0] - 2026-11-12
 
