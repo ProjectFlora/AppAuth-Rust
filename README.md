@@ -169,9 +169,14 @@ before the 1.0.0 tag; the pre-1.0 release policy in
   callback delivery. Check the example with
   `cargo check --locked --example manual_authorization`.
 
-The crate is not published on crates.io, and native packages are not published
-through Swift Package Manager, Maven Central, or Carthage. Binary distribution
-uses versioned GitHub Releases. The published [v0.1.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.1.0) contains the
+The crate is not published on crates.io. Binary distribution uses versioned
+GitHub Releases on all platforms. The package-channel evaluation recorded in
+[docs/distribution-channels.md](docs/distribution-channels.md) (issue #44)
+adopts Maven Central for Android and Swift Package Manager for Apple, with the
+GitHub Release assets remaining the fallback channel; those channels are not
+published yet and are implemented in [#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)
+and [#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82). Carthage
+was evaluated and declined. The published [v0.1.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.1.0) contains the
 Apple XCFramework, Android AAR, API reference, and checksums; it predates the
 Windows adapter. The published [v0.2.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.2.0) adds the Windows DLL/C ABI package with
 C/C++ and .NET interop files. The published [v0.3.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.3.0)
