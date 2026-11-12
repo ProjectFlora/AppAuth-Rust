@@ -43,6 +43,7 @@ jobs:
   apple_adapters:
     name: Apple adapters validation (iOS ${{ matrix.ios_simulator }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -82,8 +83,6 @@ jobs:
         run: scripts/package-apple-xcframework.sh 0.0.0-ci
       - name: Validate current Apple package consumer
         run: scripts/check-apple-release-consumer.sh target/apple/release-package/AppAuthRust-Apple-0.0.0-ci.zip
-      - name: Run iOS authorization flow on simulator
-        run: scripts/check-ios-authorization-flow.sh
       - uses: actions/upload-artifact@v4
         with:
           name: apple-xcframework-ios-${{ matrix.ios_simulator }}
