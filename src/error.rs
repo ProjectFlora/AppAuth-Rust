@@ -50,7 +50,7 @@ pub enum AuthError {
     /// The HTTP transport failed and provided a diagnostic message.
     #[error("HTTP transport failed: {0}")]
     TransportFailure(String),
-    /// An HTTP endpoint returned an unsuccessful status without an OAuth error body.
+    /// An HTTP endpoint returned an unexpected status or an unusable OAuth error body.
     #[error("HTTP endpoint returned status {0}")]
     HttpStatus(StatusCode),
     /// The operation was cancelled by the caller or platform.

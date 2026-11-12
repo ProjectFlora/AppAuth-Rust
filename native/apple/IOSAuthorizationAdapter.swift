@@ -92,6 +92,7 @@
       } onCancel: { [weak self] in
         cancellation.cancel()
         Task { @MainActor [weak self] in
+          guard self?.activeCancellation === cancellation else { return }
           self?.activeSession?.cancel()
         }
       }
@@ -108,7 +109,8 @@
       callback: ASWebAuthenticationSession.Callback,
       cancellation: FfiCancellationHandle
     ) async throws -> URL {
-      try await withCheckedThrowingContinuation {
+      guard !cancellation.isCancelled() else { throw FfiError.Cancelled }
+      return try await withCheckedThrowingContinuation {
         (continuation: CheckedContinuation<URL, any Error>) in
         let session = ASWebAuthenticationSession(
           url: authorizationURL,

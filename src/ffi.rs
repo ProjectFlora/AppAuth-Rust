@@ -36,7 +36,7 @@ pub enum FfiError {
         /// Optional human-readable error description.
         description: Option<String>,
     },
-    /// An endpoint returned an unsuccessful HTTP status.
+    /// An endpoint returned an unexpected status or an unusable OAuth error body.
     #[error("HTTP endpoint returned status {status}")]
     HttpStatus {
         /// HTTP status code.
@@ -820,6 +820,225 @@ mod tests {
                 Err(_) => Err(FfiError::Transport),
             }
         }
+    }
+
+    fn authorization_options() -> FfiAuthorizationOptions {
+        FfiAuthorizationOptions {
+            client_id: "native-client".into(),
+            redirect_uri: "com.example.app:/callback".into(),
+            scopes: vec![],
+            additional_parameters: vec![],
+            additional_token_parameters: vec![],
+        }
+    }
+
+    #[test]
+    fn native_authorization_rejects_reserved_and_duplicate_additional_parameters() {
+        let configuration = FfiServiceConfiguration::new(
+            "https://issuer.example/authorize".into(),
+            "https://issuer.example/token".into(),
+        )
+        .unwrap();
+        let transport = Arc::new(RecordingTransport {
+            request: Mutex::new(None),
+            response: Err(FfiError::Transport),
+        });
+        for (token, names) in [
+            (
+                false,
+                vec![
+                    "",
+                    "client_id",
+                    "code_challenge",
+                    "code_challenge_method",
+                    "nonce",
+                    "redirect_uri",
+                    "response_type",
+                    "scope",
+                    "state",
+                ],
+            ),
+            (
+                true,
+                vec![
+                    "",
+                    "client_assertion",
+                    "client_assertion_type",
+                    "client_id",
+                    "client_secret",
+                    "code",
+                    "code_verifier",
+                    "grant_type",
+                    "redirect_uri",
+                    "refresh_token",
+                    "scope",
+                ],
+            ),
+        ] {
+            for name in names {
+                let mut options = authorization_options();
+                let parameters = if token {
+                    &mut options.additional_token_parameters
+                } else {
+                    &mut options.additional_parameters
+                };
+                parameters.push(FfiParameter {
+                    name: name.into(),
+                    value: "override".into(),
+                });
+                assert!(
+                    matches!(
+                        begin_authorization(configuration.clone(), options, transport.clone()),
+                        Err(FfiError::InvalidRequest(_))
+                    ),
+                    "accepted {name}, token={token}"
+                );
+            }
+            let mut options = authorization_options();
+            let parameters = if token {
+                &mut options.additional_token_parameters
+            } else {
+                &mut options.additional_parameters
+            };
+            for value in ["first", "second"] {
+                parameters.push(FfiParameter {
+                    name: "audience".into(),
+                    value: value.into(),
+                });
+            }
+            assert!(matches!(
+                begin_authorization(configuration.clone(), options, transport.clone()),
+                Err(FfiError::InvalidRequest(_))
+            ));
+        }
+        assert!(transport.request.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn native_callback_uses_core_encoding_and_session_validation() {
+        let configuration = FfiServiceConfiguration::new(
+            "https://issuer.example/authorize".into(),
+            "https://issuer.example/token".into(),
+        )
+        .unwrap();
+        let transport = Arc::new(RecordingTransport {
+            request: Mutex::new(None),
+            response: Err(FfiError::Transport),
+        });
+        let session =
+            begin_authorization(configuration, authorization_options(), transport.clone()).unwrap();
+        let url = Url::parse(&session.authorization_url()).unwrap();
+        let state = url
+            .query_pairs()
+            .find(|(name, _)| name == "state")
+            .unwrap()
+            .1
+            .into_owned();
+        for query in [
+            format!("code=%FF&state={state}"),
+            format!("code=value&state={state}&%73tate={state}"),
+            "code=value&state=another-operation".into(),
+        ] {
+            assert!(matches!(
+                session.parse_redirect(format!("com.example.app:/callback?{query}")),
+                Err(FfiError::InvalidResponse(_))
+            ));
+        }
+        let response = session
+            .parse_redirect(format!(
+                "com.example.app:/callback?code=a%2Bb&state={state}"
+            ))
+            .unwrap();
+        assert_eq!(response.code(), "a+b");
+        assert!(transport.request.lock().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn native_revocation_preserves_status_and_oauth_error_classification() {
+        let configuration = FfiServiceConfiguration::new(
+            "https://issuer.example/authorize".into(),
+            "https://issuer.example/token".into(),
+        )
+        .unwrap()
+        .with_revocation_endpoint("https://issuer.example/revoke".into())
+        .unwrap();
+        for (status, body) in [
+            (200, "not JSON"),
+            (204, ""),
+            (400, r#"{"error":"unsupported_token_type"}"#),
+            (400, r#"{"error":"one","error":"two"}"#),
+            (503, r#"{"error":"temporarily_unavailable"}"#),
+        ] {
+            let transport = Arc::new(RecordingTransport {
+                request: Mutex::new(None),
+                response: Ok(FfiHttpResponse {
+                    status,
+                    headers: vec![],
+                    body: body.as_bytes().to_vec(),
+                }),
+            });
+            let result = revoke(
+                configuration.clone(),
+                "client".into(),
+                "token".into(),
+                Some("refresh_token".into()),
+                transport.clone(),
+                FfiCancellationHandle::new(),
+            )
+            .await;
+            match status {
+                200 => result.unwrap(),
+                400 if body.contains("unsupported_token_type") => assert!(
+                    matches!(result, Err(FfiError::AuthorizationServer { code, .. }) if code == "unsupported_token_type")
+                ),
+                _ => assert!(
+                    matches!(result, Err(FfiError::HttpStatus { status: actual }) if actual == status)
+                ),
+            }
+            assert!(transport.request.lock().unwrap().is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn native_revocation_rejects_unknown_hint_and_precancelled_requests() {
+        let configuration = FfiServiceConfiguration::new(
+            "https://issuer.example/authorize".into(),
+            "https://issuer.example/token".into(),
+        )
+        .unwrap()
+        .with_revocation_endpoint("https://issuer.example/revoke".into())
+        .unwrap();
+        let transport = Arc::new(RecordingTransport {
+            request: Mutex::new(None),
+            response: Err(FfiError::Transport),
+        });
+        assert!(matches!(
+            revoke(
+                configuration.clone(),
+                "client".into(),
+                "token".into(),
+                Some("unknown_hint".into()),
+                transport.clone(),
+                FfiCancellationHandle::new()
+            )
+            .await,
+            Err(FfiError::InvalidRequest(_))
+        ));
+        let cancellation = FfiCancellationHandle::new();
+        cancellation.cancel();
+        assert!(matches!(
+            revoke(
+                configuration,
+                "client".into(),
+                "token".into(),
+                None,
+                transport.clone(),
+                cancellation
+            )
+            .await,
+            Err(FfiError::Cancelled)
+        ));
+        assert!(transport.request.lock().unwrap().is_none());
     }
 
     #[tokio::test]

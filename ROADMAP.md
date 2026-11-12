@@ -10,7 +10,9 @@ This roadmap tracks work remaining for the initial scope in
   audience, expiration, and nonce.
 - **OIDC algorithms and JWKS:** Accept RS256 and ES256 only; cache JWKS for up
   to 300 seconds, respect stricter server cache directives, and refresh once
-  when a cached set does not contain the presented key ID.
+  when a cached set does not contain the presented key ID. Serialize retrieval
+  across configuration clones and reuse newly cached results after waiting;
+  uncached results and failed retrievals may require separate attempts.
 - **Authentication state:** The Rust core models serializable authentication
   state; persistence and encryption are the host application's responsibility.
 - **Native API surface:** Expose the Rust core through thin Swift adapters for
@@ -153,6 +155,9 @@ browser callback, and CI builds/tests the Windows target and builds the .NET
 wrapper. CI also packages an Apple XCFramework and verifies Rust libraries are
 packaged in the Android release AAR. Live identity-provider interoperability
 remains explicitly unverified.
+
+Security edge-case audit progress and remaining gaps are tracked in
+[the audit ledger](docs/security-edge-case-audit.md) ([#62](https://github.com/ProjectFlora/AppAuth-Rust/issues/62)).
 
 ## Initial validation checkpoints
 

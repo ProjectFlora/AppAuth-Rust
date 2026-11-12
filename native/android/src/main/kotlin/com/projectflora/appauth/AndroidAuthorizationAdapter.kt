@@ -269,7 +269,10 @@ internal class PendingRedirect(
     suspend fun await(): String = result.await()
 
     fun matches(uri: String): Boolean {
-        val actual = RedirectTarget.parse(uri) ?: return false
+        // Route by target components only. A malformed query or fragment on
+        // the matching route must reach core validation and terminate, rather
+        // than being ignored and leaving the authorization pending forever.
+        val actual = RedirectTarget.parse(uri.substringBefore('?').substringBefore('#')) ?: return false
         return expected.matches(actual)
     }
 

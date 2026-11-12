@@ -6,6 +6,46 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+### Security
+
+- Process Windows loopback connections concurrently (up to 32, with per-client
+  time limits), so incomplete requests do not serially block callbacks. Abort
+  and drain active connection tasks when the operation completes or is cancelled.
+- Route malformed matching Android callbacks to core validation instead of
+  silently leaving the operation pending.
+- Disable native Apple/Android HTTP caching so Rust controls JWKS freshness.
+  Avoid delayed iOS cancellation affecting a newer operation, and reject
+  starting an already-cancelled macOS listener or iOS browser request.
+
+- Reject duplicate or conflicting token/revocation error objects and preserve
+  their HTTP status instead of interpreting an ambiguous error. Require HTTP
+  200 for token issuance and revocation success; retain unexpected/retryable
+  status codes, including 429/503, even with OAuth-shaped bodies. Valid OAuth
+  error objects on 400/401 remain authorization-server errors.
+- Reject reserved revocation endpoint query parameters and propagate core
+  cancellation even when an HTTP transport ignores its cancellation handle.
+
+- Reject malformed percent escapes and invalid UTF-8 in authorization/logout
+  callback queries, empty authorization errors, and ambiguous configured
+  callback queries. Reject reserved parameters in token endpoint queries before
+  code exchange or refresh sends a request.
+
+- Serialize JWKS retrieval across configuration clones and recheck the cache
+  after waiting, avoiding duplicate successful refreshes and stale overwrites.
+  Preserve valid cached keys on refresh failure, reject expired-key fallback,
+  and allow independent cancellation while waiting or fetching.
+- Honor all JWKS Cache-Control fields, subtract Age from freshness, and disable
+  caching for ambiguous or malformed freshness directives and unsupported
+  Expires-only policies.
+
+- Validate ID Token exp, iat and optional nbf against one clock reading, with
+  deterministic coverage of the inclusive 60-second skew boundary. Reject
+  malformed non-null nbf values and use overflow-safe time comparisons.
+
+- Reject token success responses containing duplicate top-level JSON member
+  names or an `error` member, preventing ambiguous responses from being
+  accepted during code exchange or refresh.
+
 ## [0.4.0] - 2026-11-12
 
 ### Added
