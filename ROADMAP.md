@@ -112,6 +112,14 @@ This roadmap tracks work remaining for the initial scope in
     ensure CI is green for all declared targets and packages.
   - Validate installation and use of each release artifact, publish complete
     API/user documentation, and record the final support matrix.
+    [Issue #60](https://github.com/ProjectFlora/AppAuth-Rust/issues/60) tracks
+    the [matrix and verification procedure](docs/support-matrix.md).
+    Release-candidate asset inspection is tracked in
+    [#77](https://github.com/ProjectFlora/AppAuth-Rust/issues/77), and the
+    pre-tag lifecycle recheck and final OS record in
+    [#78](https://github.com/ProjectFlora/AppAuth-Rust/issues/78).
+    Both remain 1.0.0 readiness gates after #60 is complete. Record actual
+    CI runtimes and explicitly resolve or accept execution gaps in #77.
 
 ## Work phases
 

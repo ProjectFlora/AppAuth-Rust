@@ -1,5 +1,12 @@
 using System;
+using System.Runtime.InteropServices;
 using ProjectFlora.AppAuthRust;
+
+if (RuntimeInformation.ProcessArchitecture != Architecture.X64)
+{
+    throw new InvalidOperationException("The Windows release consumer must run as x64.");
+}
+Console.WriteLine($"Windows consumer process: {RuntimeInformation.ProcessArchitecture}; OS: {RuntimeInformation.OSArchitecture}");
 
 try
 {

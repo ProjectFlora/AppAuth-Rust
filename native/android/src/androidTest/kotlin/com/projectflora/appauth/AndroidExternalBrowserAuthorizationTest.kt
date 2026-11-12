@@ -1,11 +1,13 @@
 package com.projectflora.appauth
 
 import android.net.Uri
+import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import kotlinx.coroutines.CompletableDeferred
@@ -92,9 +94,8 @@ class AndroidExternalBrowserAuthorizationTest {
 
                 assertTrue(
                     "Mock provider page did not load in the external browser",
-                    device.wait(Until.hasObject(By.text("Authorize")), 20_000),
+                    clickWhenAvailable(device, By.text("Authorize"), 20_000),
                 )
-                checkNotNull(device.findObject(By.text("Authorize"))).click()
                 confirmExternalAppLaunch(device)
 
                 val tokenParameters =
@@ -145,14 +146,8 @@ class AndroidExternalBrowserAuthorizationTest {
         val setupDeadline = System.currentTimeMillis() + 15_000
         val setupLabels = listOf("Accept & continue", "No thanks", "Use without an account")
         while (System.currentTimeMillis() < setupDeadline) {
-            val setupButton = setupLabels.firstNotNullOfOrNull { label ->
-                device.findObject(labelMatches(label))
-            }
-            if (setupButton == null) {
-                Thread.sleep(500)
-            } else {
-                setupButton.click()
-            }
+            setupLabels.any { label -> clickIfPresent(device, labelMatches(label)) }
+            Thread.sleep(500)
         }
         assertTrue(
             "Chrome first-run wizard was still showing when the authorization flow started",
@@ -164,12 +159,35 @@ class AndroidExternalBrowserAuthorizationTest {
     private fun confirmExternalAppLaunch(device: UiDevice) {
         val labels = listOf("Just once", "Open", "Continue")
         for (label in labels) {
-            if (device.wait(Until.hasObject(labelMatches(label)), 2_000)) {
-                device.findObject(labelMatches(label))?.click()
+            if (clickWhenAvailable(device, labelMatches(label), 2_000)) {
                 return
             }
         }
     }
+
+    private fun clickWhenAvailable(device: UiDevice, selector: BySelector, timeoutMillis: Long): Boolean {
+        val deadline = SystemClock.uptimeMillis() + timeoutMillis
+        do {
+            if (clickIfPresent(device, selector)) return true
+            Thread.sleep(100)
+        } while (SystemClock.uptimeMillis() < deadline)
+        return false
+    }
+
+    private fun clickIfPresent(device: UiDevice, selector: BySelector): Boolean =
+        try {
+            val button = device.findObject(selector)
+            if (button == null) {
+                false
+            } else {
+                button.click()
+                true
+            }
+        } catch (_: StaleObjectException) {
+            // Chrome can redraw between lookup and click. Reacquire the element
+            // on the next bounded polling iteration; do not reuse the old node.
+            false
+        }
 
     private fun labelMatches(label: String): BySelector =
         By.text(Regex("(?i)^${Regex.escape(label)}$").toPattern())

@@ -49,19 +49,18 @@ xcrun --sdk iphonesimulator swiftc \
 
 codesign --force --sign - --timestamp=none "$app_bundle"
 
-simulator_id=$(
-    xcrun simctl list devices booted -j |
-        python3 -c 'import json, sys; data = json.load(sys.stdin); print(next((device["udid"] for devices in data["devices"].values() for device in devices if device["state"] == "Booted" and device["name"].startswith("iPhone")), ""))'
+simulator_selection=$(
+    xcrun simctl list devices available -j |
+        python3 scripts/select_ios_simulator.py "${IOS_SIMULATOR_MAJOR_VERSION:-}"
 )
-if [[ -z "$simulator_id" ]]; then
-    simulator_id=$(
-        xcrun simctl list devices available -j |
-            python3 -c 'import json, sys; data = json.load(sys.stdin); print(next((device["udid"] for devices in data["devices"].values() for device in devices if device["isAvailable"] and device["name"].startswith("iPhone")), ""))'
-    )
-    if [[ -z "$simulator_id" ]]; then
-        echo "no available iPhone simulator was found" >&2
-        exit 1
-    fi
+IFS=$'\t' read -r simulator_id simulator_state simulator_runtime <<< "$simulator_selection"
+echo "iOS flow simulator: $simulator_id ($simulator_runtime; $simulator_state)"
+sw_vers
+xcodebuild -version
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    echo "iOS authorization: $simulator_runtime on $(uname -m), simulator $simulator_id" >> "$GITHUB_STEP_SUMMARY"
+fi
+if [[ "$simulator_state" != Booted ]]; then
     xcrun simctl boot "$simulator_id"
     booted_by_script=true
 fi

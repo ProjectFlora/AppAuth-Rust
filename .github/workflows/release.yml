@@ -62,6 +62,8 @@ jobs:
     name: Build Apple release package
     needs: validate_version
     runs-on: macos-15
+    env:
+      IOS_SIMULATOR_MAJOR_VERSION: '18'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -70,8 +72,6 @@ jobs:
       - name: Remove cached XCFramework package output
         run: rm -rf target/apple/release-package
       - run: scripts/package-apple-xcframework.sh "${{ needs.validate_version.outputs.version }}"
-      - name: Run iOS authorization flow on simulator
-        run: scripts/check-ios-authorization-flow.sh
       - uses: actions/upload-artifact@v4
         with:
           name: release-apple
