@@ -84,8 +84,11 @@ contains the Apple XCFramework, Android AAR, Rust API reference, and
 includes those assets and adds the Windows DLL/C ABI package. The published
 [v0.3.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.3.0)
 repackages those assets and adds token revocation to the Rust, UniFFI, and
-Windows C ABI public-client APIs. See
-[Download and verify v0.3.0](README.md#download-and-verify-v030) for exact asset
+Windows C ABI public-client APIs. The published
+[v0.4.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.4.0)
+repackages those assets and adds token refresh and OIDC end-session to the
+Windows C ABI and .NET wrapper. See
+[Download and verify v0.4.0](README.md#download-and-verify-v040) for exact asset
 names, download links, and checksum verification using the same release's
 `SHA256SUMS`. The XCFramework contains the generated Swift API and Rust
 library; the AAR contains the generated Kotlin API and Android Rust libraries;

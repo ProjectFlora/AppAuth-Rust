@@ -90,9 +90,10 @@ This roadmap tracks work remaining for the initial scope in
   feature set or compatibility guarantees are complete. They may be published
   as regular GitHub Releases while known gaps remain; release notes must state
   the status and limitations.
-- v0.3.0 is the current implementation snapshot. It adds token revocation to
-  the previously published v0.2.0 assets, which include the Windows desktop
-  adapter and release package.
+- v0.4.0 is the current implementation snapshot. It adds token refresh and
+  OIDC end-session to the Windows C ABI and .NET wrapper on top of the
+  previously published v0.3.0 assets, which include token revocation and the
+  Windows desktop adapter and release package.
 - Do not declare 1.0.0 ready until all of these conditions are met:
   - Reassess and settle provisional platform minimums, including Android API
     level, Apple security-supported OS generations, and the Windows support
