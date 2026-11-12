@@ -27,8 +27,10 @@ This roadmap tracks work remaining for the initial scope in
   the validated spike, and generate bindings reproducibly from the Rust
   interface. Publish versioned Apple XCFramework, Android AAR, and Windows
   DLL/C ABI packages with checksums through GitHub Releases; keep compiled
-  binaries out of the source repository. Evaluate Maven Central, Swift Package
-  Manager, and Carthage as later distribution channels.
+  binaries out of the source repository. Maven Central, Swift Package
+  Manager, and Carthage were subsequently evaluated; the per-platform
+  decisions and rationale are recorded in
+  [docs/distribution-channels.md](docs/distribution-channels.md).
 - **HTTP architecture:** Use an asynchronous transport abstraction, with a
   Rust `reqwest` implementation by default and native transport overrides
   available to mobile adapters.
@@ -82,12 +84,18 @@ This roadmap tracks work remaining for the initial scope in
   release. Record the resulting unverified provider and real-device coverage
   in [docs/live-idp-interoperability.md](docs/live-idp-interoperability.md);
   ordinary pull-request CI remains limited to local mock providers.
+- **Long-term package distribution:** Re-evaluated 2026-11-13
+  ([#44](https://github.com/ProjectFlora/AppAuth-Rust/issues/44)). Adopt
+  Maven Central for the Android AAR and Swift Package Manager for the Apple
+  package, each running alongside the existing GitHub Release assets. Decline
+  Carthage for now: its maintenance has slowed and SPM covers the same
+  audience. Windows stays on GitHub Releases. The evaluation, technical
+  spike evidence, comparison matrix, and follow-up issues are recorded in
+  [docs/distribution-channels.md](docs/distribution-channels.md).
 
 ## Open decisions
 
-- **Long-term package distribution:** Evaluate Maven Central, Swift Package
-  Manager, and Carthage after the initial GitHub Release artifacts are
-  available.
+None.
 
 ## Pre-1.0 release policy
 
