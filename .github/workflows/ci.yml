@@ -90,6 +90,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  apple_validation:
+    name: Apple adapters validation
+    needs: apple_adapters
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both iOS configurations to pass
+        env:
+          APPLE_RESULT: ${{ needs.apple_adapters.result }}
+        run: test "$APPLE_RESULT" = success
+
   windows_core:
     name: Windows core target validation
     runs-on: windows-latest
