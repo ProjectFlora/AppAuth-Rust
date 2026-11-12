@@ -59,13 +59,19 @@ This roadmap tracks work remaining for the initial scope in
   triples in [README.md](README.md); Linux is for development and CI only.
   Keep one Rust core crate and add a workspace only if separate Rust crates
   become necessary.
-- **Initial support matrix:** As checked on 2026-11-08, set iOS/iPadOS minimum
-  to 18 and macOS minimum to 15 based on Apple's current security-updated
-  generations. Set Android API 34 as a provisional minimum based on current
-  AOSP Security Bulletin coverage; reassess it before release using the current
-  bulletin and available Google Play Console Reach and devices data. For
-  Windows, support Microsoft-supported Windows client versions and review the
-  support matrix at each release.
+- **Initial support matrix:** Re-evaluated 2026-11-12. Set iOS/iPadOS minimum
+  to 18 and macOS minimum to 15, based on the Apple security-update
+  generations current on that date. Set the Android minimum to API 28
+  (Android 9): the November 2026 AOSP Security Bulletin still patches 14 and
+  later, so a security-based floor would stay at API 34, but the 1.0.0 reach
+  target (at least 90% of active devices, 95% preferred) only holds at API
+  28 or lower — 97.1% in Google's October 2026 distribution data, versus
+  56.4% for API 34. Manufacturer-dependent updates for older devices are
+  accepted and documented in the README support policy. For Windows, support
+  Microsoft-supported Windows client versions (25H2 and newer as of the check
+  date) and review the support matrix at each release. Re-evaluate all three
+  against the then-current security data and device reach immediately before
+  the 1.0.0 tag.
 - **Provider-specific behavior:** Do not add provider detection, defaults, or
   protocol branches in the initial release. Keep provider parameters caller
   supplied and expose unrecognized response parameters to callers as raw
@@ -82,9 +88,6 @@ This roadmap tracks work remaining for the initial scope in
 - **Long-term package distribution:** Evaluate Maven Central, Swift Package
   Manager, and Carthage after the initial GitHub Release artifacts are
   available.
-- **Android 1.0 release floor:** Reassess provisional API 34 against current
-  security bulletins, device reach data, and the final native dependency set
-  before 1.0.0.
 
 ## Pre-1.0 release policy
 
@@ -97,9 +100,11 @@ This roadmap tracks work remaining for the initial scope in
   previously published v0.3.0 assets, which include token revocation and the
   Windows desktop adapter and release package.
 - Do not declare 1.0.0 ready until all of these conditions are met:
-  - Reassess and settle provisional platform minimums, including Android API
-    level, Apple security-supported OS generations, and the Windows support
-    matrix.
+  - Re-evaluate the support matrix against the then-current Apple security
+    updates, Android Security Bulletin and device distribution, and
+    Microsoft-supported Windows client versions immediately before the 1.0.0
+    tag (1.0.0 is planned for 2026 Q4 to 2027 H1), and record the settled
+    values in the support policy in [README.md](README.md).
   - Keep live identity-provider and real-device interoperability explicitly
     documented as unverified; do not represent those integrations as validated
     compatibility guarantees.
@@ -147,7 +152,7 @@ implemented and covered by SDK type-checking. CI exercises iOS simulator
 authorization against a local mock provider and runs a macOS loopback
 authorization flow against a local mock provider. The Android authorization
 adapter is implemented with App Links/custom-scheme selection, unit-tested
-redirect handling, and an API 34 emulator test that exercises authorization
+redirect handling, and an API 28 emulator test that exercises authorization
 through a Custom Tab, callback activity, and code exchange against a local mock
 provider. The Windows C ABI implements system-browser launch, loopback
 authorization, and cancellation; unit tests exercise the flow with a simulated

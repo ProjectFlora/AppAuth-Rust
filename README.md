@@ -39,13 +39,17 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 | --- | --- | --- |
 | iOS / iPadOS | 18 | Rust core and native authorization adapter |
 | macOS | 15 | Rust core and native authorization adapter |
-| Android | API 34 (Android 14) | Rust core and native authorization adapter |
+| Android | API 28 (Android 9) | Rust core and native authorization adapter |
 | Windows | Microsoft-supported Windows client versions; reviewed each release | Rust core and desktop authorization adapter |
 | tvOS | Not applicable | Deferred |
 
 The Apple minimums follow the security-update generations reviewed on
-2026-11-08. Android API 34 is provisional. Recheck both the supported OS
-versions and Android device reach immediately before release.
+2026-11-12. Android API 28 is the settled 1.0.0 minimum: it is the highest
+floor that still reaches at least 95% of active devices in Google's October
+2026 distribution data (97.1%; API 34 reaches only 56.4%). Recheck the
+supported OS versions, Android device reach, and the Windows support list
+before the 1.0.0 tag; the pre-1.0 release policy in
+[ROADMAP.md](ROADMAP.md) makes this a release gate.
 
 ## Redirect policy
 
@@ -215,7 +219,7 @@ the repository's native build output:
 - Apple compiles and runs a macOS Swift host, then links the same generated
   Swift API and XCFramework for the iOS simulator.
 - Android installs the AAR as a local Gradle dependency and calls its Kotlin
-  API on an x86_64 API 34 emulator. The release job separately verifies that
+  API on an x86_64 API 28 emulator. The release job separately verifies that
   the AAR contains both `arm64-v8a` and `x86_64` libraries.
 - Windows builds and runs a C++ host linked with the import library, plus a
   .NET host that compiles the packaged P/Invoke wrapper and loads the DLL.
@@ -347,7 +351,7 @@ version to repeat these checks against the immutable GitHub Release assets.
   core work; the host remains responsible for authorization timeout policy.
 - Build and run the adapter unit tests with
   `./native/android/gradlew -p native/android testDebugUnitTest`. The module
-  targets the documented Android API 34 minimum and regenerates UniFFI Kotlin
+  targets the documented Android API 28 minimum and regenerates UniFFI Kotlin
   bindings under its build directory.
 - Build the release AAR with
   `ANDROID_NDK_HOME=/path/to/ndk ./native/android/gradlew -p native/android assembleRelease`.
@@ -374,7 +378,7 @@ version to repeat these checks against the immutable GitHub Release assets.
   `appauth-rust-android-release.aar` and expires after 14 days. The versioned
   GitHub Release AAR and `SHA256SUMS` are the persistent distribution artifacts.
 - Android authorization through a Custom Tab, callback activity, and code
-  exchange is exercised against a local mock provider on an API 34 emulator.
+  exchange is exercised against a local mock provider on an API 28 emulator.
   Live identity-provider interoperability is not yet tested end-to-end.
 
 ## Windows adapter
@@ -455,22 +459,37 @@ version to repeat these checks against the immutable GitHub Release assets.
 
 ## Minimum OS support policy
 
-| Platform | Initial minimum / support | Basis checked 2026-11-08 |
+| Platform | Initial minimum / support | Basis checked 2026-11-12 |
 | --- | --- | --- |
-| iOS / iPadOS | 18 | Apple listed security updates for 27.2, 26.7.2, and 18.7.11 on 2026-10-26; minimum follows the oldest security-updated major generation. |
-| macOS | 15 (Sequoia) | Apple listed security updates for 27.2 (Golden Gate), 26.7.2 (Tahoe), and 15.8.2 (Sequoia) on 2026-10-26. |
-| Android | API 34 (Android 14), provisional | The November 2026 Android Security Bulletin lists AOSP versions 14–17. Re-evaluate against current security bulletins and Google Play Console Reach and devices data before release. |
-| Windows | Microsoft-supported Windows client versions (x64), reviewed at each release | Track Microsoft's product lifecycle; no fixed minimum OS version. |
+| iOS / iPadOS | 18 | Apple listed security updates for 27.2.1, 26.7.3, and 18.7.12 on 2026-11-09; the minimum follows the oldest security-updated major generation. |
+| macOS | 15 (Sequoia) | Apple listed security updates for 27.2.1 (Golden Gate), 26.7.3 (Tahoe), and 15.8.3 (Sequoia) on 2026-11-09. Sequoia is in its final security-support year; see the re-evaluation policy below. |
+| Android | API 28 (Android 9) | Google's October 2026 device distribution (Android Studio data, active devices contacting the Play Store) puts API 28+ on 97.1% of devices, meeting the 95% reach target; API 34+ reaches only 56.4%. |
+| Windows | Microsoft-supported Windows client versions (x64), reviewed at each release | As of 2026-11-12 Microsoft supports Windows 11 client editions 25H2, 26H1, and 26H2 (Home/Pro); 24H2 consumer support ended 2026-10-13 and 23H2 ended 2026-11-10. No fixed minimum OS version. |
 
-The Apple versions above are a dated snapshot, not fixed promises. At release,
-recheck Apple's security updates and record the actual supported versions.
-Android API 34 is a provisional SDK floor, not a guarantee that a device is
-receiving security patches: updates depend on the device manufacturer and model.
-Reassess the floor before release using the then-current Android Security
-Bulletin and available Play Console data. Android App Links require API 23, but
-the provisional security-based floor is higher. For Windows, review Microsoft's
-supported Windows client versions at each release and update the support matrix
-and validation targets; the v1 target is currently `x86_64-pc-windows-msvc`.
+The Apple versions above are a dated snapshot, not fixed promises. Before
+the 1.0.0 tag, recheck Apple's security updates and record the actual
+supported versions. macOS 15 (Sequoia) is expected to leave Apple's
+security updates around autumn 2027, and 1.0.0 is planned for 2026 Q4 to
+2027 H1; a release that slips past the Sequoia end of support must raise the
+macOS floor and re-verify the affected targets.
+
+Android API 28 is a device-reach floor, not a security-patch guarantee. The
+November 2026 Android Security Bulletin patches AOSP 14 and later, so
+devices below that level depend on their manufacturer for updates; this
+floor accepts that trade-off to meet the reach target, and the Rust core has
+no Android-specific dependencies that would block it. Android App Links
+require API 23, which every supported device meets. Reassess the floor
+before release using the then-current Android Security Bulletin, the latest
+Google device distribution (Play Console Reach and devices data where
+available), and the final native dependency set.
+
+For Windows, review Microsoft's supported client versions at each release
+and update the support matrix and validation targets; the v1 target is
+currently `x86_64-pc-windows-msvc`. CI builds and tests that target on
+GitHub's hosted Windows runners (a Windows Server release), which is not one
+of the supported client editions, and its browser interaction is simulated;
+client-edition and live identity-provider coverage is recorded as unverified
+in [docs/live-idp-interoperability.md](docs/live-idp-interoperability.md).
 
 See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for the feature-scope proposal and
 [ROADMAP.md](ROADMAP.md) for remaining design decisions and work phases.

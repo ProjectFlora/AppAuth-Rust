@@ -5,6 +5,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import kotlinx.coroutines.CompletableDeferred
@@ -138,11 +139,14 @@ class AndroidExternalBrowserAuthorizationTest {
             device.wait(Until.hasObject(By.pkg("com.android.chrome")), 20_000),
         )
 
+        // Chrome spells its first-run buttons differently across versions: all caps
+        // ("ACCEPT & CONTINUE") on 2019-era system images such as API 28, title case on
+        // newer ones. uiautomator text matching is case sensitive, so match both cases.
         val setupDeadline = System.currentTimeMillis() + 15_000
         val setupLabels = listOf("Accept & continue", "No thanks", "Use without an account")
         while (System.currentTimeMillis() < setupDeadline) {
             val setupButton = setupLabels.firstNotNullOfOrNull { label ->
-                device.findObject(By.text(label))
+                device.findObject(labelMatches(label))
             }
             if (setupButton == null) {
                 Thread.sleep(500)
@@ -150,18 +154,25 @@ class AndroidExternalBrowserAuthorizationTest {
                 setupButton.click()
             }
         }
+        assertTrue(
+            "Chrome first-run wizard was still showing when the authorization flow started",
+            device.wait(Until.gone(By.res("com.android.chrome:id/fre_pager")), 10_000),
+        )
         device.pressBack()
     }
 
     private fun confirmExternalAppLaunch(device: UiDevice) {
         val labels = listOf("Just once", "Open", "Continue")
         for (label in labels) {
-            if (device.wait(Until.hasObject(By.text(label)), 2_000)) {
-                device.findObject(By.text(label))?.click()
+            if (device.wait(Until.hasObject(labelMatches(label)), 2_000)) {
+                device.findObject(labelMatches(label))?.click()
                 return
             }
         }
     }
+
+    private fun labelMatches(label: String): BySelector =
+        By.text(Regex("(?i)^${Regex.escape(label)}$").toPattern())
 }
 
 private class MockAuthorizationServer : Closeable {

@@ -95,7 +95,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Configure Android NDK
         env:
-          ANDROID_API_LEVEL: '34'
+          ANDROID_API_LEVEL: '28'
         run: |
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
           echo "ANDROID_API_LEVEL=$ANDROID_API_LEVEL" >> "$GITHUB_ENV"
@@ -106,7 +106,7 @@ jobs:
       - name: Run Android callback tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 28
           arch: x86_64
           target: google_apis_playstore
           disable-linux-hw-accel: false
@@ -219,7 +219,7 @@ jobs:
       - name: Run Android release consumer on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 28
           arch: x86_64
           target: google_apis_playstore
           disable-linux-hw-accel: false
