@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.projectflora.appauth.consumer"
-        minSdk = 34
+        minSdk = 28
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

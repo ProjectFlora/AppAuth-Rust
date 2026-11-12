@@ -10,7 +10,7 @@ if (( $# > 1 )); then
 fi
 
 ndk_home=${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME to the Android NDK directory}
-api_level=${ANDROID_API_LEVEL:-34}
+api_level=${ANDROID_API_LEVEL:-28}
 output_dir=${1:-}
 
 if [[ ! "$api_level" =~ ^[1-9][0-9]*$ ]]; then
