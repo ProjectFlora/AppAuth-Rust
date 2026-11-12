@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use http::{header, HeaderMap, HeaderValue, Method};
+use http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use url::{form_urlencoded, Host, Url};
@@ -36,6 +36,15 @@ const RESERVED_TOKEN_PARAMETERS: &[&str] = &[
     "redirect_uri",
     "refresh_token",
     "scope",
+];
+
+const RESERVED_REVOCATION_PARAMETERS: &[&str] = &[
+    "token",
+    "token_type_hint",
+    "client_id",
+    "client_secret",
+    "client_assertion",
+    "client_assertion_type",
 ];
 
 const RESERVED_END_SESSION_PARAMETERS: &[&str] = &[
@@ -420,6 +429,11 @@ impl AuthorizationSession {
     /// responses are returned as [`AuthError::AuthorizationServer`].
     pub fn parse_redirect(&self, redirect: &Url) -> Result<AuthorizationResponse> {
         validate_redirect_uri_match(&self.redirect_uri, redirect)?;
+        if !has_valid_query_encoding(redirect) {
+            return Err(AuthError::InvalidAuthorizationResponse(
+                "response query has invalid percent encoding or UTF-8",
+            ));
+        }
 
         let mut parameters = BTreeMap::new();
         let mut names = HashSet::new();
@@ -466,6 +480,11 @@ impl AuthorizationSession {
             });
         }
         if let Some(code) = error {
+            if code.is_empty() {
+                return Err(AuthError::InvalidAuthorizationResponse(
+                    "authorization error must not be empty",
+                ));
+            }
             return Err(AuthError::AuthorizationServer {
                 code,
                 description: parameters.remove("error_description"),
@@ -806,6 +825,11 @@ impl EndSessionSession {
                     "no post-logout redirect URI was requested",
                 ))?;
         validate_end_session_redirect_uri_match(expected_redirect_uri, redirect)?;
+        if !has_valid_query_encoding(redirect) {
+            return Err(AuthError::InvalidEndSessionResponse(
+                "response query has invalid percent encoding or UTF-8",
+            ));
+        }
 
         let mut parameters = BTreeMap::new();
         let mut names = HashSet::new();
@@ -1167,40 +1191,18 @@ async fn send_token_request(
     transport: &dyn HttpTransport,
     cancellation: CancellationHandle,
 ) -> Result<TokenResponse> {
-    let mut headers = HeaderMap::new();
-    headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/x-www-form-urlencoded"),
-    );
-
-    let response = transport
-        .execute(
-            HttpRequest {
-                method: Method::POST,
-                url: token_endpoint.clone(),
-                headers,
-                body,
-            },
-            cancellation,
-        )
-        .await?;
-
-    if !response.status.is_success() {
-        if let Ok(value) = serde_json::from_slice::<Value>(&response.body) {
-            if let Some(code) = value.get("error").and_then(Value::as_str) {
-                return Err(AuthError::AuthorizationServer {
-                    code: code.to_owned(),
-                    description: value
-                        .get("error_description")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned),
-                });
-            }
-        }
-        return Err(AuthError::HttpStatus(response.status));
+    if token_endpoint
+        .query_pairs()
+        .any(|(name, _)| RESERVED_TOKEN_PARAMETERS.contains(&name.as_ref()))
+    {
+        return Err(AuthError::InvalidConfiguration(
+            "token endpoint query contains a reserved parameter",
+        ));
     }
-
+    let response = send_form_request(token_endpoint, body, transport, cancellation).await?;
+    if response.status != StatusCode::OK {
+        return Err(oauth_error_or_status(response.status, &response.body));
+    }
     parse_token_response(&response.body)
 }
 
@@ -1210,44 +1212,154 @@ async fn send_revocation_request(
     transport: &dyn HttpTransport,
     cancellation: CancellationHandle,
 ) -> Result<()> {
+    if revocation_endpoint
+        .query_pairs()
+        .any(|(name, _)| RESERVED_REVOCATION_PARAMETERS.contains(&name.as_ref()))
+    {
+        return Err(AuthError::InvalidConfiguration(
+            "revocation endpoint query contains a reserved parameter",
+        ));
+    }
+    let response = send_form_request(revocation_endpoint, body, transport, cancellation).await?;
+    // RFC 7009 section 2.2: only 200 signals successful revocation (including
+    // an already-invalid token), and its body is ignored regardless of content.
+    if response.status == StatusCode::OK {
+        return Ok(());
+    }
+    Err(oauth_error_or_status(response.status, &response.body))
+}
+
+async fn send_form_request(
+    endpoint: &Url,
+    body: Vec<u8>,
+    transport: &dyn HttpTransport,
+    cancellation: CancellationHandle,
+) -> Result<crate::HttpResponse> {
     let mut headers = HeaderMap::new();
     headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
     headers.insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("application/x-www-form-urlencoded"),
     );
-
-    let response = transport
-        .execute(
-            HttpRequest {
-                method: Method::POST,
-                url: revocation_endpoint.clone(),
-                headers,
-                body,
-            },
-            cancellation,
-        )
-        .await?;
-    if response.status.is_success() {
-        return Ok(());
+    let request = HttpRequest {
+        method: Method::POST,
+        url: endpoint.clone(),
+        headers,
+        body,
+    };
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err(AuthError::Cancelled),
+        response = transport.execute(request, cancellation.clone()) => response,
     }
-    if let Ok(value) = serde_json::from_slice::<Value>(&response.body) {
-        if let Some(code) = value.get("error").and_then(Value::as_str) {
-            return Err(AuthError::AuthorizationServer {
-                code: code.to_owned(),
-                description: value
-                    .get("error_description")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-            });
+}
+
+fn oauth_error_or_status(status: StatusCode, body: &[u8]) -> AuthError {
+    // Preserve transient/unexpected HTTP status (notably 429 and 503) even if
+    // its body resembles an OAuth error. Retry policy belongs to the host.
+    if matches!(status, StatusCode::BAD_REQUEST | StatusCode::UNAUTHORIZED) {
+        if let Some(error) = parse_oauth_error(body) {
+            return error;
         }
     }
-    Err(AuthError::HttpStatus(response.status))
+    AuthError::HttpStatus(status)
+}
+
+fn parse_oauth_error(body: &[u8]) -> Option<AuthError> {
+    let UniqueJsonObject(object) = serde_json::from_slice(body).ok()?;
+    // A response cannot simultaneously report failure and issue token values.
+    if [
+        "access_token",
+        "token_type",
+        "expires_in",
+        "refresh_token",
+        "scope",
+        "id_token",
+    ]
+    .iter()
+    .any(|name| object.contains_key(*name))
+    {
+        return None;
+    }
+    let code = object.get("error")?.as_str()?;
+    let valid_text = |value: &str| {
+        value.bytes().all(|byte| {
+            byte == b'!'
+                || (b'#'..=b'[').contains(&byte)
+                || (b']'..=b'~').contains(&byte)
+                || byte == b' '
+        })
+    };
+    if code.is_empty() || !valid_text(code) {
+        return None;
+    }
+    let description = match object.get("error_description") {
+        None => None,
+        Some(value) => {
+            let description = value.as_str()?;
+            if !valid_text(description) {
+                return None;
+            }
+            Some(description.to_owned())
+        }
+    };
+    if let Some(value) = object.get("error_uri") {
+        let uri = value.as_str()?;
+        if !valid_text(uri) || uri.contains(' ') {
+            return None;
+        }
+    }
+    Some(AuthError::AuthorizationServer {
+        code: code.to_owned(),
+        description,
+    })
+}
+
+// Preserve top-level member uniqueness before converting values into a map.
+// Nested extension values remain opaque JSON owned by the caller.
+struct UniqueJsonObject(Map<String, Value>);
+
+impl<'de> Deserialize<'de> for UniqueJsonObject {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        struct ObjectVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ObjectVisitor {
+            type Value = UniqueJsonObject;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a JSON object with unique member names")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut entries: A,
+            ) -> std::result::Result<Self::Value, A::Error> {
+                let mut object = Map::new();
+                while let Some(name) = entries.next_key::<String>()? {
+                    if object.contains_key(&name) {
+                        return Err(serde::de::Error::custom("duplicate response member"));
+                    }
+                    object.insert(name, entries.next_value::<Value>()?);
+                }
+                Ok(UniqueJsonObject(object))
+            }
+        }
+
+        deserializer.deserialize_map(ObjectVisitor)
+    }
 }
 
 fn parse_token_response(body: &[u8]) -> Result<TokenResponse> {
-    let mut object: Map<String, Value> = serde_json::from_slice(body)
-        .map_err(|_| AuthError::InvalidTokenResponse("response is not a JSON object"))?;
+    let UniqueJsonObject(mut object) = serde_json::from_slice(body).map_err(|_| {
+        AuthError::InvalidTokenResponse("response is not a JSON object with unique member names")
+    })?;
+    if object.contains_key("error") {
+        return Err(AuthError::InvalidTokenResponse(
+            "successful token response contains an error",
+        ));
+    }
 
     let access_token = take_required_string(&mut object, "access_token")?;
     let token_type = take_required_string(&mut object, "token_type")?;
@@ -1510,6 +1622,20 @@ fn validate_redirect_uri(redirect_uri: &Url) -> Result<()> {
             "redirect URI must have a scheme and must not contain credentials or a fragment",
         ));
     }
+    if !has_valid_query_encoding(redirect_uri) {
+        return Err(AuthError::InvalidConfiguration(
+            "redirect URI query has invalid percent encoding or UTF-8",
+        ));
+    }
+    let mut names = HashSet::new();
+    if redirect_uri
+        .query_pairs()
+        .any(|(name, _)| !names.insert(name.into_owned()))
+    {
+        return Err(AuthError::InvalidConfiguration(
+            "redirect URI query contains a duplicate parameter",
+        ));
+    }
     if redirect_uri.query_pairs().any(|(name, _)| {
         matches!(
             name.as_ref(),
@@ -1546,6 +1672,33 @@ fn reject_reserved_endpoint_parameters(endpoint: &Url) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+// url::query_pairs uses lossy decoding. Check the raw query first so malformed
+// escapes and invalid UTF-8 cannot silently become literal '%' or U+FFFD.
+fn has_valid_query_encoding(url: &Url) -> bool {
+    let query = url.query().unwrap_or_default().as_bytes();
+    let mut decoded = Vec::with_capacity(query.len());
+    let mut index = 0;
+    while index < query.len() {
+        if query[index] == b'%' {
+            let Some(pair) = query.get(index + 1..index + 3) else {
+                return false;
+            };
+            let (Some(high), Some(low)) = (
+                (pair[0] as char).to_digit(16),
+                (pair[1] as char).to_digit(16),
+            ) else {
+                return false;
+            };
+            decoded.push((high * 16 + low) as u8);
+            index += 3;
+        } else {
+            decoded.push(query[index]);
+            index += 1;
+        }
+    }
+    std::str::from_utf8(&decoded).is_ok()
 }
 
 fn validate_redirect_uri_match(expected: &Url, received: &Url) -> Result<()> {
@@ -1605,7 +1758,7 @@ mod tests {
         }
     }
 
-    fn test_transport(status: StatusCode, body: &'static [u8]) -> TestTransport {
+    fn test_transport(status: StatusCode, body: &[u8]) -> TestTransport {
         TestTransport {
             request: Mutex::new(None),
             response: Mutex::new(Some(HttpResponse {
@@ -1616,7 +1769,7 @@ mod tests {
         }
     }
 
-    fn discovery_transport(body: &'static [u8]) -> TestTransport {
+    fn discovery_transport(body: &[u8]) -> TestTransport {
         test_transport(StatusCode::OK, body)
     }
 
@@ -1973,6 +2126,211 @@ mod tests {
             ))
         ));
         assert!(transport.request.lock().unwrap().is_none());
+    }
+
+    fn minimal_metadata() -> Value {
+        serde_json::json!({
+            "issuer": "https://issuer.example/",
+            "authorization_endpoint": "https://issuer.example/authorize",
+            "token_endpoint": "https://issuer.example/token",
+        })
+    }
+
+    async fn discover_body(body: &[u8]) -> Result<ServiceConfiguration> {
+        ServiceConfiguration::discover(
+            Url::parse("https://issuer.example/").unwrap(),
+            &discovery_transport(body),
+            CancellationHandle::new(),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn discovery_rejects_missing_malformed_and_duplicate_known_fields() {
+        for name in ["issuer", "authorization_endpoint", "token_endpoint"] {
+            let mut metadata = minimal_metadata();
+            metadata.as_object_mut().unwrap().remove(name);
+            assert!(
+                matches!(
+                    discover_body(&serde_json::to_vec(&metadata).unwrap()).await,
+                    Err(AuthError::InvalidDiscoveryMetadata(_))
+                ),
+                "accepted missing {name}"
+            );
+        }
+        for name in [
+            "issuer",
+            "authorization_endpoint",
+            "token_endpoint",
+            "jwks_uri",
+            "revocation_endpoint",
+            "end_session_endpoint",
+            "registration_endpoint",
+        ] {
+            for value in [
+                serde_json::json!(1),
+                serde_json::json!([]),
+                serde_json::json!({}),
+            ] {
+                let mut metadata = minimal_metadata();
+                metadata[name] = value;
+                assert!(
+                    matches!(
+                        discover_body(&serde_json::to_vec(&metadata).unwrap()).await,
+                        Err(AuthError::InvalidDiscoveryMetadata(_))
+                    ),
+                    "accepted malformed {name}"
+                );
+            }
+            let metadata = serde_json::to_string(&minimal_metadata()).unwrap();
+            let duplicate = format!(
+                "{},\"{name}\":\"https://issuer.example/\",\"{name}\":\"https://other.example/\"}}",
+                metadata.trim_end_matches('}')
+            );
+            assert!(
+                matches!(
+                    discover_body(duplicate.as_bytes()).await,
+                    Err(AuthError::InvalidDiscoveryMetadata(_))
+                ),
+                "accepted duplicate {name}"
+            );
+        }
+        for body in [br#"[]"#.as_slice(), br#"null"#, br#"{} {}"#, br#"{"issuer":"https://issuer.example/","iss\u0075er":"https://other.example/","authorization_endpoint":"https://issuer.example/a","token_endpoint":"https://issuer.example/t"}"#] {
+            assert!(matches!(discover_body(body).await, Err(AuthError::InvalidDiscoveryMetadata(_))));
+        }
+    }
+
+    #[tokio::test]
+    async fn discovery_validates_every_endpoint_and_exact_issuer() {
+        for name in [
+            "authorization_endpoint",
+            "token_endpoint",
+            "jwks_uri",
+            "revocation_endpoint",
+            "end_session_endpoint",
+            "registration_endpoint",
+        ] {
+            for value in [
+                "",
+                "/relative",
+                "http://127.0.0.1/token",
+                "https://user:pass@issuer.example/token",
+                "https://issuer.example/token#fragment",
+            ] {
+                let mut metadata = minimal_metadata();
+                metadata[name] = Value::String(value.to_owned());
+                assert!(
+                    matches!(
+                        discover_body(&serde_json::to_vec(&metadata).unwrap()).await,
+                        Err(AuthError::InvalidDiscoveryMetadata(_))
+                    ),
+                    "accepted {name}={value}"
+                );
+            }
+        }
+        for issuer in [
+            "https://issuer.example",
+            "https://other.example/",
+            "https://issuer.example/tenant",
+            "https://issuer.example/#fragment",
+        ] {
+            let mut metadata = minimal_metadata();
+            metadata["issuer"] = Value::String(issuer.to_owned());
+            assert!(
+                matches!(
+                    discover_body(&serde_json::to_vec(&metadata).unwrap()).await,
+                    Err(AuthError::InvalidDiscoveryMetadata(_))
+                ),
+                "accepted issuer {issuer}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn discovery_allows_extensions_and_optional_endpoint_absence_for_oauth() {
+        let mut metadata = minimal_metadata();
+        metadata["provider_extension"] = serde_json::json!({"nested": [1, true, null]});
+        for explicit_null in [false, true] {
+            if explicit_null {
+                for name in [
+                    "jwks_uri",
+                    "revocation_endpoint",
+                    "end_session_endpoint",
+                    "registration_endpoint",
+                ] {
+                    metadata[name] = Value::Null;
+                }
+            }
+            let configuration = discover_body(&serde_json::to_vec(&metadata).unwrap())
+                .await
+                .unwrap();
+            assert!(configuration.jwks_uri().is_none());
+            assert!(configuration.revocation_endpoint().is_none());
+            assert!(configuration.end_session_endpoint().is_none());
+            assert!(configuration.registration_endpoint().is_none());
+            let redirect = Url::parse("com.example.app:/callback").unwrap();
+            AuthorizationRequest::new(configuration.clone(), "client", redirect.clone(), vec![])
+                .unwrap()
+                .begin()
+                .unwrap();
+            assert!(matches!(
+                AuthorizationRequest::new(configuration, "client", redirect, vec!["openid".into()]),
+                Err(AuthError::InvalidConfiguration(_))
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn discovery_rejects_redirect_statuses_and_does_not_cache_metadata() {
+        for status in [301, 302, 303, 307, 308] {
+            let transport = test_transport(
+                StatusCode::from_u16(status).unwrap(),
+                &serde_json::to_vec(&minimal_metadata()).unwrap(),
+            );
+            assert!(
+                matches!(ServiceConfiguration::discover(Url::parse("https://issuer.example/").unwrap(), &transport, CancellationHandle::new()).await, Err(AuthError::HttpStatus(actual)) if actual.as_u16() == status)
+            );
+        }
+        let body = serde_json::to_vec(&minimal_metadata()).unwrap();
+        let transport = discovery_transport(&body);
+        transport
+            .response
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .headers
+            .insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("max-age=999999999"),
+            );
+        ServiceConfiguration::discover(
+            Url::parse("https://issuer.example/").unwrap(),
+            &transport,
+            CancellationHandle::new(),
+        )
+        .await
+        .unwrap();
+        assert!(transport.request.lock().unwrap().take().is_some());
+        let mut updated = minimal_metadata();
+        updated["token_endpoint"] = serde_json::json!("https://other.example/new-token");
+        *transport.response.lock().unwrap() = Some(HttpResponse {
+            status: StatusCode::OK,
+            headers: HeaderMap::new(),
+            body: serde_json::to_vec(&updated).unwrap(),
+        });
+        let refreshed = ServiceConfiguration::discover(
+            Url::parse("https://issuer.example/").unwrap(),
+            &transport,
+            CancellationHandle::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            refreshed.token_endpoint().as_str(),
+            "https://other.example/new-token"
+        );
+        assert!(transport.request.lock().unwrap().is_some());
     }
 
     #[tokio::test]
@@ -2486,6 +2844,289 @@ mod tests {
     }
 
     #[test]
+    fn callback_rejects_empty_duplicate_and_malformed_parameters() {
+        let session = request(&[]).begin().unwrap();
+        for query in [
+            "code=&state=STATE",
+            "error=&state=STATE",
+            "state=STATE",
+            "code=value",
+            "code=value&state=",
+            "code=value&state=STATE&%73tate=STATE",
+            "code=value&state=STATE&extension=1&extension=2",
+            "code=value&state=STATE&error=",
+            "error=denied&state=wrong",
+            "code=%&state=STATE",
+            "code=%2&state=STATE",
+            "code=%GG&state=STATE",
+            "code=%FF&state=STATE",
+            "code=%C0%AF&state=STATE",
+            "code=value&state=STATE&ext=%ED%A0%80",
+            "code=value&state=STATE&%FF=extension",
+        ] {
+            let callback = Url::parse(&format!(
+                "com.example.app:/oauth2redirect?{}",
+                query.replace("STATE", session.state.as_str())
+            ))
+            .unwrap();
+            assert!(
+                matches!(
+                    session.parse_redirect(&callback),
+                    Err(AuthError::InvalidAuthorizationResponse(_))
+                ),
+                "accepted {query}"
+            );
+        }
+        let callback = Url::parse(&format!(
+            "com.example.app:/oauth2redirect?code=a%2Bb%25&state={}&ext=%E6%97%A5%E6%9C%AC+text",
+            session.state.as_str()
+        ))
+        .unwrap();
+        let response = session.parse_redirect(&callback).unwrap();
+        assert_eq!(response.code(), "a+b%");
+        assert_eq!(response.additional_parameters["ext"], "日本 text");
+    }
+
+    #[test]
+    fn callback_requires_registered_components_and_fixed_query() {
+        let configuration = service_configuration();
+        let session = AuthorizationRequest::new(
+            configuration,
+            "client",
+            Url::parse("https://app.example:8443/callback?tenant=one").unwrap(),
+            vec![],
+        )
+        .unwrap()
+        .begin()
+        .unwrap();
+        for target in [
+            "http://app.example:8443/callback?tenant=one",
+            "https://other.example:8443/callback?tenant=one",
+            "https://app.example/callback?tenant=one",
+            "https://app.example:8443/other?tenant=one",
+            "https://app.example:8443/callback?tenant=two",
+            "https://app.example:8443/callback?other=one",
+            "https://user@app.example:8443/callback?tenant=one",
+        ] {
+            let callback = Url::parse(&format!(
+                "{target}&code=value&state={}",
+                session.state.as_str()
+            ))
+            .unwrap();
+            assert!(
+                matches!(
+                    session.parse_redirect(&callback),
+                    Err(AuthError::InvalidAuthorizationResponse(_))
+                ),
+                "accepted {target}"
+            );
+        }
+        let valid = Url::parse(&format!(
+            "https://app.example:8443/callback?state={}&tenant=one&code=value",
+            session.state.as_str()
+        ))
+        .unwrap();
+        session.parse_redirect(&valid).unwrap();
+        let mut fragment = valid;
+        fragment.set_fragment(Some("unexpected"));
+        assert!(matches!(
+            session.parse_redirect(&fragment),
+            Err(AuthError::InvalidAuthorizationResponse(_))
+        ));
+        for query in [
+            "tenant=1&tenant=1",
+            "tenant=%FF",
+            "tenant=%",
+            "%73tate=fixed",
+        ] {
+            assert!(matches!(
+                AuthorizationRequest::new(
+                    service_configuration(),
+                    "client",
+                    Url::parse(&format!("com.example.app:/callback?{query}")).unwrap(),
+                    vec![]
+                ),
+                Err(AuthError::InvalidConfiguration(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn logout_callback_rejects_malformed_encoding_and_encoded_duplicate_state() {
+        let configuration = service_configuration()
+            .with_end_session_endpoint(Url::parse("https://issuer.example/logout").unwrap())
+            .unwrap();
+        let session = EndSessionRequest::new(&configuration, "client")
+            .unwrap()
+            .with_post_logout_redirect_uri(Url::parse("com.example.app:/logout").unwrap())
+            .unwrap()
+            .begin()
+            .unwrap();
+        let state = session.state.as_deref().unwrap();
+        for suffix in ["&extra=%", "&extra=%FF", "&%73tate=duplicate"] {
+            let callback =
+                Url::parse(&format!("com.example.app:/logout?state={state}{suffix}")).unwrap();
+            assert!(matches!(
+                session.parse_redirect(&callback),
+                Err(AuthError::InvalidEndSessionResponse(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn all_reserved_names_are_rejected_in_builders_and_authorization_endpoint_query() {
+        for name in RESERVED_AUTHORIZATION_PARAMETERS
+            .iter()
+            .copied()
+            .chain(std::iter::once(""))
+        {
+            assert!(matches!(
+                request(&[]).with_additional_parameter(name, "override"),
+                Err(AuthError::InvalidConfiguration(_))
+            ));
+            if name.is_empty() {
+                continue;
+            }
+            for encoded in [
+                name.to_owned(),
+                format!("%{:02X}{}", name.as_bytes()[0], &name[1..]),
+            ] {
+                let configuration = ServiceConfiguration::new(
+                    Url::parse(&format!(
+                        "https://issuer.example/authorize?{encoded}=override"
+                    ))
+                    .unwrap(),
+                    Url::parse("https://issuer.example/token").unwrap(),
+                )
+                .unwrap();
+                assert!(matches!(
+                    AuthorizationRequest::new(
+                        configuration,
+                        "client",
+                        Url::parse("com.example.app:/callback").unwrap(),
+                        vec![]
+                    )
+                    .unwrap()
+                    .begin(),
+                    Err(AuthError::InvalidConfiguration(_))
+                ));
+            }
+        }
+        for name in RESERVED_TOKEN_PARAMETERS
+            .iter()
+            .copied()
+            .chain(std::iter::once(""))
+        {
+            assert!(matches!(
+                request(&[]).with_additional_token_parameter(name, "override"),
+                Err(AuthError::InvalidConfiguration(_))
+            ));
+        }
+        // Names are case-sensitive, and percent signs in caller-supplied names
+        // are serialized literally rather than interpreted as escapes.
+        let session = request(&[])
+            .with_additional_parameter("STATE", "extension")
+            .unwrap()
+            .with_additional_parameter("st%61te", "literal")
+            .unwrap()
+            .begin()
+            .unwrap();
+        let parameters: BTreeMap<_, _> = session
+            .authorization_url()
+            .query_pairs()
+            .into_owned()
+            .collect();
+        assert_eq!(parameters["state"], session.state.as_str());
+        assert_eq!(parameters["STATE"], "extension");
+        assert_eq!(parameters["st%61te"], "literal");
+    }
+
+    #[tokio::test]
+    async fn refresh_rejects_every_reserved_extra_name_without_changing_state() {
+        for name in RESERVED_TOKEN_PARAMETERS
+            .iter()
+            .copied()
+            .chain(std::iter::once(""))
+        {
+            let transport = test_transport(StatusCode::OK, b"unused");
+            let mut state = authentication_state();
+            let before = serde_json::to_value(&state).unwrap();
+            let parameters = BTreeMap::from([(name.to_owned(), "override".to_owned())]);
+            assert!(matches!(
+                state
+                    .refresh_with_additional_parameters(
+                        &service_configuration(),
+                        "client",
+                        &parameters,
+                        &transport,
+                        CancellationHandle::new()
+                    )
+                    .await,
+                Err(AuthError::InvalidConfiguration(_))
+            ));
+            assert_eq!(serde_json::to_value(&state).unwrap(), before);
+            assert!(transport.request.lock().unwrap().is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn reserved_token_endpoint_queries_fail_before_network_and_preserve_refresh_state() {
+        for name in RESERVED_TOKEN_PARAMETERS {
+            for encoded in [
+                name.to_string(),
+                format!("%{:02X}{}", name.as_bytes()[0], &name[1..]),
+            ] {
+                let endpoint =
+                    Url::parse(&format!("https://issuer.example/token?{encoded}=override"))
+                        .unwrap();
+                let transport = test_transport(
+                    StatusCode::OK,
+                    br#"{"access_token":"value","token_type":"Bearer"}"#,
+                );
+                assert!(matches!(
+                    send_token_request(
+                        &endpoint,
+                        Vec::new(),
+                        &transport,
+                        CancellationHandle::new()
+                    )
+                    .await,
+                    Err(AuthError::InvalidConfiguration(_))
+                ));
+                let mut configuration = service_configuration();
+                configuration.token_endpoint = endpoint;
+                let mut state = authentication_state();
+                let before = serde_json::to_value(&state).unwrap();
+                assert!(matches!(
+                    state
+                        .refresh(
+                            &configuration,
+                            "client",
+                            &transport,
+                            CancellationHandle::new()
+                        )
+                        .await,
+                    Err(AuthError::InvalidConfiguration(_))
+                ));
+                assert_eq!(serde_json::to_value(&state).unwrap(), before);
+                assert!(transport.request.lock().unwrap().is_none());
+            }
+        }
+        let endpoint = Url::parse("https://issuer.example/token?tenant=one").unwrap();
+        let transport = test_transport(
+            StatusCode::OK,
+            br#"{"access_token":"value","token_type":"Bearer"}"#,
+        );
+        send_token_request(&endpoint, Vec::new(), &transport, CancellationHandle::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            transport.request.lock().unwrap().as_ref().unwrap().url,
+            endpoint
+        );
+    }
+
+    #[test]
     fn rejects_duplicate_and_conflicting_authorization_parameters() {
         let session = request(&[]).begin().unwrap();
         let state = &session.state;
@@ -2635,6 +3276,399 @@ mod tests {
                     .await,
                 Err(AuthError::InvalidIdToken(message)) if message == expected_error
             ));
+        }
+    }
+
+    #[test]
+    fn token_response_rejects_duplicate_members_and_success_error_conflicts() {
+        for body in [
+            r#"{"access_token":"first","access_token":"second","token_type":"Bearer"}"#,
+            r#"{"access_token":"first","access_\u0074oken":"second","token_type":"Bearer"}"#,
+            r#"{"access_token":"value","token_type":"Bearer","expires_in":1,"expires_in":2}"#,
+            r#"{"access_token":"value","token_type":"Bearer","extension":1,"extension":2}"#,
+            r#"{"access_token":"value","token_type":"Bearer","error":"invalid_grant"}"#,
+            r#"{"access_token":"value","token_type":"Bearer","error":null}"#,
+            r#"[]"#,
+            r#"{"access_token":"value","token_type":"Bearer"} {}"#,
+        ] {
+            assert!(
+                matches!(
+                    parse_token_response(body.as_bytes()),
+                    Err(AuthError::InvalidTokenResponse(_))
+                ),
+                "accepted {body}"
+            );
+        }
+    }
+
+    #[test]
+    fn token_response_preserves_nested_extension_values() {
+        let response = parse_token_response(br#"{"access_token":"value","token_type":"Bearer","extension":{"items":[1,null,{"enabled":true}]}}"#).unwrap();
+        assert_eq!(
+            response.additional_parameters["extension"],
+            serde_json::json!({"items": [1, null, {"enabled": true}]})
+        );
+    }
+
+    #[tokio::test]
+    async fn token_request_rejects_ambiguous_success_response() {
+        for body in [
+            br#"{"access_token":"first","access_token":"second","token_type":"Bearer"}"#.as_slice(),
+            br#"{"access_token":"value","token_type":"Bearer","error":"invalid_grant"}"#.as_slice(),
+        ] {
+            let transport = test_transport(StatusCode::OK, body);
+            assert!(matches!(
+                send_token_request(
+                    &Url::parse("https://issuer.example/token").unwrap(),
+                    Vec::new(),
+                    &transport,
+                    CancellationHandle::new(),
+                )
+                .await,
+                Err(AuthError::InvalidTokenResponse(_))
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn token_and_revocation_errors_require_unique_unambiguous_oauth_objects() {
+        let malformed = [
+            r#"{"error":"first","error":"second"}"#,
+            r#"{"error":"first","err\u006fr":"second"}"#,
+            r#"{"error":"invalid_grant","extension":1,"extension":2}"#,
+            r#"{"error":"invalid_grant","access_token":"issued"}"#,
+            r#"{"error":"invalid_grant","refresh_token":null}"#,
+            r#"{"error":""}"#,
+            r#"{"error":null}"#,
+            r#"{"error":1}"#,
+            r#"{"error":"invalid\ngrant"}"#,
+            r#"{"error":"invalid_grant","error_description":null}"#,
+            r#"{"error":"invalid_grant","error_description":1}"#,
+            r#"{"error":"invalid_grant","error_description":"line\nbreak"}"#,
+            r#"{"error":"invalid_grant","error_uri":{}}"#,
+            r#"{"error":"invalid_grant","error_uri":"not a URI"}"#,
+            r#"{"access_token":"issued","token_type":"Bearer"}"#,
+            r#"{}"#,
+            r#"[]"#,
+            r#"null"#,
+            r#"{"error":"invalid_grant"} {}"#,
+            "not JSON",
+        ];
+        for status in [StatusCode::BAD_REQUEST, StatusCode::UNAUTHORIZED] {
+            for body in malformed {
+                let endpoint = Url::parse("https://issuer.example/endpoint").unwrap();
+                let transport = test_transport(status, body.as_bytes());
+                assert!(
+                    matches!(send_token_request(&endpoint, Vec::new(), &transport, CancellationHandle::new()).await, Err(AuthError::HttpStatus(actual)) if actual == status),
+                    "accepted token error {body}"
+                );
+                let transport = test_transport(status, body.as_bytes());
+                assert!(
+                    matches!(send_revocation_request(&endpoint, Vec::new(), &transport, CancellationHandle::new()).await, Err(AuthError::HttpStatus(actual)) if actual == status),
+                    "accepted revocation error {body}"
+                );
+            }
+        }
+        for name in ["token_type", "expires_in", "scope", "id_token"] {
+            let body = format!("{{\"error\":\"invalid_grant\",\"{name}\":null}}");
+            assert!(matches!(
+                oauth_error_or_status(StatusCode::BAD_REQUEST, body.as_bytes()),
+                AuthError::HttpStatus(StatusCode::BAD_REQUEST)
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn token_and_revocation_preserve_valid_extension_errors() {
+        for (status, code) in [
+            (StatusCode::BAD_REQUEST, "unsupported_token_type"),
+            (StatusCode::UNAUTHORIZED, "invalid_client"),
+            (StatusCode::BAD_REQUEST, "provider_specific_error"),
+        ] {
+            let body = format!("{{\"error\":\"{code}\",\"error_description\":\"request rejected\",\"error_uri\":\"https://issuer.example/help\",\"extension\":{{\"nested\":[1,true]}}}}");
+            let endpoint = Url::parse("https://issuer.example/endpoint").unwrap();
+            for revoke in [false, true] {
+                let transport = test_transport(status, body.as_bytes());
+                let error = if revoke {
+                    send_revocation_request(
+                        &endpoint,
+                        Vec::new(),
+                        &transport,
+                        CancellationHandle::new(),
+                    )
+                    .await
+                    .unwrap_err()
+                } else {
+                    send_token_request(&endpoint, Vec::new(), &transport, CancellationHandle::new())
+                        .await
+                        .err()
+                        .unwrap()
+                };
+                assert!(
+                    matches!(error, AuthError::AuthorizationServer { code: actual, description: Some(description) } if actual == code && description == "request rejected")
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn unexpected_statuses_remain_http_errors_even_with_oauth_bodies() {
+        let endpoint = Url::parse("https://issuer.example/endpoint").unwrap();
+        for status in [
+            201, 202, 204, 206, 301, 302, 303, 307, 308, 403, 429, 500, 503,
+        ] {
+            let status = StatusCode::from_u16(status).unwrap();
+            for body in [
+                br#"{"error":"temporarily_unavailable"}"#.as_slice(),
+                br#"{"access_token":"issued","token_type":"Bearer"}"#,
+            ] {
+                let transport = test_transport(status, body);
+                transport
+                    .response
+                    .lock()
+                    .unwrap()
+                    .as_mut()
+                    .unwrap()
+                    .headers
+                    .insert(header::RETRY_AFTER, HeaderValue::from_static("120"));
+                assert!(
+                    matches!(send_token_request(&endpoint, Vec::new(), &transport, CancellationHandle::new()).await, Err(AuthError::HttpStatus(actual)) if actual == status)
+                );
+                let transport = test_transport(status, body);
+                assert!(
+                    matches!(send_revocation_request(&endpoint, Vec::new(), &transport, CancellationHandle::new()).await, Err(AuthError::HttpStatus(actual)) if actual == status)
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn rejected_token_error_responses_preserve_refresh_state() {
+        for (status, body) in [
+            (
+                StatusCode::BAD_REQUEST,
+                br#"{"error":"invalid_grant","error":"invalid_client"}"#.as_slice(),
+            ),
+            (
+                StatusCode::BAD_REQUEST,
+                br#"{"error":"invalid_grant","access_token":"issued"}"#,
+            ),
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                br#"{"error":"temporarily_unavailable"}"#,
+            ),
+            (
+                StatusCode::CREATED,
+                br#"{"access_token":"issued","token_type":"Bearer"}"#,
+            ),
+        ] {
+            let mut state = authentication_state();
+            let before = serde_json::to_value(&state).unwrap();
+            let transport = test_transport(status, body);
+            assert!(
+                matches!(state.refresh(&service_configuration(), "client", &transport, CancellationHandle::new()).await, Err(AuthError::HttpStatus(actual)) if actual == status)
+            );
+            assert_eq!(serde_json::to_value(&state).unwrap(), before);
+        }
+    }
+
+    #[tokio::test]
+    async fn revocation_accepts_only_200_and_ignores_its_body() {
+        let configuration = service_configuration()
+            .with_revocation_endpoint(
+                Url::parse("https://issuer.example/revoke?tenant=one").unwrap(),
+            )
+            .unwrap();
+        for body in [
+            b"".as_slice(),
+            b"not JSON",
+            br#"{"error":"unsupported_token_type"}"#,
+            br#"{"error":"one","error":"two"}"#,
+        ] {
+            let transport = test_transport(StatusCode::OK, body);
+            // The same response covers an invalid or already-revoked token;
+            // clients cannot and should not distinguish those server outcomes.
+            revoke_token(
+                &configuration,
+                "client",
+                "already-invalid-token",
+                None,
+                &transport,
+                CancellationHandle::new(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                transport
+                    .request
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .url
+                    .query(),
+                Some("tenant=one")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn revocation_encodes_public_client_form_and_all_hint_options() {
+        let configuration = service_configuration()
+            .with_revocation_endpoint(Url::parse("https://issuer.example/revoke").unwrap())
+            .unwrap();
+        for (hint, expected) in [
+            (None, None),
+            (Some(RevocationTokenType::AccessToken), Some("access_token")),
+            (
+                Some(RevocationTokenType::RefreshToken),
+                Some("refresh_token"),
+            ),
+        ] {
+            let transport = test_transport(StatusCode::OK, b"");
+            revoke_token(
+                &configuration,
+                "client+/=&",
+                "token+/=&?",
+                hint,
+                &transport,
+                CancellationHandle::new(),
+            )
+            .await
+            .unwrap();
+            let request = transport.request.lock().unwrap().take().unwrap();
+            let form: BTreeMap<_, _> = form_urlencoded::parse(&request.body).into_owned().collect();
+            assert_eq!(form["client_id"], "client+/=&");
+            assert_eq!(form["token"], "token+/=&?");
+            assert_eq!(form.get("token_type_hint").map(String::as_str), expected);
+            assert_eq!(form.len(), if hint.is_some() { 3 } else { 2 });
+            assert!(!request.headers.contains_key(header::AUTHORIZATION));
+        }
+    }
+
+    #[tokio::test]
+    async fn revocation_rejects_reserved_endpoint_query_and_blank_input_before_sending() {
+        for name in RESERVED_REVOCATION_PARAMETERS {
+            for encoded in [
+                name.to_string(),
+                format!("%{:02X}{}", name.as_bytes()[0], &name[1..]),
+            ] {
+                let configuration = service_configuration()
+                    .with_revocation_endpoint(
+                        Url::parse(&format!("https://issuer.example/revoke?{encoded}=override"))
+                            .unwrap(),
+                    )
+                    .unwrap();
+                let transport = test_transport(StatusCode::OK, b"");
+                assert!(matches!(
+                    revoke_token(
+                        &configuration,
+                        "client",
+                        "token",
+                        None,
+                        &transport,
+                        CancellationHandle::new()
+                    )
+                    .await,
+                    Err(AuthError::InvalidConfiguration(_))
+                ));
+                assert!(transport.request.lock().unwrap().is_none());
+            }
+        }
+        let configuration = service_configuration()
+            .with_revocation_endpoint(Url::parse("https://issuer.example/revoke").unwrap())
+            .unwrap();
+        for (client, token) in [
+            ("", "token"),
+            ("  ", "token"),
+            ("client", ""),
+            ("client", "  "),
+        ] {
+            let transport = test_transport(StatusCode::OK, b"");
+            assert!(matches!(
+                revoke_token(
+                    &configuration,
+                    client,
+                    token,
+                    None,
+                    &transport,
+                    CancellationHandle::new()
+                )
+                .await,
+                Err(AuthError::InvalidConfiguration(_))
+            ));
+            assert!(transport.request.lock().unwrap().is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn token_and_revocation_cancel_even_if_transport_ignores_the_handle() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        struct BlockingTransport {
+            started: tokio::sync::Notify,
+            dropped: AtomicBool,
+        }
+        struct DropSignal<'a>(&'a AtomicBool);
+        impl Drop for DropSignal<'_> {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        #[async_trait]
+        impl HttpTransport for BlockingTransport {
+            async fn execute(&self, _: HttpRequest, _: CancellationHandle) -> Result<HttpResponse> {
+                let _drop = DropSignal(&self.dropped);
+                self.started.notify_one();
+                std::future::pending().await
+            }
+        }
+        let endpoint = Url::parse("https://issuer.example/endpoint").unwrap();
+        for revoke in [false, true] {
+            let transport = BlockingTransport {
+                started: tokio::sync::Notify::new(),
+                dropped: AtomicBool::new(false),
+            };
+            let cancellation = CancellationHandle::new();
+            let operation = async {
+                if revoke {
+                    send_revocation_request(&endpoint, Vec::new(), &transport, cancellation.clone())
+                        .await
+                } else {
+                    send_token_request(&endpoint, Vec::new(), &transport, cancellation.clone())
+                        .await
+                        .map(|_| ())
+                }
+            };
+            tokio::pin!(operation);
+            tokio::select! { _ = transport.started.notified() => {}, result = &mut operation => panic!("request should block: {result:?}") }
+            cancellation.cancel();
+            assert!(matches!(
+                tokio::time::timeout(std::time::Duration::from_secs(2), operation)
+                    .await
+                    .unwrap(),
+                Err(AuthError::Cancelled)
+            ));
+            assert!(transport.dropped.load(Ordering::SeqCst));
+            let transport = test_transport(StatusCode::OK, b"unused");
+            if revoke {
+                assert!(matches!(
+                    send_revocation_request(
+                        &endpoint,
+                        Vec::new(),
+                        &transport,
+                        cancellation.clone()
+                    )
+                    .await,
+                    Err(AuthError::Cancelled)
+                ));
+            } else {
+                assert!(matches!(
+                    send_token_request(&endpoint, Vec::new(), &transport, cancellation.clone())
+                        .await,
+                    Err(AuthError::Cancelled)
+                ));
+            }
+            assert!(transport.request.lock().unwrap().is_none());
         }
     }
 

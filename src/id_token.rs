@@ -22,7 +22,13 @@ const JWKS_CACHE_MAX_AGE: Duration = Duration::from_secs(300);
 const CLOCK_SKEW_LEEWAY_SECONDS: u64 = 60;
 
 #[derive(Clone, Default)]
-pub(crate) struct JwksCache(Arc<Mutex<Option<CachedJwks>>>);
+pub(crate) struct JwksCache(Arc<JwksCacheState>);
+
+#[derive(Default)]
+struct JwksCacheState {
+    value: Mutex<Option<Arc<CachedJwks>>>,
+    fetch: tokio::sync::Mutex<()>,
+}
 
 pub(crate) struct IdTokenValidation<'a> {
     pub(crate) token: &'a str,
@@ -39,31 +45,30 @@ struct CachedJwks {
 }
 
 impl JwksCache {
-    fn get(&self) -> Result<Option<JwkSet>> {
+    fn get(&self) -> Result<Option<Arc<CachedJwks>>> {
         let cached = self
             .0
+            .value
             .lock()
             .map_err(|_| AuthError::InvalidJwks("JWKS cache is unavailable"))?;
         Ok(cached
             .as_ref()
             .filter(|cached| cached.expires_at > Instant::now())
-            .map(|cached| cached.jwks.clone()))
+            .cloned())
     }
 
-    fn store(&self, jwks: JwkSet, max_age: Duration) -> Result<()> {
+    fn store(&self, jwks: JwkSet, max_age: Duration) -> Result<Arc<CachedJwks>> {
+        let value = Arc::new(CachedJwks {
+            expires_at: Instant::now() + max_age,
+            jwks,
+        });
         let mut cached = self
             .0
+            .value
             .lock()
             .map_err(|_| AuthError::InvalidJwks("JWKS cache is unavailable"))?;
-        *cached = if max_age.is_zero() {
-            None
-        } else {
-            Some(CachedJwks {
-                expires_at: Instant::now() + max_age,
-                jwks,
-            })
-        };
-        Ok(())
+        *cached = (!max_age.is_zero()).then(|| value.clone());
+        Ok(value)
     }
 }
 
@@ -74,6 +79,7 @@ struct IdTokenClaims {
     aud: Audience,
     exp: u64,
     iat: u64,
+    nbf: Option<u64>,
     nonce: Option<String>,
     azp: Option<String>,
 }
@@ -103,6 +109,24 @@ pub(crate) async fn validate_id_token(
     jwks_cache: &JwksCache,
     transport: &dyn HttpTransport,
     cancellation: CancellationHandle,
+) -> Result<()> {
+    validate_id_token_with_clock(validation, jwks_cache, transport, cancellation, || {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .map_err(|_| AuthError::Clock)
+    })
+    .await
+}
+
+// Read the clock after signature verification and any JWKS fetch. Keeping the
+// clock injectable lets tests exercise the complete validation path without sleep.
+async fn validate_id_token_with_clock(
+    validation: IdTokenValidation<'_>,
+    jwks_cache: &JwksCache,
+    transport: &dyn HttpTransport,
+    cancellation: CancellationHandle,
+    clock: impl FnOnce() -> Result<u64>,
 ) -> Result<()> {
     let IdTokenValidation {
         token,
@@ -143,15 +167,16 @@ pub(crate) async fn validate_id_token(
         }
     };
 
-    let (mut jwks, was_cached) =
-        load_jwks(jwks_uri, jwks_cache, transport, cancellation.clone()).await?;
-    let mut jwk = find_jwk(&jwks, header.kid.as_deref(), algorithm);
-    if jwk.is_none() && was_cached && header.kid.is_some() {
-        let (fresh_jwks, max_age) = fetch_jwks(jwks_uri, transport, cancellation).await?;
-        jwks_cache.store(fresh_jwks.clone(), max_age)?;
-        jwks = fresh_jwks;
-        jwk = find_jwk(&jwks, header.kid.as_deref(), algorithm);
-    }
+    let keys = load_jwks(
+        jwks_uri,
+        jwks_cache,
+        transport,
+        cancellation,
+        header.kid.as_deref(),
+        algorithm,
+    )
+    .await?;
+    let jwk = find_jwk(&keys.jwks, header.kid.as_deref(), algorithm);
     let jwk = jwk.ok_or(AuthError::InvalidIdToken(
         "no matching trusted signing key was found",
     ))?;
@@ -163,8 +188,10 @@ pub(crate) async fn validate_id_token(
     validation.set_audience(&[client_id]);
     validation.set_required_spec_claims(&["iss", "aud", "exp", "sub"]);
     validation.algorithms = vec![algorithm];
-    validation.validate_nbf = true;
-    validation.leeway = CLOCK_SKEW_LEEWAY_SECONDS;
+    // Validate all time claims below against one clock reading. The JWT library
+    // still verifies the signature, algorithm, issuer, audience and required claims.
+    validation.validate_exp = false;
+    validation.validate_nbf = false;
     let claims = decode::<IdTokenClaims>(token, &decoding_key, &validation)
         .map_err(|_| AuthError::InvalidIdToken("signature or required claims are invalid"))?
         .claims;
@@ -204,15 +231,18 @@ pub(crate) async fn validate_id_token(
         }
     }
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| AuthError::Clock)?
-        .as_secs();
+    let now = clock()?;
     if claims.iat > now.saturating_add(CLOCK_SKEW_LEEWAY_SECONDS) {
         return Err(AuthError::InvalidIdToken("issued-at time is in the future"));
     }
     if claims.exp.saturating_add(CLOCK_SKEW_LEEWAY_SECONDS) < now {
         return Err(AuthError::InvalidIdToken("ID Token has expired"));
+    }
+    if claims
+        .nbf
+        .is_some_and(|nbf| nbf > now.saturating_add(CLOCK_SKEW_LEEWAY_SECONDS))
+    {
+        return Err(AuthError::InvalidIdToken("ID Token is not yet valid"));
     }
     Ok(())
 }
@@ -222,13 +252,36 @@ async fn load_jwks(
     cache: &JwksCache,
     transport: &dyn HttpTransport,
     cancellation: CancellationHandle,
-) -> Result<(JwkSet, bool)> {
-    if let Some(jwks) = cache.get()? {
-        return Ok((jwks, true));
+    kid: Option<&str>,
+    algorithm: Algorithm,
+) -> Result<Arc<CachedJwks>> {
+    if cancellation.is_cancelled() {
+        return Err(AuthError::Cancelled);
+    }
+    let observed = cache.get()?;
+    if let Some(keys) = &observed {
+        if kid.is_none() || find_jwk(&keys.jwks, kid, algorithm).is_some() {
+            return Ok(keys.clone());
+        }
+    }
+
+    // Serialize retrieval per configuration, then recheck the cache: another
+    // operation may already have fetched the set while this operation waited.
+    let _fetch = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => return Err(AuthError::Cancelled),
+        guard = cache.0.fetch.lock() => guard,
+    };
+    if let Some(current) = cache.get()? {
+        if observed
+            .as_ref()
+            .is_none_or(|old| !Arc::ptr_eq(old, &current))
+        {
+            return Ok(current);
+        }
     }
     let (jwks, max_age) = fetch_jwks(jwks_uri, transport, cancellation).await?;
-    cache.store(jwks.clone(), max_age)?;
-    Ok((jwks, false))
+    cache.store(jwks, max_age)
 }
 
 async fn fetch_jwks(
@@ -238,17 +291,17 @@ async fn fetch_jwks(
 ) -> Result<(JwkSet, Duration)> {
     let mut headers = HeaderMap::new();
     headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
-    let response = transport
-        .execute(
-            HttpRequest {
-                method: Method::GET,
-                url: jwks_uri.clone(),
-                headers,
-                body: Vec::new(),
-            },
-            cancellation,
-        )
-        .await?;
+    let request = HttpRequest {
+        method: Method::GET,
+        url: jwks_uri.clone(),
+        headers,
+        body: Vec::new(),
+    };
+    let response = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => return Err(AuthError::Cancelled),
+        response = transport.execute(request, cancellation.clone()) => response?,
+    };
     if !response.status.is_success() {
         return Err(AuthError::HttpStatus(response.status));
     }
@@ -262,28 +315,67 @@ async fn fetch_jwks(
 }
 
 fn jwks_cache_max_age(headers: &HeaderMap) -> Duration {
-    let Some(cache_control) = headers
-        .get(header::CACHE_CONTROL)
-        .and_then(|value| value.to_str().ok())
-    else {
-        return JWKS_CACHE_MAX_AGE;
-    };
-
     let mut max_age = None;
-    for directive in cache_control.split(',').map(str::trim) {
-        if directive.eq_ignore_ascii_case("no-cache") || directive.eq_ignore_ascii_case("no-store")
-        {
+    for value in headers.get_all(header::CACHE_CONTROL) {
+        let Ok(value) = value.to_str() else {
             return Duration::ZERO;
-        }
-        if let Some((name, value)) = directive.split_once('=') {
-            if name.trim().eq_ignore_ascii_case("max-age") {
-                max_age = value.trim().trim_matches('"').parse::<u64>().ok();
+        };
+        for directive in value.split(',').map(str::trim) {
+            let (name, value) = directive
+                .split_once('=')
+                .map_or((directive, None), |(name, value)| {
+                    (name.trim(), Some(value.trim()))
+                });
+            if name.eq_ignore_ascii_case("no-cache") || name.eq_ignore_ascii_case("no-store") {
+                return Duration::ZERO;
+            }
+            if name.eq_ignore_ascii_case("max-age") {
+                // Ambiguous or invalid freshness must never extend key trust.
+                if max_age.is_some() {
+                    return Duration::ZERO;
+                }
+                let Some(value) = value else {
+                    return Duration::ZERO;
+                };
+                let value = value
+                    .strip_prefix('"')
+                    .and_then(|value| value.strip_suffix('"'))
+                    .unwrap_or(value);
+                if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return Duration::ZERO;
+                }
+                let Ok(seconds) = value.parse::<u64>() else {
+                    return Duration::ZERO;
+                };
+                max_age = Some(seconds);
             }
         }
     }
+    // Do not infer a lifetime from Expires without parsing Date and cache age.
+    if max_age.is_none() && headers.contains_key(header::EXPIRES) {
+        return Duration::ZERO;
+    }
+    let mut ages = headers.get_all(header::AGE).iter();
+    let age = if let Some(value) = ages.next() {
+        if ages.next().is_some() {
+            return Duration::ZERO;
+        }
+        let Some(age) = value
+            .to_str()
+            .ok()
+            .filter(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
+            .and_then(|value| value.parse::<u64>().ok())
+        else {
+            return Duration::ZERO;
+        };
+        age
+    } else {
+        0
+    };
     Duration::from_secs(
         max_age
             .unwrap_or(JWKS_CACHE_MAX_AGE.as_secs())
+            .saturating_sub(age)
             .min(JWKS_CACHE_MAX_AGE.as_secs()),
     )
 }
@@ -476,6 +568,72 @@ mod tests {
         }
     }
 
+    struct ScriptedTransport {
+        responses: Mutex<VecDeque<Result<HttpResponse>>>,
+        requests: AtomicUsize,
+        started: tokio::sync::Notify,
+        release: tokio::sync::Semaphore,
+    }
+
+    impl ScriptedTransport {
+        fn new(responses: Vec<Result<HttpResponse>>, blocked: bool) -> Self {
+            let permits = if blocked { 0 } else { responses.len() };
+            Self {
+                responses: Mutex::new(responses.into()),
+                requests: AtomicUsize::new(0),
+                started: tokio::sync::Notify::new(),
+                release: tokio::sync::Semaphore::new(permits),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl HttpTransport for ScriptedTransport {
+        async fn execute(&self, _: HttpRequest, _: CancellationHandle) -> Result<HttpResponse> {
+            self.requests.fetch_add(1, Ordering::SeqCst);
+            self.started.notify_one();
+            // Intentionally ignores cancellation: core must drop a cancelled fetch.
+            self.release.acquire().await.unwrap().forget();
+            self.responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .expect("unexpected JWKS fetch")
+        }
+    }
+
+    fn key_response(keys: &[&TestKey], cache_control: &str) -> HttpResponse {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_str(cache_control).unwrap(),
+        );
+        HttpResponse {
+            status: StatusCode::OK,
+            headers,
+            body: serde_json::to_vec(&jwks(keys)).unwrap(),
+        }
+    }
+
+    fn seed_cache(cache: &JwksCache, key: &TestKey) {
+        cache
+            .store(
+                serde_json::from_value(jwks(&[key])).unwrap(),
+                JWKS_CACHE_MAX_AGE,
+            )
+            .unwrap();
+    }
+
+    // Poll once to prove that the second operation is actually waiting while
+    // the first retrieval is held. No sleep or scheduler timing assumptions.
+    async fn assert_pending<F: std::future::Future>(mut future: std::pin::Pin<&mut F>) {
+        std::future::poll_fn(|cx| {
+            assert!(future.as_mut().poll(cx).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+    }
+
     fn claims(issuer: &str, audience: Value, nonce: Option<&str>) -> Value {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -508,7 +666,7 @@ mod tests {
     async fn validate(
         token: &str,
         jwks_cache: &JwksCache,
-        transport: &TestTransport,
+        transport: &dyn HttpTransport,
         expected_nonce: Option<&str>,
         require_nonce: bool,
     ) -> Result<()> {
@@ -527,6 +685,151 @@ mod tests {
             CancellationHandle::new(),
         )
         .await
+    }
+
+    async fn validate_at(
+        token: &str,
+        cache: &JwksCache,
+        transport: &dyn HttpTransport,
+        now: u64,
+    ) -> Result<()> {
+        let (issuer, jwks_uri) = endpoints();
+        validate_id_token_with_clock(
+            IdTokenValidation {
+                token,
+                issuer: &issuer,
+                jwks_uri: &jwks_uri,
+                client_id: "native-client",
+                expected_nonce: Some("expected-nonce"),
+                require_nonce: true,
+            },
+            cache,
+            transport,
+            CancellationHandle::new(),
+            || Ok(now),
+        )
+        .await
+    }
+
+    fn claims_at(now: u64) -> Value {
+        json!({
+            "iss": "https://issuer.example/",
+            "sub": "user-123",
+            "aud": "native-client",
+            "exp": now.saturating_add(300),
+            "iat": now,
+            "nonce": "expected-nonce",
+        })
+    }
+
+    #[tokio::test]
+    async fn time_claims_allow_exactly_sixty_seconds_of_clock_skew() {
+        // Deliberately unrelated to wall time: even expired-in-real-time signed
+        // tokens must be evaluated solely against the injected validation clock.
+        let now = 1_000_000;
+        for key in [TestKey::rs256(), TestKey::es256("time-key")] {
+            let cache = JwksCache::default();
+            let transport = TestTransport::new([jwks(&[&key])]);
+            for (claim, error) in [
+                ("exp", "ID Token has expired"),
+                ("iat", "issued-at time is in the future"),
+                ("nbf", "ID Token is not yet valid"),
+            ] {
+                for offset in [0, 59, 60, 61] {
+                    let mut claims = claims_at(now);
+                    claims[claim] = json!(if claim == "exp" {
+                        now - offset
+                    } else {
+                        now + offset
+                    });
+                    let result = validate_at(&key.sign(claims), &cache, &transport, now).await;
+                    if offset <= 60 {
+                        assert!(result.is_ok(), "{claim} offset {offset}: {result:?}");
+                    } else {
+                        assert!(
+                            matches!(result, Err(AuthError::InvalidIdToken(message)) if message == error),
+                            "{claim} offset {offset}"
+                        );
+                    }
+                }
+            }
+            assert_eq!(transport.request_count(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn time_claims_reject_missing_required_and_malformed_values() {
+        let now = 1_000_000;
+        let key = TestKey::es256("time-key");
+        let cache = JwksCache::default();
+        let transport = TestTransport::new([jwks(&[&key])]);
+        for claim in ["exp", "iat", "nbf"] {
+            for value in [
+                json!("1000000"),
+                json!(-1),
+                json!(1000000.5),
+                json!(true),
+                json!({}),
+                json!([]),
+            ] {
+                let mut claims = claims_at(now);
+                claims[claim] = value;
+                assert!(
+                    matches!(
+                        validate_at(&key.sign(claims), &cache, &transport, now).await,
+                        Err(AuthError::InvalidIdToken(_))
+                    ),
+                    "accepted malformed {claim}"
+                );
+            }
+        }
+        for claim in ["exp", "iat"] {
+            for null in [false, true] {
+                let mut claims = claims_at(now);
+                if null {
+                    claims[claim] = Value::Null;
+                } else {
+                    claims.as_object_mut().unwrap().remove(claim);
+                }
+                assert!(
+                    matches!(
+                        validate_at(&key.sign(claims), &cache, &transport, now).await,
+                        Err(AuthError::InvalidIdToken(_))
+                    ),
+                    "accepted missing/null {claim}"
+                );
+            }
+        }
+        // nbf is optional; serde treats an explicit null like an absent value.
+        for null in [false, true] {
+            let mut claims = claims_at(now);
+            if null {
+                claims["nbf"] = Value::Null;
+            }
+            validate_at(&key.sign(claims), &cache, &transport, now)
+                .await
+                .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn time_claim_arithmetic_does_not_overflow() {
+        let key = TestKey::es256("time-key");
+        let cache = JwksCache::default();
+        let transport = TestTransport::new([jwks(&[&key])]);
+        for now in [0, u64::MAX] {
+            let mut claims = claims_at(now);
+            claims["nbf"] = json!(now);
+            validate_at(&key.sign(claims), &cache, &transport, now)
+                .await
+                .unwrap();
+        }
+        let mut claims = claims_at(0);
+        claims["exp"] = json!(0);
+        assert!(matches!(
+            validate_at(&key.sign(claims), &cache, &transport, u64::MAX).await,
+            Err(AuthError::InvalidIdToken("ID Token has expired"))
+        ));
     }
 
     #[tokio::test]
@@ -679,9 +982,7 @@ mod tests {
                 true
             )
             .await,
-            Err(AuthError::InvalidIdToken(
-                "signature or required claims are invalid"
-            ))
+            Err(AuthError::InvalidIdToken("ID Token has expired"))
         ));
 
         let mut future_issued_claims = claims(
@@ -783,6 +1084,325 @@ mod tests {
         validate(&correct_authorized_party, &cache, &transport, None, false)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn failed_refresh_preserves_valid_cache_and_allows_later_retry() {
+        let old = TestKey::es256("old");
+        let new = TestKey::es256("new");
+        let old_token = old.sign(claims_at(1_000_000));
+        let new_token = new.sign(claims_at(1_000_000));
+        let mut malformed = key_response(&[&new], "max-age=300");
+        malformed.body = b"not json".to_vec();
+        let mut unavailable = key_response(&[&new], "max-age=300");
+        unavailable.status = StatusCode::SERVICE_UNAVAILABLE;
+        for failure in [
+            Err(AuthError::Transport),
+            Ok(unavailable),
+            Ok(malformed),
+            Ok(key_response(&[], "max-age=300")),
+        ] {
+            let cache = JwksCache::default();
+            seed_cache(&cache, &old);
+            let transport = ScriptedTransport::new(
+                vec![failure, Ok(key_response(&[&new], "max-age=300"))],
+                false,
+            );
+            assert!(matches!(
+                validate_at(&new_token, &cache, &transport, 1_000_000).await,
+                Err(AuthError::Transport | AuthError::HttpStatus(_) | AuthError::InvalidJwks(_))
+            ));
+            // The failed refresh neither validates the unknown key nor discards
+            // an unexpired trusted key. No stale fallback for the new token.
+            validate_at(&old_token, &cache, &transport, 1_000_000)
+                .await
+                .unwrap();
+            assert_eq!(transport.requests.load(Ordering::SeqCst), 1);
+            validate_at(&new_token, &cache, &transport, 1_000_000)
+                .await
+                .unwrap();
+            assert_eq!(transport.requests.load(Ordering::SeqCst), 2);
+        }
+    }
+
+    #[tokio::test]
+    async fn expired_cache_is_not_used_when_retrieval_fails() {
+        let key = TestKey::es256("old");
+        let cache = JwksCache::default();
+        seed_cache(&cache, &key);
+        {
+            let mut value = cache.0.value.lock().unwrap();
+            Arc::get_mut(value.as_mut().unwrap()).unwrap().expires_at =
+                Instant::now() - Duration::from_secs(1);
+        }
+        let transport = ScriptedTransport::new(
+            vec![
+                Err(AuthError::Transport),
+                Ok(key_response(&[&key], "max-age=300")),
+            ],
+            false,
+        );
+        let token = key.sign(claims_at(1_000_000));
+        assert!(matches!(
+            validate_at(&token, &cache, &transport, 1_000_000).await,
+            Err(AuthError::Transport)
+        ));
+        validate_at(&token, &cache, &transport, 1_000_000)
+            .await
+            .unwrap();
+        assert_eq!(transport.requests.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn concurrent_cold_loads_and_rotations_fetch_only_once() {
+        let old = TestKey::es256("old");
+        let new = TestKey::es256("new");
+        let token = new.sign(claims_at(1_000_000));
+        // Also cover a refreshed set that still lacks the requested kid: queued
+        // validators must not each issue another refresh for the same snapshot.
+        for seeded in [false, true] {
+            for found in [false, true] {
+                let cache = JwksCache::default();
+                if seeded {
+                    seed_cache(&cache, &old);
+                }
+                let cloned_cache = cache.clone();
+                let transport = ScriptedTransport::new(
+                    vec![Ok(key_response(
+                        &[if found { &new } else { &old }],
+                        "max-age=300",
+                    ))],
+                    true,
+                );
+                let first = validate_at(&token, &cache, &transport, 1_000_000);
+                tokio::pin!(first);
+                tokio::select! {
+                    _ = transport.started.notified() => {},
+                    result = &mut first => panic!("fetch should block: {result:?}"),
+                }
+                let second = validate_at(&token, &cloned_cache, &transport, 1_000_000);
+                tokio::pin!(second);
+                assert_pending(second.as_mut()).await;
+                assert_eq!(transport.requests.load(Ordering::SeqCst), 1);
+                transport.release.add_permits(1);
+                let (first, second) = tokio::join!(first, second);
+                for result in [first, second] {
+                    if found {
+                        result.unwrap();
+                    } else {
+                        assert!(matches!(
+                            result,
+                            Err(AuthError::InvalidIdToken(
+                                "no matching trusted signing key was found"
+                            ))
+                        ));
+                    }
+                }
+                assert_eq!(transport.requests.load(Ordering::SeqCst), 1);
+                // New set remains cached, so an older in-flight load cannot
+                // overwrite it after publication.
+                assert!(find_jwk(
+                    &cache.get().unwrap().unwrap().jwks,
+                    Some(if found { "new" } else { "old" }),
+                    Algorithm::ES256
+                )
+                .is_some());
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_waiter_does_not_cancel_the_active_fetch() {
+        let key = TestKey::es256("key");
+        let cache = JwksCache::default();
+        let transport =
+            ScriptedTransport::new(vec![Ok(key_response(&[&key], "max-age=300"))], true);
+        let (_, uri) = endpoints();
+        let first = load_jwks(
+            &uri,
+            &cache,
+            &transport,
+            CancellationHandle::new(),
+            Some("key"),
+            Algorithm::ES256,
+        );
+        tokio::pin!(first);
+        tokio::select! {
+            _ = transport.started.notified() => {},
+            result = &mut first => panic!("fetch should block: {:?}", result.err()),
+        }
+        let cancellation = CancellationHandle::new();
+        let second = load_jwks(
+            &uri,
+            &cache,
+            &transport,
+            cancellation.clone(),
+            Some("key"),
+            Algorithm::ES256,
+        );
+        tokio::pin!(second);
+        assert_pending(second.as_mut()).await;
+        cancellation.cancel();
+        assert!(matches!(second.await, Err(AuthError::Cancelled)));
+        assert_eq!(transport.requests.load(Ordering::SeqCst), 1);
+        transport.release.add_permits(1);
+        first.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancelled_fetch_releases_the_lock_for_another_operation() {
+        let key = TestKey::es256("key");
+        let cache = JwksCache::default();
+        let transport =
+            ScriptedTransport::new(vec![Ok(key_response(&[&key], "max-age=300"))], true);
+        let (_, uri) = endpoints();
+        let cancellation = CancellationHandle::new();
+        let first = load_jwks(
+            &uri,
+            &cache,
+            &transport,
+            cancellation.clone(),
+            Some("key"),
+            Algorithm::ES256,
+        );
+        tokio::pin!(first);
+        tokio::select! {
+            _ = transport.started.notified() => {},
+            result = &mut first => panic!("fetch should block: {:?}", result.err()),
+        }
+        cancellation.cancel();
+        assert!(matches!(first.await, Err(AuthError::Cancelled)));
+        assert!(cache.get().unwrap().is_none());
+        transport.release.add_permits(1);
+        load_jwks(
+            &uri,
+            &cache,
+            &transport,
+            CancellationHandle::new(),
+            Some("key"),
+            Algorithm::ES256,
+        )
+        .await
+        .unwrap();
+        assert_eq!(transport.requests.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn already_cancelled_operation_does_not_use_cached_keys_or_fetch() {
+        let key = TestKey::es256("key");
+        let cache = JwksCache::default();
+        seed_cache(&cache, &key);
+        let transport = ScriptedTransport::new(vec![], false);
+        let (_, uri) = endpoints();
+        let cancellation = CancellationHandle::new();
+        cancellation.cancel();
+        assert!(matches!(
+            load_jwks(
+                &uri,
+                &cache,
+                &transport,
+                cancellation,
+                Some("key"),
+                Algorithm::ES256
+            )
+            .await,
+            Err(AuthError::Cancelled)
+        ));
+        assert_eq!(transport.requests.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn noncacheable_keys_are_refetched_for_each_validation() {
+        let key = TestKey::es256("key");
+        let token = key.sign(claims_at(1_000_000));
+        for directive in ["no-store", "no-cache", "max-age=0", "max-age=invalid"] {
+            let cache = JwksCache::default();
+            let transport = ScriptedTransport::new(
+                vec![
+                    Ok(key_response(&[&key], directive)),
+                    Ok(key_response(&[&key], directive)),
+                ],
+                false,
+            );
+            for _ in 0..2 {
+                validate_at(&token, &cache, &transport, 1_000_000)
+                    .await
+                    .unwrap();
+                assert!(cache.get().unwrap().is_none());
+            }
+            assert_eq!(transport.requests.load(Ordering::SeqCst), 2);
+        }
+    }
+
+    #[test]
+    fn jwks_cache_directives_cannot_extend_trust_ambiguously() {
+        for (directives, expected) in [
+            (vec![], 300),
+            (vec!["public"], 300),
+            (vec!["MAX-AGE = \"30\""], 30),
+            (vec!["max-age=18446744073709551615"], 300),
+            (vec!["max-age=0"], 0),
+            (vec!["max-age"], 0),
+            (vec!["max-age=-1"], 0),
+            (vec!["max-age=+1"], 0),
+            (vec!["max-age=1.5"], 0),
+            (vec!["max-age="], 0),
+            (vec!["max-age=18446744073709551616"], 0),
+            (vec!["max-age=\"30"], 0),
+            (vec!["max-age=30,max-age=300"], 0),
+            (vec!["max-age=30", "max-age=300"], 0),
+            (vec!["max-age=300", "NO-STORE"], 0),
+            (vec!["max-age=300", "no-cache=\"keys\""], 0),
+        ] {
+            let mut headers = HeaderMap::new();
+            for directive in &directives {
+                headers.append(
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_str(directive).unwrap(),
+                );
+            }
+            assert_eq!(
+                jwks_cache_max_age(&headers),
+                Duration::from_secs(expected),
+                "{directives:?}"
+            );
+        }
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_bytes(&[0xff]).unwrap(),
+        );
+        assert_eq!(jwks_cache_max_age(&headers), Duration::ZERO);
+    }
+
+    #[test]
+    fn jwks_cache_accounts_for_age_and_unsupported_expires() {
+        for (age, expected) in [
+            ("10", 20),
+            ("30", 0),
+            ("1000", 0),
+            ("18446744073709551615", 0),
+            ("invalid", 0),
+            ("-1", 0),
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("max-age=30"),
+            );
+            headers.insert(header::AGE, HeaderValue::from_str(age).unwrap());
+            assert_eq!(jwks_cache_max_age(&headers), Duration::from_secs(expected));
+        }
+        let mut headers = HeaderMap::new();
+        headers.append(header::AGE, HeaderValue::from_static("1"));
+        headers.append(header::AGE, HeaderValue::from_static("2"));
+        assert_eq!(jwks_cache_max_age(&headers), Duration::ZERO);
+        headers.clear();
+        headers.insert(
+            header::EXPIRES,
+            HeaderValue::from_static("Wed, 01 Jan 2031 00:00:00 GMT"),
+        );
+        assert_eq!(jwks_cache_max_age(&headers), Duration::ZERO);
     }
 
     #[test]

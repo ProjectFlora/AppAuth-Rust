@@ -23,7 +23,8 @@ import kotlin.coroutines.resumeWithException
  * `HttpURLConnection`-based UniFFI transport that does not follow redirects.
  *
  * The implementation disconnects active connections when the coroutine or
- * shared cancellation handle is cancelled.
+ * shared cancellation handle is cancelled. Platform HTTP caching is disabled;
+ * JWKS freshness is controlled by the Rust core.
  */
 class UrlConnectionNativeHttpTransport : NativeHttpTransport {
     override suspend fun execute(
@@ -32,6 +33,7 @@ class UrlConnectionNativeHttpTransport : NativeHttpTransport {
     ): FfiHttpResponse {
         val connection = openConnection(request.url)
         connection.instanceFollowRedirects = false
+        connection.useCaches = false
         val cancellationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val cancellationWatcher =
             cancellationScope.launch {

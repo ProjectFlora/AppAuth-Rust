@@ -48,6 +48,55 @@ class UrlConnectionNativeHttpTransportTest {
         }
 
     @Test
+    fun bypassesPlatformResponseCache() =
+        runBlocking {
+            val previous = java.net.ResponseCache.getDefault()
+            val lookups =
+                java.util.concurrent.atomic
+                    .AtomicInteger()
+            val stores =
+                java.util.concurrent.atomic
+                    .AtomicInteger()
+            val cache =
+                object : java.net.ResponseCache() {
+                    override fun get(
+                        uri: java.net.URI,
+                        method: String,
+                        headers: MutableMap<String, MutableList<String>>,
+                    ): java.net.CacheResponse? {
+                        lookups.incrementAndGet()
+                        return null
+                    }
+
+                    override fun put(
+                        uri: java.net.URI,
+                        connection: java.net.URLConnection,
+                    ): java.net.CacheRequest? {
+                        stores.incrementAndGet()
+                        return null
+                    }
+                }
+            val server =
+                LocalHttpServer(
+                    listOf(
+                        "HTTP/1.1 200 OK\r\nCache-Control: max-age=300\r\nContent-Length: 3\r\nConnection: close\r\n\r\none",
+                        "HTTP/1.1 200 OK\r\nCache-Control: max-age=300\r\nContent-Length: 3\r\nConnection: close\r\n\r\ntwo",
+                    ),
+                )
+            try {
+                java.net.ResponseCache.setDefault(cache)
+                val transport = UrlConnectionNativeHttpTransport()
+                assertEquals("one", String(transport.execute(request(server.url), TestCancellationHandle()).body))
+                assertEquals("two", String(transport.execute(request(server.url), TestCancellationHandle()).body))
+                assertEquals(0, lookups.get())
+                assertEquals(0, stores.get())
+            } finally {
+                java.net.ResponseCache.setDefault(previous)
+                server.close()
+            }
+        }
+
+    @Test
     fun cancellationDisconnectsAnActiveRequest() =
         runBlocking {
             val server = LocalHttpServer(responses = listOf(null))
