@@ -41,10 +41,18 @@ jobs:
         run: scripts/generate-bindings.sh
 
   apple_adapters:
-    name: Apple adapters validation
-    runs-on: macos-15
+    name: Apple adapters validation (iOS ${{ matrix.ios_simulator }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ios_simulator: '18'
+            runner: macos-15
+          - ios_simulator: latest
+            runner: macos-latest
     env:
-      IOS_SIMULATOR_MAJOR_VERSION: '18'
+      IOS_SIMULATOR_MAJOR_VERSION: ${{ matrix.ios_simulator }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -61,7 +69,7 @@ jobs:
         run: scripts/check-ios-authorization-flow.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: apple-xcframework
+          name: apple-xcframework-ios-${{ matrix.ios_simulator }}
           path: target/apple/release-package/AppAuthRust-Apple-0.0.0-ci.zip
           if-no-files-found: error
           retention-days: 14

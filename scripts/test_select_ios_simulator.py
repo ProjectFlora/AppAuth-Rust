@@ -41,8 +41,18 @@ class SimulatorSelectionTests(unittest.TestCase):
         self.assertEqual(select_device({"com.apple.CoreSimulator.SimRuntime.iOS-26-0":
                                         [device("iPhone 17", "local")]}, "")[0], "local")
 
+    def test_latest_ignores_booted_older_runtime_and_unavailable_newer_runtime(self):
+        devices = {
+            "com.apple.CoreSimulator.SimRuntime.iOS-18-5": [device("iPhone 16", "old", "Booted")],
+            "com.apple.CoreSimulator.SimRuntime.iOS-26-9": [device("iPhone 17", "older-patch", "Booted")],
+            "com.apple.CoreSimulator.SimRuntime.iOS-26-10": [device("iPhone 17", "latest")],
+            "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [
+                device("iPhone 18", "unavailable", available=False)],
+        }
+        self.assertEqual(select_device(devices, "latest")[0], "latest")
+
     def test_invalid_major_is_rejected(self):
-        for major in ("0", "18.0", "-1", "latest"):
+        for major in ("0", "18.0", "-1", "newest"):
             with self.subTest(major=major), self.assertRaises(ValueError):
                 select_device({}, major)
 
