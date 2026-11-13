@@ -4,6 +4,9 @@ Rust client library for OAuth 2.0 and OpenID Connect, informed by
 [AppAuth-iOS](https://github.com/openid/AppAuth-iOS) and
 [AppAuth-Android](https://github.com/openid/AppAuth-Android).
 
+See the [documentation index](docs/README.md) for platform installation guides,
+the shared authentication-state lifecycle, and public API coverage by language.
+
 ## Initial scope
 
 - Implement a shared Rust core for native applications.
