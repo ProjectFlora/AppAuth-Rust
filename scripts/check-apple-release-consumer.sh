@@ -34,6 +34,19 @@ if [[ ! -d "$xcframework" || ! -f "$bindings" ]]; then
     exit 1
 fi
 
+source_files=(
+    "$package_root/Swift/IOSAuthorizationAdapter.swift"
+    "$package_root/Swift/MacOSAuthorizationAdapter.swift"
+    "$package_root/Swift/URLSessionNativeHttpTransport.swift"
+)
+
+for file in "${source_files[@]}"; do
+    if [[ ! -f "$file" ]]; then
+        echo "Apple release archive is missing source file: $(basename "$file")" >&2
+        exit 1
+    fi
+done
+
 case "$(uname -m)" in
     arm64) macos_target=arm64-apple-macosx15.0 ;;
     x86_64) macos_target=x86_64-apple-macosx15.0 ;;

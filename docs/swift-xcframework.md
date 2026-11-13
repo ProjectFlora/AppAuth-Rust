@@ -21,14 +21,24 @@ to `AppAuthRust-Apple/`.
 
 ## Add the package to Xcode
 
+If you install with Swift Package Manager (v0.5.0 and later), skip this
+section: the `AppAuthRust` package product already links the XCFramework and
+compiles these Swift sources. See
+[Apple Swift Package Manager](https://github.com/ProjectFlora/AppAuth-Rust#apple-swift-package-manager-spm)
+for setup.
+
 For each iOS/iPadOS or macOS app target:
 
 1. Add `AppAuthRust-Apple/AppAuthRust.xcframework` to the Xcode project and
    select the app target. In **Frameworks, Libraries, and Embedded Content**,
    set it to **Do Not Embed**; it contains static libraries.
-2. Add `AppAuthRust-Apple/Swift/appauth_rust.swift` to the project and make
-   sure the app target is selected under **Target Membership**. The generated
-   Swift bindings and XCFramework must come from the same release archive.
+2. Add every Swift source in `AppAuthRust-Apple/Swift/` to the project and
+   make sure the app target is selected under **Target Membership**:
+   `appauth_rust.swift` (the generated bindings),
+   `IOSAuthorizationAdapter.swift`, `MacOSAuthorizationAdapter.swift`, and
+   `URLSessionNativeHttpTransport.swift`. Each adapter compiles only on its
+   own platform, so the same set works for iOS/iPadOS and macOS targets. The
+   Swift sources and XCFramework must come from the same release archive.
 3. Set the target's minimum deployment version to iOS/iPadOS 18 or macOS 15,
    as appropriate.
 

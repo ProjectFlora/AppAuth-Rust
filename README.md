@@ -296,6 +296,47 @@ version to repeat these checks against the immutable GitHub Release assets.
   14 days. Use the published Apple archive and `SHA256SUMS` linked in
   [Download and verify v0.4.0](#download-and-verify-v040) for distribution.
 
+## Apple Swift Package Manager (SPM)
+
+Starting with v0.5.0, the Apple package is also available through Swift
+Package Manager. SPM is the recommended installation method; it resolves the
+same XCFramework published in the GitHub Release and compiles the generated
+Swift API and the platform adapters as part of the `AppAuthRust` library
+product. The package supports iOS/iPadOS 18 and later and macOS 15 and later.
+
+In Xcode, choose **File > Add Package Dependencies...**, enter
+`https://github.com/ProjectFlora/AppAuth-Rust`, set **Dependency Rule** to
+**Up to Next Minor Version** from `0.5.0`, and add the `AppAuthRust` library
+to your app target.
+
+In a `Package.swift` manifest, add the package dependency and the
+`AppAuthRust` product to your target:
+
+```swift
+dependencies: [
+    .package(
+        url: "https://github.com/ProjectFlora/AppAuth-Rust",
+        .upToNextMinor(from: "0.5.0")
+    ),
+],
+targets: [
+    .target(
+        name: "MyApp",
+        dependencies: [
+            .product(name: "AppAuthRust", package: "AppAuth-Rust"),
+        ]
+    ),
+],
+```
+
+Pin to a minor version while the project is pre-1.0: 0.x minor releases may
+contain breaking API changes (see the
+[pre-1.0 release policy](ROADMAP.md#pre-10-release-policy)). Then
+`import AppAuthRust` in your Swift code. With SPM, skip the manual XCFramework
+and Swift source steps in
+[Swift XCFramework installation](docs/swift-xcframework.md); its callback
+configuration still applies.
+
 ## Android adapter
 
 - `native/android` launches authorization in a Custom Tab. It uses the HTTPS
