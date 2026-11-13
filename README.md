@@ -257,14 +257,14 @@ version to repeat these checks against the immutable GitHub Release assets.
 
 ## Apple adapters
 
-- `native/apple/IOSAuthorizationAdapter.swift` runs authorization in
+- `Sources/AppAuthRust/IOSAuthorizationAdapter.swift` runs authorization in
   `ASWebAuthenticationSession`; HTTPS callbacks use Apple's verified callback
   matcher, and custom URI schemes are supported as a fallback. The host app
   must configure a `webcredentials:<host>` associated domain or register its
   custom URL scheme, and provide an
   `ASWebAuthenticationPresentationContextProviding` implementation.
-- `native/apple/MacOSAuthorizationAdapter.swift` accepts a redirect template
-  such as `http://127.0.0.1/oauth/callback`, replaces its port with a
+- `Sources/AppAuthRust/MacOSAuthorizationAdapter.swift` accepts a redirect
+  template such as `http://127.0.0.1/oauth/callback`, replaces its port with a
   dynamically allocated port, and binds the listener only to IPv4 loopback.
   Unexpected paths receive 404 while the adapter continues waiting.
 - Cancelling the iOS adapter or Swift task dismisses its authentication
@@ -285,8 +285,10 @@ version to repeat these checks against the immutable GitHub Release assets.
   `scripts/package-apple-xcframework.sh 0.4.0`. It creates
   `target/apple/release-package/AppAuthRust-Apple-0.4.0.zip`, containing an
   `AppAuthRust.xcframework` with static Rust libraries for iOS device,
-  iOS simulator, and universal macOS, the generated Swift API source, and an
-  installation guide. See [Swift XCFramework installation](docs/swift-xcframework.md).
+  iOS simulator, and universal macOS, the generated Swift API source, the
+  platform adapters (the same sources the Swift package target compiles),
+  and an installation guide.
+  See [Swift XCFramework installation](docs/swift-xcframework.md).
   The CI `apple-xcframework` artifact is for validation and expires after
   14 days. Use the published Apple archive and `SHA256SUMS` linked in
   [Download and verify v0.4.0](#download-and-verify-v040) for distribution.

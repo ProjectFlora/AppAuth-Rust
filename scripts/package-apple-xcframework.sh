@@ -51,7 +51,16 @@ for target in \
 done
 
 mkdir -p "$repo_root/target/apple" "$package_root/Swift" "$headers"
+# The Swift package sources (the UniFFI-generated API plus the platform
+# adapters) ship in the archive so manual Xcode users get the same content as
+# the Swift Package Manager target. The generated file is copied from the
+# freshly generated output, which the SPM bindings check verifies matches the
+# checked-in copy.
 cp "$generated/swift/appauth_rust.swift" "$package_root/Swift/"
+cp "$repo_root"/Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
+    "$repo_root"/Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
+    "$repo_root"/Sources/AppAuthRust/URLSessionNativeHttpTransport.swift \
+    "$package_root/Swift/"
 cp "$repo_root/LICENSE" "$package_root/"
 cp "$repo_root/docs/swift-xcframework.md" "$package_root/README.md"
 cp "$generated/swift/appauth_rustFFI.h" "$headers/"
@@ -105,8 +114,8 @@ xcrun swiftc \
     -o "$repo_root/target/apple/mac-authorization-flow-smoke-static" \
     "$generated/swift/appauth_rust.swift" \
     "$repo_root/native/apple/MacOSMockOAuthProvider.swift" \
-    "$repo_root/native/apple/MacOSAuthorizationAdapter.swift" \
-    "$repo_root/native/apple/URLSessionNativeHttpTransport.swift" \
+    "$repo_root/Sources/AppAuthRust/MacOSAuthorizationAdapter.swift" \
+    "$repo_root/Sources/AppAuthRust/URLSessionNativeHttpTransport.swift" \
     "$repo_root/native/apple/MacOSAuthorizationFlowSmoke.swift"
 "$repo_root/target/apple/mac-authorization-flow-smoke-static"
 scripts/check-ios-authorization-flow.sh

@@ -43,7 +43,7 @@ jobs:
   apple_adapters:
     name: Apple adapters validation (iOS ${{ matrix.ios_simulator }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -83,6 +83,8 @@ jobs:
         run: scripts/package-apple-xcframework.sh 0.0.0-ci
       - name: Validate current Apple package consumer
         run: scripts/check-apple-release-consumer.sh target/apple/release-package/AppAuthRust-Apple-0.0.0-ci.zip
+      - name: Validate Swift package (host build, tests, iOS simulator)
+        run: scripts/check-spm-package.sh target/apple/release-package/AppAuthRust-Apple-0.0.0-ci.zip
       - uses: actions/upload-artifact@v4
         with:
           name: apple-xcframework-ios-${{ matrix.ios_simulator }}
@@ -100,6 +102,15 @@ jobs:
         env:
           APPLE_RESULT: ${{ needs.apple_adapters.result }}
         run: test "$APPLE_RESULT" = success
+
+  spm_bindings:
+    name: Swift package bindings match
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/check-spm-bindings.sh
 
   windows_core:
     name: Windows core target validation
@@ -254,7 +265,7 @@ jobs:
   report:
     name: PR report
     if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    needs: [test, apple_adapters, android_adapters, windows_core, windows_client, lint, coverage]
+    needs: [test, apple_adapters, spm_bindings, android_adapters, windows_core, windows_client, lint, coverage]
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -266,6 +277,7 @@ jobs:
             const checks = [
               ['Tests', '${{ needs.test.result }}'],
               ['Apple adapters validation', '${{ needs.apple_adapters.result }}'],
+              ['Swift package bindings match', '${{ needs.spm_bindings.result }}'],
               ['Android adapters validation', '${{ needs.android_adapters.result }}'],
               ['Windows core target validation', '${{ needs.windows_core.result }}'],
               ['Windows 11 client consumers (x64 emulation)', '${{ needs.windows_client.result }}'],

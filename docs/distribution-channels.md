@@ -266,9 +266,14 @@ document:
   signing setup, POM generation for the library module with the three
   transitive dependencies (jna as `aar` type, per Spike B), publication step
   in the release workflow, and consumer documentation updates.
-- **Distribute the Apple package through SPM** ([#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82)) — per-release `Package.swift`
-  (tools 6.0, iOS 18 / macOS 15 minimums, Swift 5 language-mode pin, binary
-  target `url:` + checksum at the existing zip asset), manifest placement
-  (SPM requires the manifest at the repository root for remote git
-  dependencies), release pipeline assembly, and consumer documentation
-  updates.
+- **Distribute the Apple package through SPM** ([#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82)) — the package
+  landed as `Package.swift` at the repository root: a subdirectory manifest
+  is not an option because SPM resolves only a root manifest for remote git
+  dependencies (the upstream feature request remains unimplemented), and a
+  dedicated repository would split version tags and the release pipeline.
+  Its source target carries the checked-in UniFFI-generated Swift API (a
+  CI check verifies it matches the Rust source) plus the platform adapters,
+  and its binary target references the release zip by URL with a per-release
+  checksum that the release pipeline must keep in sync with the published
+  archive. Remaining: the release pipeline's checksum injection and SPM
+  consumer validation, consumer documentation, and the first SPM release.
