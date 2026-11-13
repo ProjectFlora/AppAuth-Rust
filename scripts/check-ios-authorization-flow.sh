@@ -43,9 +43,9 @@ xcrun --sdk iphonesimulator swiftc \
     -framework UIKit \
     -o "$app_bundle/$executable" \
     "$generated/appauth_rust.swift" \
-    native/apple/IOSAuthorizationAdapter.swift \
+    Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
     native/apple/IOSAuthorizationFlowSmoke.swift \
-    native/apple/URLSessionNativeHttpTransport.swift
+    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift
 
 codesign --force --sign - --timestamp=none "$app_bundle"
 

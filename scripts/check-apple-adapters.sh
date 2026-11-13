@@ -7,11 +7,11 @@ cd "$repo_root"
 output_dir=target/uniffi
 scripts/generate-bindings.sh "$output_dir"
 xcrun swift-format lint --strict \
-    native/apple/IOSAuthorizationAdapter.swift \
+    Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
     native/apple/IOSAuthorizationFlowSmoke.swift \
-    native/apple/MacOSAuthorizationAdapter.swift \
+    Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
-    native/apple/URLSessionNativeHttpTransport.swift \
+    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift \
     native/apple/MacOSAuthorizationFlowSmoke.swift
 
 swift_file="$output_dir/swift/appauth_rust.swift"
@@ -22,10 +22,10 @@ swiftc \
     -Xcc "-fmodule-map-file=$module_map" \
     -typecheck \
     "$swift_file" \
-    native/apple/IOSAuthorizationAdapter.swift \
+    Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
-    native/apple/MacOSAuthorizationAdapter.swift \
-    native/apple/URLSessionNativeHttpTransport.swift
+    Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
+    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift
 
 swiftc \
     -target arm64-apple-macosx15.0 \
@@ -33,10 +33,10 @@ swiftc \
     -Xcc "-fmodule-map-file=$module_map" \
     -typecheck \
     "$swift_file" \
-    native/apple/IOSAuthorizationAdapter.swift \
+    Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
-    native/apple/MacOSAuthorizationAdapter.swift \
-    native/apple/URLSessionNativeHttpTransport.swift
+    Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
+    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift
 
 mkdir -p target/apple
 case "$(uname -m)" in
@@ -60,7 +60,7 @@ swiftc \
     -o target/apple/mac-authorization-flow-smoke \
     "$swift_file" \
     native/apple/MacOSMockOAuthProvider.swift \
-    native/apple/MacOSAuthorizationAdapter.swift \
-    native/apple/URLSessionNativeHttpTransport.swift \
+    Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
+    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift \
     native/apple/MacOSAuthorizationFlowSmoke.swift
 target/apple/mac-authorization-flow-smoke
