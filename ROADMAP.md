@@ -92,6 +92,13 @@ This roadmap tracks work remaining for the initial scope in
   audience. Windows stays on GitHub Releases. The evaluation, technical
   spike evidence, comparison matrix, and follow-up issues are recorded in
   [docs/distribution-channels.md](docs/distribution-channels.md).
+- **Crates.io publication:** Deferred 2026-11-13
+  ([#64](https://github.com/ProjectFlora/AppAuth-Rust/issues/64)). Do not
+  publish the Rust core to crates.io for the initial release: the primary
+  consumers are the native bindings, publishing requires package metadata,
+  docs.rs, and `cargo publish` validation work, and the version policy relative
+  to the Maven Central and SPM packages is not yet settled. Re-evaluate after
+  1.0.0 or when a concrete pure-Rust consumer need emerges.
 
 ## Open decisions
 
