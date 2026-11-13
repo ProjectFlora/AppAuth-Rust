@@ -84,8 +84,9 @@ This roadmap tracks work remaining for the initial scope in
   release. Record the resulting unverified provider and real-device coverage
   in [docs/live-idp-interoperability.md](docs/live-idp-interoperability.md);
   ordinary pull-request CI remains limited to local mock providers.
-- **Crates.io publication:** Deferred. Publication to crates.io is not a priority for the initial release due to lower priority for pure Rust distribution, technical hurdles (metadata, docs.rs, `cargo publish` validation), and version alignment needs with Maven Central/SPM.
-
+- **Crates.io publication:** Deferred. Publication to crates.io is not a priority for the initial release due to lower priority for pure Rust distribution,
+  technical hurdles (metadata, docs.rs, `cargo publish` validation), and version alignment needs with Maven Central/SPM. Re-evaluate after 1.0.0.
+- **Long-term package distribution:** Maven Central (Android), Swift Package Manager (iOS), and Carthage (legacy iOS) are the primary targets for native binding distribution, prioritized over crates.io.
 
 ## Open decisions
 
