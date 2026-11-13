@@ -296,6 +296,23 @@ version to repeat these checks against the immutable GitHub Release assets.
   14 days. Use the published Apple archive and `SHA256SUMS` linked in
   [Download and verify v0.4.0](#download-and-verify-v040) for distribution.
 
+## Apple Swift Package Manager (SPM)
+
+You can also use Swift Package Manager to integrate the Rust bindings into your
+Swift project. This is the recommended method for new projects.
+
+To use SPM:
+1. Add the following dependency to your `Package.swift`:
+
+```swift
+.package(url: "https://github.com/ProjectFlora/AppAuth-Rust", from: "0.5.0"),
+.target(name: "AppAuthRust", dependencies: ["AppAuthRust"])
+```
+
+2. Import the `AppAuthRust` module in your Swift code.
+
+See [docs/distribution-channels.md](docs/distribution-channels.md) for more details.
+
 ## Android adapter
 
 - `native/android` launches authorization in a Custom Tab. It uses the HTTPS
