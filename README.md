@@ -298,20 +298,44 @@ version to repeat these checks against the immutable GitHub Release assets.
 
 ## Apple Swift Package Manager (SPM)
 
-You can also use Swift Package Manager to integrate the Rust bindings into your
-Swift project. This is the recommended method for new projects.
+Starting with v0.5.0, the Apple package is also available through Swift
+Package Manager. SPM is the recommended installation method; it resolves the
+same XCFramework published in the GitHub Release and compiles the generated
+Swift API and the platform adapters as part of the `AppAuthRust` library
+product. The package supports iOS/iPadOS 18 and later and macOS 15 and later.
 
-To use SPM:
-1. Add the following dependency to your `Package.swift`:
+In Xcode, choose **File > Add Package Dependencies...**, enter
+`https://github.com/ProjectFlora/AppAuth-Rust`, set **Dependency Rule** to
+**Up to Next Minor Version** from `0.5.0`, and add the `AppAuthRust` library
+to your app target.
+
+In a `Package.swift` manifest, add the package dependency and the
+`AppAuthRust` product to your target:
 
 ```swift
-.package(url: "https://github.com/ProjectFlora/AppAuth-Rust", from: "0.5.0"),
-.target(name: "AppAuthRust", dependencies: ["AppAuthRust"])
+dependencies: [
+    .package(
+        url: "https://github.com/ProjectFlora/AppAuth-Rust",
+        .upToNextMinor(from: "0.5.0")
+    ),
+],
+targets: [
+    .target(
+        name: "MyApp",
+        dependencies: [
+            .product(name: "AppAuthRust", package: "AppAuth-Rust"),
+        ]
+    ),
+],
 ```
 
-2. Import the `AppAuthRust` module in your Swift code.
-
-See [docs/distribution-channels.md](docs/distribution-channels.md) for more details.
+Pin to a minor version while the project is pre-1.0: 0.x minor releases may
+contain breaking API changes (see the
+[pre-1.0 release policy](ROADMAP.md#pre-10-release-policy)). Then
+`import AppAuthRust` in your Swift code. With SPM, skip the manual XCFramework
+and Swift source steps in
+[Swift XCFramework installation](docs/swift-xcframework.md); its callback
+configuration still applies.
 
 ## Android adapter
 
