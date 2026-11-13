@@ -84,14 +84,8 @@ This roadmap tracks work remaining for the initial scope in
   release. Record the resulting unverified provider and real-device coverage
   in [docs/live-idp-interoperability.md](docs/live-idp-interoperability.md);
   ordinary pull-request CI remains limited to local mock providers.
-- **Long-term package distribution:** Re-evaluated 2026-11-13
-  ([#44](https://github.com/ProjectFlora/AppAuth-Rust/issues/44)). Adopt
-  Maven Central for the Android AAR and Swift Package Manager for the Apple
-  package, each running alongside the existing GitHub Release assets. Decline
-  Carthage for now: its maintenance has slowed and SPM covers the same
-  audience. Windows stays on GitHub Releases. The evaluation, technical
-  spike evidence, comparison matrix, and follow-up issues are recorded in
-  [docs/distribution-channels.md](docs/distribution-channels.md).
+- **Crates.io publication:** Deferred. Publication to crates.io is not a priority for the initial release due to lower priority for pure Rust distribution, technical hurdles (metadata, docs.rs, `cargo publish` validation), and version alignment needs with Maven Central/SPM.
+
 
 ## Open decisions
 
