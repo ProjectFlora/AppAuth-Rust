@@ -41,7 +41,7 @@ case "$archive" in
 esac
 
 cp "$manifest" "$manifest.orig"
-trap 'mv -f "$manifest.orig" "$manifest" && rm -f "$manifest.orig"' EXIT
+trap 'mv -f "$manifest.orig" "$manifest"' EXIT
 
 # Swap the binary target's release URL and checksum for the local archive.
 python3 - "$rel_archive" "$manifest" <<'PY'
@@ -57,9 +57,14 @@ if needle not in text:
 binary_block = text.split(needle, 1)[1].split(")", 1)[0]
 if "url:" not in binary_block or "path:" in binary_block:
     sys.exit(f"refusing to rewrite unrecognized manifest: {manifest}")
-text = re.sub(r'\n[ \t]+url: "[^"]+",', "", text)
-text = re.sub(r'\n[ \t]+checksum: "[^"]+"', "", text)
-text = text.replace(needle, f'{needle}\n            path: "{archive}"', 1)
+# Strip the url/checksum lines only inside this binary target block, so any
+# other remote binary target in the manifest is left untouched.
+block = re.sub(r'\n[ \t]+url: "[^"]+",', "", binary_block)
+block = re.sub(r'\n[ \t]+checksum: "[^"]+"', "", block)
+text = text.replace(
+    needle + binary_block,
+    f'{needle}\n            path: "{archive}"' + block,
+    1)
 pathlib.Path(manifest).write_text(text)
 PY
 
