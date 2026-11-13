@@ -163,6 +163,7 @@ pub type AppAuthWindowsRefreshResult = AppAuthWindowsAuthorizationResult;
 pub type AppAuthWindowsEndSessionResult = AppAuthWindowsAuthorizationResult;
 
 #[cfg(windows)]
+/// Opaque result returned by [`appauth_windows_revoke`].
 pub type AppAuthWindowsRevocationResult = AppAuthWindowsAuthorizationResult;
 
 #[cfg(windows)]
