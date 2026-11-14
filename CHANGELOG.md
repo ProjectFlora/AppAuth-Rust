@@ -6,6 +6,19 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+### Documentation
+
+- Correct how the v0.5.0 notes describe the Apple release archive. The
+  release builds the archive once and computes the manifest checksum from
+  that build. The packaging script's in-run self-test re-zips the staged
+  tree and re-runs `create-xcframework` for the Info.plist, so it shows
+  only that those steps repeat byte-identically within one run on one
+  machine, not that a rebuild or a build on another machine reproduces the
+  archive. Main's `Package.swift` is never rewritten by the release
+  workflow: it keeps the binary target last committed to main (v0.4.0),
+  not the previous release's. See
+  [Releasing](docs/releasing.md#what-the-packaging-self-test-checks).
+
 ## [0.5.0] - 2026-11-14
 
 ### Security
@@ -66,14 +79,14 @@ policies are still evolving. Each release records its known limitations.
   the pipeline instead of by hand. The release preparation pull request
   (version, changelog, docs) is the only manual step before dispatch; see
   [Releasing](docs/releasing.md).
-- Make the Apple release archive's packaging deterministic: the packaging
-  step pins entry timestamps and metadata, normalizes the zip and the
-  xcframework Info.plist, and self-tests in-run by packaging the archive
-  twice and requiring byte-identical output.
+- Make the Apple release archive reproducible: the packaging step pins
+  entry timestamps and metadata, normalizes the zip and the xcframework
+  Info.plist, and requires a second in-run build to be byte-identical, so
+  the checksum recorded in the manifest is stable and verifiable.
 - Pin the release apple job to exact Rust and Xcode toolchain versions and
-  record them in the run summary, so the archive's bytes are tied to a
-  known toolchain rather than to a moving Rust stable release or a runner
-  image update.
+  record them in the run summary, so the archive's bytes — and the manifest
+  checksum computed from them — cannot drift with a stable release or a
+  runner image update.
 - Published release consumer validation covers the SPM channel: an external
   consumer package resolves the release tag as a remote dependency, runs a
   host-side smoke of the generated API, and builds for the iOS simulator

@@ -354,7 +354,7 @@ jobs:
             exit 1
           fi
           git tag -a "v$RELEASE_VERSION" -m "AppAuth-Rust v$RELEASE_VERSION"
-          # Push only the tag; main keeps the previous release's manifest.
+          # Push only the tag; main's Package.swift is never updated by a release.
           git push origin "refs/tags/v$RELEASE_VERSION"
       - name: Generate checksums and publish assets
         env:

@@ -8,11 +8,11 @@ set -euo pipefail
 #
 # The release commit carries only Package.swift and is pushed as the version
 # tag, never to main (see docs/releasing.md: "Why CI creates the tag"). Main
-# therefore keeps the previous release's binary target while the Cargo
-# version moves forward in the release preparation pull request, so the
-# manifest version may lag the Cargo version — normally by exactly one
-# release, but by any number of releases in general — and must never lead
-# it (a leading URL would point at a release that does not exist yet).
+# therefore keeps the binary target last committed to it by hand (v0.4.0)
+# while the Cargo version moves forward with every release preparation pull
+# request, so the lag grows by one per release. The manifest version may lag
+# the Cargo version by any number of releases but must never lead it (a
+# leading URL would point at a release that does not exist yet).
 #
 # Usage: scripts/check-spm-manifest.sh
 
@@ -101,7 +101,7 @@ if semver(manifest_version) > semver(cargo_version):
     sys.exit(
         f"Package.swift binary target points at release {manifest_version} but "
         f"the Cargo version is {cargo_version}; the manifest may lag the Cargo "
-        f"version (main keeps the previous release's binary target) but must "
+        f"version (the release workflow never updates main's binary target) but must "
         f"not lead it"
     )
 

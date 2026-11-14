@@ -91,13 +91,10 @@ the release tracking issue.
 
 Swift Package Manager reads `Package.swift` at the version tag, and that
 manifest must contain the SHA-256 checksum of the published XCFramework
-archive. The checksum is a build output: the run proves the packaging step
-is deterministic (it packages the archive a second time and requires
-byte-identical output; the Rust build itself runs once), but the checksum
-is only known after the archive is actually built, so a tag pushed before
-the build can never contain it. The workflow therefore builds
-and validates the archive first and then tags a release commit that carries
-it:
+archive. The checksum is a build output: it is only known after the
+archive is actually built, so a tag pushed before the build can never
+contain it. The workflow therefore builds and validates the archive first
+and then tags a release commit that carries it:
 
 ```text
 main ── A ── B            (B: dispatched commit)
@@ -105,9 +102,37 @@ main ── A ── B            (B: dispatched commit)
                R          release: vX.Y.Z  (Package.swift only)  ← tag vX.Y.Z
 ```
 
-As a consequence, `main`'s `Package.swift` keeps the previous release's
-binary target. SPM consumers resolve released versions by tag and are
-unaffected; depending on the `main` branch through SPM is not supported.
+The release commit is reachable only from its tag; the workflow never
+rewrites `main`'s `Package.swift`. `main` therefore keeps the binary target
+last committed to it by hand (currently v0.4.0, from before SPM
+distribution), and the gap to the Cargo version grows by one with every
+release. `scripts/check-spm-manifest.sh` accepts any such lag and rejects
+only a manifest that leads the Cargo version. SPM consumers resolve
+released versions by tag and are unaffected; depending on the `main` branch
+through SPM is not supported.
+
+### What the packaging self-test checks
+
+This section is the reference description of the determinism self-test in
+`scripts/package-apple-xcframework.sh`; other documents link here rather
+than restating it.
+
+The release run builds the Rust libraries and stages the package once.
+The script then repeats two steps and requires identical bytes:
+
+- `xcodebuild -create-xcframework` runs a second time, and both
+  canonicalized `Info.plist` files must match
+  (`scripts/normalize_xcframework_plist.py`).
+- `ditto` zips the same staged tree a second time, and both archives must
+  have the same SHA-256 after `scripts/normalize_zip.py`.
+
+Staging (`cp`, `lipo`, `xattr -cr`, `touch -t`) runs once, and both
+passes run in the same job, on the same machine, with the same toolchain
+and `TZ=UTC`. The self-test therefore shows only that the plist and zip
+steps repeat byte-identically within one run. It does not show that a
+rebuild, a repeated staging pass, or a run on another machine would
+produce the same archive. The manifest checksum does not rely on that: it
+is computed from the one archive that is published.
 
 ## Recovering from a failed run
 

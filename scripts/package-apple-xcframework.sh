@@ -125,10 +125,13 @@ xcrun swiftc \
 "$repo_root/target/apple/mac-authorization-flow-smoke-static"
 scripts/check-ios-authorization-flow.sh
 
-# The archive bytes must not depend on the build machine or on the file
-# states `ditto` reads: the in-run determinism self-test below packages the
-# same tree a second time and requires an identical SHA-256. Three layers
-# enforce that:
+# Keep the archive bytes free of build-time and file-state inputs that
+# `ditto` would otherwise record. The in-run self-test below zips the same
+# staged tree a second time and requires an identical SHA-256. It runs on
+# one machine in one job, so it checks only that this zip step repeats; it
+# cannot detect differences between machines or between staging passes
+# (see docs/releasing.md: "What the packaging self-test checks"). Three
+# layers remove those inputs:
 #
 # 1. Fixed timestamps. `ditto` records each file's modification time in the
 #    zip DOS time fields and as atime + mtime words in the 0x5855 (UT)
@@ -158,8 +161,8 @@ archive="$output_root/AppAuthRust-Apple-$version.zip"
 ditto -c -k --keepParent "$package_root" "$archive"
 python3 "$repo_root/scripts/normalize_zip.py" "$archive"
 
-# The in-run determinism self-test: zip the same package a second time,
-# normalize both, and demand identical hashes.
+# The in-run determinism self-test: zip the same staged tree a second time,
+# normalize both, and demand identical hashes. Staging is not repeated.
 # (The raw double-ditto hashes would differ: the first zip's read of the
 # tree advances file atimes, which the second zip records in the UT extra
 # field; the normalizer is what makes the comparison meaningful.)
