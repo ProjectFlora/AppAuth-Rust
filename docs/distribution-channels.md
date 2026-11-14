@@ -279,5 +279,5 @@ document:
   writes the URL and checksum into `Package.swift`, validates the rewritten
   manifest against the archive, commits it as a release commit on top of the
   dispatched `main` commit, and creates the version tag there; the published
-  release consumer workflow resolves the tag by URL. Remaining: the first
-  SPM release.
+  release consumer workflow resolves the tag by URL (see
+  [Releasing](releasing.md)). Remaining: the first SPM release.

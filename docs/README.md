@@ -45,6 +45,8 @@ SPM and Maven Central publication are tracked by
 [#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81); use the documented
 GitHub Release installation until those channels are actually published.
 
+Maintainers publishing a version follow the [release procedure](releasing.md).
+
 Build checks, mock-provider tests, and real-provider/device verification are
 different kinds of evidence. Consult the [coverage matrix](api-coverage.md)
 and [interoperability limits](live-idp-interoperability.md) before treating an

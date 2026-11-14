@@ -187,11 +187,12 @@ adds token revocation to the Rust, UniFFI, and Windows C ABI public-client
 APIs. The published [v0.4.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.4.0)
 adds token refresh and OIDC end-session to the Windows C ABI and .NET
 wrapper.
-The release workflow is dispatched manually from `main` with a SemVer version
-that matches the crate version. A run without `publish` validates and packages
-a release candidate. With `publish`, the workflow writes the Apple archive's
-URL and SHA-256 checksum into `Package.swift` as a release commit on top of
-that `main` commit, tags it, and publishes the assets and SHA-256 checksums. Releases before 1.0.0 are pre-1.0 and may have
+The release workflow is dispatched manually with a SemVer version that matches
+the crate version. A run without `publish` validates and packages a release
+candidate. A `publish` run must be dispatched from `main`: it writes the Apple
+archive's URL and SHA-256 checksum into `Package.swift` as a release commit on
+top of that `main` commit, tags it, and publishes the assets and SHA-256
+checksums. See [Releasing](docs/releasing.md) for the maintainer procedure. Releases before 1.0.0 are pre-1.0 and may have
 documented interoperability or support-policy gaps; see `CHANGELOG.md` and
 `ROADMAP.md`.
 

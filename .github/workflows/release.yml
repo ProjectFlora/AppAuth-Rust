@@ -45,12 +45,15 @@ jobs:
             echo "Release versions must use MAJOR.MINOR.PATCH" >&2
             exit 1
           fi
-          git fetch origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "Releases must be built from a commit on main" >&2
-            exit 1
-          fi
+          # Candidate runs (no publish) may be dispatched from any branch so
+          # release changes can be validated before they merge; publishing
+          # requires the dispatched commit to be on main.
           if [[ "$PUBLISH" == "true" ]]; then
+            git fetch origin main
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "Releases must be built from a commit on main" >&2
+              exit 1
+            fi
             if [[ "$GITHUB_REF" != refs/heads/main ]]; then
               echo "Publishing releases must be dispatched from main" >&2
               exit 1
