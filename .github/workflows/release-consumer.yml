@@ -42,11 +42,18 @@ jobs:
       # the tag, downloads the binary target from the manifest URL (verifying
       # the checksum the release pipeline prepared), and compiles the
       # generated Swift API and the platform adapters it ships.
+      #
+      # The consumer lives outside $GITHUB_WORKSPACE: SPM derives a root
+      # package's identity from its directory name, and the workspace
+      # directory (`AppAuth-Rust`) would give the consumer the same identity
+      # (`appauth-rust`) as the dependency, so the dependency's products
+      # would not be found.
       - name: Create the SPM consumer package
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          mkdir -p Sources/Consumer
+          mkdir -p "$RUNNER_TEMP/spm-consumer/Sources/Consumer"
+          cd "$RUNNER_TEMP/spm-consumer"
           # $GITHUB_REPOSITORY and $RELEASE_VERSION are shell-expanded into
           # the manifest: the consumer depends on the published release
           # exactly as a foreign package would.
@@ -122,10 +129,13 @@ jobs:
           }
           EOF
       - name: Resolve the published release tag and build for macOS
+        working-directory: ${{ runner.temp }}/spm-consumer
         run: swift build
       - name: Run the consumer smoke
+        working-directory: ${{ runner.temp }}/spm-consumer
         run: swift run Consumer
       - name: Build for the iOS simulator
+        working-directory: ${{ runner.temp }}/spm-consumer
         # A generic destination builds every standard simulator
         # architecture, but the release xcframework ships an arm64
         # simulator slice; exclude the other one (the same arm64 simulator
