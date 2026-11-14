@@ -23,6 +23,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # Two dispatch runs of the same version must not race: the first one to
+  # publish pushes the version tag, and a racing second run would fail at
+  # the tag push only after a full rebuild. Serialize runs of the same
+  # version; a publish dispatched behind a candidate run waits for it
+  # rather than colliding.
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   validate_version:
     name: Validate release version
@@ -79,8 +88,25 @@ jobs:
       IOS_SIMULATOR_MAJOR_VERSION: '18'
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # The archive's bytes are shaped by the toolchain (the rustc version is
+      # part of rustc's -C metadata hash; the Xcode version shapes the
+      # xcframework), and the manifest's checksum is computed from them. Pin
+      # both to exact versions — the macos-15 image ships Xcode 16.4, so no
+      # extra download — and record the exact versions in the step summary so
+      # a release archive can be tied to the toolchain that built it.
+      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
       - uses: Swatinem/rust-cache@v2
+      - name: Record toolchain versions
+        run: |
+          {
+            echo "### Toolchain"
+            rustc -vV
+            echo
+            xcodebuild -version
+          } >> "$GITHUB_STEP_SUMMARY"
       - run: scripts/check-apple-adapters.sh
       - name: Remove cached XCFramework package output
         run: rm -rf target/apple/release-package

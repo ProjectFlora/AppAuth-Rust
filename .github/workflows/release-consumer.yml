@@ -33,22 +33,33 @@ jobs:
       - run: scripts/check-apple-release-consumer.sh dist/AppAuthRust-Apple-${{ inputs.version }}.zip
 
   spm:
-    name: Validate published Swift package
+    name: Validate published SPM consumer
     runs-on: macos-15
+    timeout-minutes: 45
     steps:
-      - name: Resolve and build the release tag through SPM
+      # No checkout: the consumer is a foreign package that only knows the
+      # published release tag, exactly like a real SPM consumer. SPM resolves
+      # the tag, downloads the binary target from the manifest URL (verifying
+      # the checksum the release pipeline prepared), and compiles the
+      # generated Swift API and the platform adapters it ships.
+      - name: Create the SPM consumer package
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          consumer="$RUNNER_TEMP/spm-consumer"
-          mkdir -p "$consumer/Sources/SPMConsumer"
-          cat > "$consumer/Package.swift" <<EOF
+          mkdir -p Sources/Consumer
+          # $GITHUB_REPOSITORY and $RELEASE_VERSION are shell-expanded into
+          # the manifest: the consumer depends on the published release
+          # exactly as a foreign package would.
+          cat > Package.swift <<EOF
           // swift-tools-version: 6.0
           import PackageDescription
 
           let package = Package(
-              name: "SPMConsumer",
-              platforms: [.iOS(.v18), .macOS(.v15)],
+              name: "Consumer",
+              platforms: [
+                  .iOS(.v18),
+                  .macOS(.v15),
+              ],
               dependencies: [
                   .package(
                       url: "https://github.com/$GITHUB_REPOSITORY",
@@ -57,25 +68,69 @@ jobs:
               ],
               targets: [
                   .executableTarget(
-                      name: "SPMConsumer",
+                      name: "Consumer",
                       dependencies: [
                           .product(name: "AppAuthRust", package: "AppAuth-Rust"),
-                      ],
-                      swiftSettings: [.swiftLanguageMode(.v5)]
+                      ]
                   ),
               ]
           )
           EOF
-          cat > "$consumer/Sources/SPMConsumer/main.swift" <<'EOF'
+          cat > Sources/Consumer/Consumer.swift <<'EOF'
           import AppAuthRust
 
-          print("Resolved AppAuthRust through Swift Package Manager")
+          enum ConsumerError: Error {
+              case roundTripMismatch
+              case configurationMismatch
+          }
+
+          @main
+          struct Main {
+              static func main() async throws {
+                  // The same host-side smoke the in-tree package runs in its
+                  // tests: exercise the generated API through the binary
+                  // target's FFI module, with no network activity.
+                  let stateJson = #"{\"token_response\":{\"access_token\":\"old\",\"token_type\":\"Bearer\",\"refresh_token\":\"refresh\"}}"#
+                  let state = try FfiAuthenticationState.fromJson(serialized: stateJson)
+                  let serialized = try await state.toJson()
+                  let restored = try FfiAuthenticationState.fromJson(serialized: serialized)
+                  let reserialized = try await restored.toJson()
+                  guard reserialized == serialized else {
+                      throw ConsumerError.roundTripMismatch
+                  }
+                  let response = await restored.tokenResponse()
+                  guard response.accessToken == "old" else {
+                      throw ConsumerError.roundTripMismatch
+                  }
+
+                  let configuration = try FfiServiceConfiguration(
+                      authorizationEndpoint: "https://idp.example/authorize",
+                      tokenEndpoint: "https://idp.example/token"
+                  )
+                  let withValidation = try configuration.withOidcValidationEndpoints(
+                      issuer: "https://idp.example",
+                      jwksUri: "https://idp.example/.well-known/jwks.json"
+                  )
+                  guard withValidation.issuer() == "https://idp.example/",
+                        withValidation.jwksUri() == "https://idp.example/.well-known/jwks.json"
+                  else {
+                      throw ConsumerError.configurationMismatch
+                  }
+
+                  print("Published Swift package consumer smoke passed")
+              }
+          }
           EOF
-          cd "$consumer"
-          # Resolution downloads the binary target and verifies its checksum.
-          swift package resolve
-          swift build
-          swift run SPMConsumer
+      - name: Resolve the published release tag and build for macOS
+        run: swift build
+      - name: Run the consumer smoke
+        run: swift run Consumer
+      - name: Build for the iOS simulator
+        # A generic destination builds every standard simulator
+        # architecture, but the release xcframework ships an arm64
+        # simulator slice; exclude the other one (the same arm64 simulator
+        # target the archive consumer check links).
+        run: xcodebuild -scheme Consumer -destination 'generic/platform=iOS Simulator' EXCLUDED_ARCHS=x86_64 build
 
   android:
     name: Validate published Android consumer
