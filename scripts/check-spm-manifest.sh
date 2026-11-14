@@ -10,11 +10,12 @@ set -euo pipefail
 #
 # The release commit carries only Package.swift and is pushed as the version
 # tag, never to main (see docs/releasing.md: "Why CI creates the tag"). Main
-# therefore keeps the binary target last committed to it by hand
-# while the Cargo version moves forward with every release preparation pull
-# request, so the lag grows by one per release. The manifest version may lag
-# the Cargo version by any number of releases but must never lead it (a
-# leading URL would point at a release that does not exist yet).
+# therefore keeps the binary target last committed to it by hand while the
+# Cargo version moves forward with every release preparation pull request,
+# so the manifest falls further behind with each release unless updated.
+# The manifest version may lag the Cargo version by any number of releases
+# but must never lead it (a leading URL would point at a release that does
+# not exist yet).
 #
 # Usage: scripts/check-spm-manifest.sh
 
@@ -90,8 +91,8 @@ if not url_match:
     sys.exit(
         f"Package.swift binary target URL is not a canonical release asset: "
         f"{url!r} (expected {repo_url!r}/releases/download/v<version>/"
-        f"AppAuthRust-Apple-<version>.zip; restore the binary target from "
-        f"main instead of editing it by hand)"
+        f"AppAuthRust-Apple-<version>.zip; revert the binary target to its last "
+        f"canonical value; a release writes new ones only at its tag)"
     )
 manifest_version = url_match.group(1)
 if manifest_version != url_match.group(2):

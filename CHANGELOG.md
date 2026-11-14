@@ -14,9 +14,11 @@ policies are still evolving. Each release records its known limitations.
   tree and re-runs `create-xcframework` for the Info.plist, so it shows
   only that those steps repeat byte-identically within one run on one
   machine, not that a rebuild or a build on another machine reproduces the
-  archive. Main's `Package.swift` is never rewritten by the release
-  workflow: it keeps the binary target last committed to main by hand, not
-  the previous release's. See
+  archive. Pinning the toolchain records which toolchain built the archive;
+  it does not keep rebuilt bytes from drifting. Main's `Package.swift` is
+  never rewritten by the release workflow: the pipeline maintains the
+  manifest only in the release commit at each tag, and main keeps the binary
+  target last committed to it by hand, not the previous release's. See
   [Releasing](docs/releasing.md#what-the-packaging-self-test-checks).
 
 ## [0.5.0] - 2026-11-14

@@ -29,7 +29,9 @@ In a pull request to `main`:
   [final verification record](support-matrix.md#final-100-verification).
 
 Do not edit the `AppAuthRustBinary` URL or checksum in `Package.swift`; the
-release workflow writes them.
+release workflow writes them into the release commit at the version tag.
+`main`'s copy is not updated by a release (see
+[Why CI creates the tag](#why-ci-creates-the-tag)).
 
 Merge the pull request once CI passes.
 
@@ -107,11 +109,12 @@ main ── A ── B            (B: dispatched commit)
 
 The release commit is reachable only from its tag; the workflow never
 rewrites `main`'s `Package.swift`. `main` therefore keeps the binary target
-last committed to it by hand, and the gap to the Cargo version grows by one with every
-release. `scripts/check-spm-manifest.sh` accepts any such lag and rejects
-only a manifest that leads the Cargo version. SPM consumers resolve
-released versions by tag and are unaffected; depending on the `main` branch
-through SPM is not supported.
+last committed to it by hand, and it falls further behind the Cargo version
+with every release unless someone updates it.
+`scripts/check-spm-manifest.sh` accepts any such lag and rejects only a
+manifest that leads the Cargo version. SPM consumers resolve released
+versions by tag and are unaffected; depending on the `main` branch through
+SPM is not supported.
 
 ### What the packaging self-test checks
 
@@ -131,11 +134,12 @@ The script then repeats two steps and requires identical bytes:
 Staging (`cp`, `lipo`, `xattr -cr`, `touch -t`) runs once, and both
 comparisons run in the same job, on the same machine, with the same
 toolchain. Only the zip comparison runs under `TZ=UTC`; the plist
-comparison runs earlier, in the runner's local timezone. The self-test therefore shows only that the plist and zip
-steps repeat byte-identically within one run. It does not show that a
-rebuild, a repeated staging pass, or a run on another machine would
-produce the same archive. The manifest checksum does not rely on that: it
-is computed from the one archive that is published.
+comparison runs earlier, in the runner's local timezone. The self-test
+therefore shows only that the plist and zip steps repeat byte-identically
+within one run. It does not show that a rebuild, a repeated staging pass,
+or a run on another machine would produce the same archive. The manifest
+checksum does not rely on that: it is computed from the one archive that
+is published.
 
 ## Recovering from a failed run
 
