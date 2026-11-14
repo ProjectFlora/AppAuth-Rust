@@ -6,7 +6,7 @@ on:
       version:
         description: Published release version to validate
         required: true
-        default: 0.4.0
+        default: 0.5.0
         type: string
 
 permissions:

@@ -6,6 +6,8 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-14
+
 ### Security
 
 - Complete iOS browser waits directly on cancellation and accept only one
@@ -80,6 +82,32 @@ policies are still evolving. Each release records its known limitations.
   consistent: a canonical asset URL, a SHA-256 checksum, and a release
   version that never leads the Cargo version (main intentionally keeps the
   previous release's binary target).
+
+### Distribution
+
+- Published as a regular GitHub Release while remaining a pre-1.0 version.
+  Release assets include Apple XCFramework, Android AAR, Windows DLL/C ABI
+  package, API documentation, and SHA-256 checksums.
+- First release available through Swift Package Manager: depend on
+  `https://github.com/ProjectFlora/AppAuth-Rust` from `0.5.0` and use the
+  `AppAuthRust` library product.
+
+### Known limitations
+
+- Maven Central publication of the Android AAR is not included; it is
+  planned for 0.6.0 (#81). Install the AAR from the GitHub Release assets.
+- SPM is supported only through release tags; depending on the `main`
+  branch is not supported.
+- Live identity-provider interoperability has not been validated, including
+  token revocation.
+- macOS and Windows tests do not automate the real system-browser flow.
+- Release consumer fixtures exercise refresh and end-session error paths in
+  the Windows C++ and .NET hosts and token revocation in the Windows .NET
+  host only; the Android and Apple XCFramework fixtures only construct the
+  configuration object, and the SPM consumer runs a host-side smoke of the
+  generated API without an authorization flow.
+- Platform minimums and provider interoperability policies remain subject to
+  the 1.0.0 readiness criteria in `ROADMAP.md`.
 
 ## [0.4.0] - 2026-11-12
 
