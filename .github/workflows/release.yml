@@ -12,7 +12,7 @@ on:
       version:
         description: Release version (MAJOR.MINOR.PATCH)
         required: true
-        default: 0.5.0
+        default: 0.5.1
         type: string
       publish:
         description: Create the release commit, tag and GitHub Release
@@ -351,3 +351,25 @@ jobs:
             --verify-tag \
             --title "AppAuth-Rust v$RELEASE_VERSION" \
             --generate-notes
+
+  publish_maven:
+    if: ${{ inputs.publish }}
+    name: Publish to Maven Central
+    needs: android
+    runs-on: ubuntu-latest
+    env:
+      MAVEN_USER: ${{ secrets.MAVEN_USER }}
+      MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Import GPG Key
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --import --batch --quiet
+      - name: Publish to Maven Central
+        run: ./native/android/gradlew -p native/android publishRelease

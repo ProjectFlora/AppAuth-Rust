@@ -368,6 +368,27 @@ its newer Swift sources.
   manifest, replacing the sample host and scheme with the registered values:
 
   ```xml
+
+
+### Maven Central Installation (Recommended)
+
+Add to your project-level `build.gradle.kts`:
+
+```kotlin
+dependencies {
+    implementation("net.projectflora:appauth-rust-android:0.5.1")
+}
+```
+
+Maven Central resolves the AAR and its transitive dependencies automatically:
+- ````com.projectflora.appauth:appauth-rust-android:<version>```` (AAR)
+- ````net.java.dev.jna:jna:5.12.0@aar````
+- ````org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2````
+- ````androidx.browser:browser:1.8.0````
+
+Pin the version in your `build.gradle.kts`: **`0.5.1`**. The Maven Central
+artifact is published by GitHub Actions on each release tag (see
+[.github/workflows/release.yml](.github/workflows/release.yml)).
   <activity
       android:name="com.projectflora.appauth.AndroidAuthorizationCallbackActivity"
       android:exported="true"

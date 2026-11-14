@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library") version "8.11.1"
     id("org.jetbrains.kotlin.android") version "2.2.20"
+    id("maven-publish")
 }
 
 val repositoryRoot = rootDir.resolve("../..").canonicalFile
@@ -39,7 +40,7 @@ val buildAndroidRustLibraries by tasks.registering(Exec::class) {
 }
 
 android {
-    namespace = "com.projectflora.appauth"
+    namespace = "net.projectflora.appauth"
     compileSdk = 35
 
     defaultConfig {
@@ -84,4 +85,45 @@ dependencies {
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 
     testImplementation("junit:junit:4.13.2")
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                groupId = "net.project-flora"
+                artifactId = "appauth-rust-android"
+                version = "${needs.validate_version.outputs.version}"
+
+                with(androidComponents.getByName("release")) {
+                    artifact(file("${buildDir}/outputs/aar/${artifactId}-release.aar"))
+                    // Note: sources.jar and javadoc.jar are optional for Maven Central, but recommended.
+                    // They can be added later if needed by using androidJar() or custom tasks.
+                }
+
+                pom {
+                    licenses {
+                        ap licenseUrl = "https://github.com/ProjectFlora/AppAuth-Rust"
+                        ap name = "Apache License 2.0"
+                        ap url = "https://github.com/ProjectFlora/AppAuth-Rust/LICENSE"
+                    }
+                    developers {
+                        organization = "ProjectFlora"
+                        name = "ProjectFlora"
+                        url = "https://github.com/ProjectFlora"
+                    }
+                    description = { "Rust-based AppAuth library for Android" }
+                    url = "https://github.com/ProjectFlora/AppAuth-Rust"
+                    license = "Apache 2.0"
+                    
+                    dependencies {
+                        // Explicitly specify API dependencies (jna, kotlinx-coroutines-android) to be included in POM
+                        dependency("net.java.dev.jna:jna:5.12.0").classification("api")
+                        dependency("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2").classification("api")
+                        // browser is implementation-only, so it's not an API dependency
+                    }
+                }
+            }
+        }
+    }
 }
