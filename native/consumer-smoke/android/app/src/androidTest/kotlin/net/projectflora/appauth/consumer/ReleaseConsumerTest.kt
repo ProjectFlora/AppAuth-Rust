@@ -1,4 +1,4 @@
-package com.projectflora.appauth.consumer
+package net.projectflora.appauth.consumer
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals

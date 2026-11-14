@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.projectflora.appauth.consumer"
+    namespace = "net.projectflora.appauth.consumer"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.projectflora.appauth.consumer"
+        applicationId = "net.projectflora.appauth.consumer"
         minSdk = 28
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

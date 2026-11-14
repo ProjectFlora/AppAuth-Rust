@@ -39,7 +39,7 @@ val buildAndroidRustLibraries by tasks.registering(Exec::class) {
 }
 
 android {
-    namespace = "com.projectflora.appauth"
+    namespace = "net.projectflora.appauth"
     compileSdk = 35
 
     defaultConfig {
