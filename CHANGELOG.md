@@ -15,8 +15,8 @@ policies are still evolving. Each release records its known limitations.
   only that those steps repeat byte-identically within one run on one
   machine, not that a rebuild or a build on another machine reproduces the
   archive. Main's `Package.swift` is never rewritten by the release
-  workflow: it keeps the binary target last committed to main (v0.4.0),
-  not the previous release's. See
+  workflow: it keeps the binary target last committed to main by hand, not
+  the previous release's. See
   [Releasing](docs/releasing.md#what-the-packaging-self-test-checks).
 
 ## [0.5.0] - 2026-11-14

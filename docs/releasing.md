@@ -60,7 +60,10 @@ Dispatch from `main` with **publish** checked:
 gh workflow run release.yml --ref main -f version=X.Y.Z -f publish=true
 ```
 
-The run rebuilds and revalidates everything, then the `publish` job:
+The run rebuilds and revalidates everything; the archive it publishes, and
+the checksum written into `Package.swift`, come from this run, not from the
+candidate run in step 2, and its bytes may differ from the candidate's.
+Then the `publish` job:
 
 1. Commits the validated `Package.swift` as `release: vX.Y.Z` on top of the
    dispatched `main` commit (it fails if anything else changed).
@@ -104,8 +107,7 @@ main ── A ── B            (B: dispatched commit)
 
 The release commit is reachable only from its tag; the workflow never
 rewrites `main`'s `Package.swift`. `main` therefore keeps the binary target
-last committed to it by hand (currently v0.4.0, from before SPM
-distribution), and the gap to the Cargo version grows by one with every
+last committed to it by hand, and the gap to the Cargo version grows by one with every
 release. `scripts/check-spm-manifest.sh` accepts any such lag and rejects
 only a manifest that leads the Cargo version. SPM consumers resolve
 released versions by tag and are unaffected; depending on the `main` branch
@@ -127,8 +129,9 @@ The script then repeats two steps and requires identical bytes:
   have the same SHA-256 after `scripts/normalize_zip.py`.
 
 Staging (`cp`, `lipo`, `xattr -cr`, `touch -t`) runs once, and both
-passes run in the same job, on the same machine, with the same toolchain
-and `TZ=UTC`. The self-test therefore shows only that the plist and zip
+comparisons run in the same job, on the same machine, with the same
+toolchain. Only the zip comparison runs under `TZ=UTC`; the plist
+comparison runs earlier, in the runner's local timezone. The self-test therefore shows only that the plist and zip
 steps repeat byte-identically within one run. It does not show that a
 rebuild, a repeated staging pass, or a run on another machine would
 produce the same archive. The manifest checksum does not rely on that: it

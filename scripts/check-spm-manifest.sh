@@ -2,13 +2,15 @@
 set -euo pipefail
 
 # Check that the committed Swift package manifest is consistent with the
-# release state. The release workflow's spm_manifest job is the only writer
-# of the binary target's URL and SHA-256 checksum (scripts/update-package-swift.py);
-# this check catches manual drift in pull requests.
+# release state. At a version tag, the release workflow's spm_manifest job
+# writes the binary target's URL and SHA-256 checksum
+# (scripts/update-package-swift.py); on main the target is whatever was last
+# committed there and the workflow never rewrites it. This check catches
+# malformed or leading targets in pull requests.
 #
 # The release commit carries only Package.swift and is pushed as the version
 # tag, never to main (see docs/releasing.md: "Why CI creates the tag"). Main
-# therefore keeps the binary target last committed to it by hand (v0.4.0)
+# therefore keeps the binary target last committed to it by hand
 # while the Cargo version moves forward with every release preparation pull
 # request, so the lag grows by one per release. The manifest version may lag
 # the Cargo version by any number of releases but must never lead it (a
@@ -88,8 +90,8 @@ if not url_match:
     sys.exit(
         f"Package.swift binary target URL is not a canonical release asset: "
         f"{url!r} (expected {repo_url!r}/releases/download/v<version>/"
-        f"AppAuthRust-Apple-<version>.zip; the release workflow is the only "
-        f"writer of the binary target)"
+        f"AppAuthRust-Apple-<version>.zip; restore the binary target from "
+        f"main instead of editing it by hand)"
     )
 manifest_version = url_match.group(1)
 if manifest_version != url_match.group(2):
@@ -101,14 +103,14 @@ if semver(manifest_version) > semver(cargo_version):
     sys.exit(
         f"Package.swift binary target points at release {manifest_version} but "
         f"the Cargo version is {cargo_version}; the manifest may lag the Cargo "
-        f"version (the release workflow never updates main's binary target) but must "
-        f"not lead it"
+        f"version (the release workflow never updates main's binary "
+        f"target) but must not lead it"
     )
 
 lag = (
     ""
     if manifest_version == cargo_version
-    else f", lagging Cargo version {cargo_version} as expected between releases"
+    else f", lagging Cargo version {cargo_version} as expected on main"
 )
 print(
     f"Swift package manifest is consistent (binary target "

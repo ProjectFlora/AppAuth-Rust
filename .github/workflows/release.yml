@@ -93,7 +93,9 @@ jobs:
       # xcframework), and the manifest's checksum is computed from them. Pin
       # both to exact versions — the macos-15 image ships Xcode 16.4, so no
       # extra download — and record the exact versions in the step summary so
-      # a release archive can be tied to the toolchain that built it.
+      # a release archive can be tied to the toolchain that built it. Pinning
+      # does not make a rebuild byte-identical; the published checksum is
+      # always computed from this run's archive (see docs/releasing.md).
       - uses: dtolnay/rust-toolchain@1.100.0
       - uses: maxim-lobanov/setup-xcode@v1
         with:
