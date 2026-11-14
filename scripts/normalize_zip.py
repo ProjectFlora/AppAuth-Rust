@@ -15,9 +15,9 @@ Applied in-place to the release archive after `ditto -c -k --keepParent`:
    The mtime word is trusted because `touch -t` pins mtime and reading
    never moves it. The local uid/gid word is zeroed: the staging user is
    a machine-state input whose values must not reach the published
-   archive. The other Unix ownership subfields, 0x7855 ("Ux") and 0x7875
-   ("ux"), are rejected rather than parsed, so no owner can reach the
-   archive through them either.
+   archive. The other Unix ownership subfields, 0x000d (PKWARE Unix),
+   0x756e (ASi Unix), 0x7855 ("Ux") and 0x7875 ("ux"), are rejected rather
+   than parsed, so no owner can reach the archive through them either.
 
 2. Remove AppleDouble `._*` sidecar entries. The com.apple.provenance xattr
    cannot be removed, so ditto emits a constant sidecar for every entry; the
@@ -33,8 +33,8 @@ for PK signatures (deflate payloads could contain false-positive signatures
 and would corrupt content if the walk desynchronized). Every entry's data
 region is size- and CRC-32-verified (decompressing for deflate entries),
 unsupported methods, malformed extra fields, 0x5855 subfields whose size
-is not the one expected at their location, and any 0x5835 (XAttr), 0x7855
-or 0x7875 subfield are rejected, and the rebuilt archive is re-parsed
+is not the one expected at their location, and any 0x5835 (XAttr) or other
+Unix ownership subfield are rejected, and the rebuilt archive is re-parsed
 before being written.
 """
 import os
@@ -56,7 +56,9 @@ LOCAL_FIELDS = "<" + "H" * 5 + "I" * 3 + "H" * 2
 # Extra subfields that carry machine state (extended attributes, or the
 # staging user's uid/gid) in a shape this tool does not normalize.
 REJECTED_TAGS = {
+    0x000D: "PKWARE Unix",
     0x5835: "XAttr",
+    0x756E: "ASi Unix",
     0x7855: "Info-ZIP Unix Ux",
     0x7875: "Info-ZIP Unix ux",
 }

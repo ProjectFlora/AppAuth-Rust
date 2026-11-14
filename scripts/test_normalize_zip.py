@@ -46,8 +46,14 @@ COMMENT_EXTRA = struct.pack(
 # An xattr-bearing subfield the normalizer must reject (machine state).
 XATTR_EXTRA = struct.pack("<HH", 0x5835, 3) + b"\x00" + b"p\x00"
 # The other Unix ownership subfields, which carry the staging uid/gid and
-# must be rejected: 0x7855 "Ux" (local: uid gid as 16-bit words) and
-# 0x7875 "ux" (version, uid size, uid, gid size, gid).
+# must be rejected: 0x000d PKWARE Unix (atime mtime, 16-bit uid gid),
+# 0x756e ASi Unix (CRC-32, mode, sizdev, 16-bit uid gid), 0x7855 "Ux"
+# (local: uid gid as 16-bit words) and 0x7875 "ux" (version, uid size,
+# uid, gid size, gid).
+PKWARE_UNIX_EXTRA = struct.pack("<HHIIHH", 0x000D, 12, ATIME, MTIME,
+                                STAGING_UID, STAGING_GID)
+ASI_UNIX_EXTRA = struct.pack("<HHIHIHH", 0x756E, 14, 0, 0o100644, 0,
+                             STAGING_UID, STAGING_GID)
 UX_NEW_EXTRA = struct.pack("<HHHH", 0x7855, 4, STAGING_UID, STAGING_GID)
 UX3_EXTRA = struct.pack("<HHBBIBI", 0x7875, 11, 1, 4, STAGING_UID,
                         4, STAGING_GID)
@@ -266,6 +272,16 @@ class NormalizeZipTestCase(unittest.TestCase):
         self._assert_refused(_drifted_ux_local() + XATTR_EXTRA,
                              _drifted_ux_central(),
                              "unexpected 0x5835 (XAttr) subfield len=3")
+
+    def test_pkware_unix_subfield_is_refused(self):
+        self._assert_refused(_drifted_ux_local() + PKWARE_UNIX_EXTRA,
+                             _drifted_ux_central(),
+                             "unexpected 0x000d (PKWARE Unix) subfield")
+
+    def test_asi_unix_subfield_is_refused(self):
+        self._assert_refused(_drifted_ux_local() + ASI_UNIX_EXTRA,
+                             _drifted_ux_central(),
+                             "unexpected 0x756e (ASi Unix) subfield")
 
     def test_unix_ux_subfield_is_refused(self):
         self._assert_refused(_drifted_ux_local() + UX_NEW_EXTRA,
