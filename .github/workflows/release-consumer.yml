@@ -32,6 +32,51 @@ jobs:
           grep -F "  AppAuthRust-Apple-$RELEASE_VERSION.zip" SHA256SUMS | shasum -a 256 -c -
       - run: scripts/check-apple-release-consumer.sh dist/AppAuthRust-Apple-${{ inputs.version }}.zip
 
+  spm:
+    name: Validate published Swift package
+    runs-on: macos-15
+    steps:
+      - name: Resolve and build the release tag through SPM
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          consumer="$RUNNER_TEMP/spm-consumer"
+          mkdir -p "$consumer/Sources/SPMConsumer"
+          cat > "$consumer/Package.swift" <<EOF
+          // swift-tools-version: 6.0
+          import PackageDescription
+
+          let package = Package(
+              name: "SPMConsumer",
+              platforms: [.iOS(.v18), .macOS(.v15)],
+              dependencies: [
+                  .package(
+                      url: "https://github.com/$GITHUB_REPOSITORY",
+                      exact: "$RELEASE_VERSION"
+                  ),
+              ],
+              targets: [
+                  .executableTarget(
+                      name: "SPMConsumer",
+                      dependencies: [
+                          .product(name: "AppAuthRust", package: "AppAuth-Rust"),
+                      ],
+                      swiftSettings: [.swiftLanguageMode(.v5)]
+                  ),
+              ]
+          )
+          EOF
+          cat > "$consumer/Sources/SPMConsumer/main.swift" <<'EOF'
+          import AppAuthRust
+
+          print("Resolved AppAuthRust through Swift Package Manager")
+          EOF
+          cd "$consumer"
+          # Resolution downloads the binary target and verifies its checksum.
+          swift package resolve
+          swift build
+          swift run SPMConsumer
+
   android:
     name: Validate published Android consumer
     runs-on: ubuntu-latest

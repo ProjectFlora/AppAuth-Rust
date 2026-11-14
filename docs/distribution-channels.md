@@ -274,6 +274,10 @@ document:
   Its source target carries the checked-in UniFFI-generated Swift API (a
   CI check verifies it matches the Rust source) plus the platform adapters,
   and its binary target references the release zip by URL with a per-release
-  checksum that the release pipeline must keep in sync with the published
-  archive. Remaining: the release pipeline's checksum injection and SPM
-  consumer validation, consumer documentation, and the first SPM release.
+  checksum. Because the archive is not reproducible, the checksum is only
+  known after the build, so the release workflow (dispatched from `main`)
+  writes the URL and checksum into `Package.swift`, validates the rewritten
+  manifest against the archive, commits it as a release commit on top of the
+  dispatched `main` commit, and creates the version tag there; the published
+  release consumer workflow resolves the tag by URL (see
+  [Releasing](releasing.md)). Remaining: the first SPM release.

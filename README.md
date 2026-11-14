@@ -187,10 +187,12 @@ adds token revocation to the Rust, UniFFI, and Windows C ABI public-client
 APIs. The published [v0.4.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.4.0)
 adds token refresh and OIDC end-session to the Windows C ABI and .NET
 wrapper.
-The release workflow accepts only SemVer tags that point to `main` and match
-the crate version. A manual workflow run validates and packages a release
-candidate without publishing; pushing its matching version tag publishes the
-assets and SHA-256 checksums. Releases before 1.0.0 are pre-1.0 and may have
+The release workflow is dispatched manually with a SemVer version that matches
+the crate version. A run without `publish` validates and packages a release
+candidate. A `publish` run must be dispatched from `main`: it writes the Apple
+archive's URL and SHA-256 checksum into `Package.swift` as a release commit on
+top of that `main` commit, tags it, and publishes the assets and SHA-256
+checksums. See [Releasing](docs/releasing.md) for the maintainer procedure. Releases before 1.0.0 are pre-1.0 and may have
 documented interoperability or support-policy gaps; see `CHANGELOG.md` and
 `ROADMAP.md`.
 
@@ -336,6 +338,17 @@ contain breaking API changes (see the
 and Swift source steps in
 [Swift XCFramework installation](docs/swift-xcframework.md); its callback
 configuration still applies.
+
+### Advantages of using SPM
+
+SPM resolves the prebuilt XCFramework from the GitHub Release asset and builds
+the checked-in Swift API and platform adapters alongside it, so there is no
+need to download the archive or copy its Swift sources into your project. Each
+release tag's `Package.swift` pins the archive URL and SHA-256 checksum, which
+the release pipeline writes into a release commit after building and
+validating the archive. Depend on a released version rather than the `main`
+branch: `main` keeps the previous release's binary target, which may not match
+its newer Swift sources.
 
 ## Android adapter
 
