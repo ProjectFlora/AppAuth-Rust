@@ -161,7 +161,12 @@ def sanity(blob, path):
         for extra, local in (
                 (blob[c_start:c_start + fields[10]], False),
                 (blob[l_start:l_start + lfields[9]], True)):
-            if patch_ux(bytearray(extra), local, path):
+            try:
+                rewritten = patch_ux(bytearray(extra), local, path)
+            except SystemExit as exc:
+                reason = str(exc).split(": ", 1)[1]
+                die(path, f"rebuilt archive: {reason} for {name!r}")
+            if rewritten:
                 die(path, f"rebuilt archive: extra field not normalized "
                           f"for {name!r}")
     return len(entries)

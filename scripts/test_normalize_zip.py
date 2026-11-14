@@ -300,6 +300,28 @@ class NormalizeZipTestCase(unittest.TestCase):
                              _drifted_ux_central(),
                              "unexpected 0x7875 (Info-ZIP Unix ux) subfield")
 
+    def _assert_normalized(self, entries, expected):
+        with open(self.path, "wb") as handle:
+            handle.write(_build(entries, COMMENT))
+        proc = self._run()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self._read(), _build(expected, COMMENT))
+
+    def test_entry_without_extra_is_kept(self):
+        # ditto writes no extra field at all for a symlink entry.
+        self._assert_normalized(
+            [(b"pkg/link", b"readme.txt", b"", b"")],
+            [(b"pkg/link", b"readme.txt", b"", b"")])
+
+    def test_every_duplicate_ux_subfield_is_normalized(self):
+        self._assert_normalized(
+            [(b"pkg/f.txt", b"x",
+              _drifted_ux_local() + _drifted_ux_local(),
+              _drifted_ux_central() + _drifted_ux_central())],
+            [(b"pkg/f.txt", b"x",
+              _ux([MTIME, MTIME, 0]) + _ux([MTIME, MTIME, 0]),
+              _ux([MTIME, MTIME]) + _ux([MTIME, MTIME]))])
+
     def test_sidecar_extra_is_not_checked(self):
         with open(self.path, "wb") as handle:
             handle.write(_build(
@@ -335,6 +357,16 @@ class SanityTestCase(unittest.TestCase):
             normalize_zip.sanity(blob, "archive.zip")
         self.assertIn("rebuilt archive: extra field not normalized",
                       str(raised.exception))
+
+    def test_rejected_subfield_names_the_rebuilt_archive(self):
+        blob = _build([(b"pkg/f.txt", b"x", _ux([MTIME, MTIME, 0]),
+                        _ux([MTIME, MTIME]) + XATTR_EXTRA)], COMMENT)
+        with self.assertRaises(SystemExit) as raised:
+            normalize_zip.sanity(blob, "archive.zip")
+        self.assertEqual(
+            str(raised.exception),
+            "archive.zip: rebuilt archive: unexpected 0x5835 (XAttr) "
+            "subfield len=3 for b'pkg/f.txt'")
 
 
 class WalkCentralTestCase(unittest.TestCase):
