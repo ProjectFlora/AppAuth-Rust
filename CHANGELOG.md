@@ -27,20 +27,18 @@ policies are still evolving. Each release records its known limitations.
   the zip normalizer zeros the local-header 0x5855 (Info-ZIP "UX") uid/gid
   word instead of overwriting it with the pinned mtime, which left a
   meaningless uid/gid derived from the timestamp. The word still records
-  an owner, now uid 0 / gid 0, which a root `unzip -X` restores
-  (#114).
-  The normalizer now also rejects a 0x5855 subfield unless it is the 8-byte
-  shape in the central directory or the 12-byte shape in a local header,
-  rejects the other Unix ownership subfields (0x000d PKWARE Unix, 0x756e
-  ASi Unix, 0x7855 "Ux" and 0x7875 "ux") so no uid/gid reaches the
-  archive through them, rejects extra
-  fields whose subfields overrun or leave trailing bytes, and enforces the
-  documented rejection of 0x5835 (XAttr) subfields that the code never
-  implemented, so no extended attribute can reach the published archive.
-  The removed AppleDouble sidecars are no longer normalized or checked,
-  and the normalized-word count in its summary line no longer includes
-  them. The in-run determinism self-test is
-  unchanged.
+  an owner, now uid 0 / gid 0, which a root `unzip -X` restores (#114).
+  The normalizer now accepts only the extra subfield `ditto` writes, a
+  0x5855 subfield of 8 bytes in the central directory or 12 bytes in a
+  local header, and rejects every other subfield: no owner (such as 0x7855
+  "Ux" or 0x7875 "ux"), extended attribute (0x5835 XAttr, a rejection the
+  code documented but never implemented) or timestamp (0x5455) can reach
+  the published archive. It also rejects extra fields whose subfields
+  overrun or leave trailing bytes, and checks that every extra field in
+  the rebuilt archive is already normalized. The removed AppleDouble
+  sidecars are no longer normalized or checked, and the normalizer's
+  summary line no longer counts their words. The in-run determinism
+  self-test is unchanged.
 - Parse the end-of-central-directory record once in the zip normalizer:
   the central directory walk returns the central directory offset, so the
   main path no longer rescans the archive for it. The normalized archive

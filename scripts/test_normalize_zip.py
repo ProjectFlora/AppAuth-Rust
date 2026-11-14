@@ -38,13 +38,17 @@ LOCAL_MAGIC = normalize_zip.LOCAL_MAGIC
 CD_MAGIC = normalize_zip.CD_MAGIC
 EOCD_MAGIC = normalize_zip.EOCD_MAGIC
 
-# A subfield the normalizer must leave alone: 0x6375, Info-ZIP Unicode
-# Comment (version, CRC-32 of the header comment, UTF-8 comment).
+# A subfield ditto does not write, which the normalizer must reject even
+# though it carries no machine state: 0x6375, Info-ZIP Unicode Comment
+# (version, CRC-32 of the header comment, UTF-8 comment).
 COMMENT_EXTRA_PAYLOAD = b"\x01" + struct.pack("<I", zlib.crc32(b"")) + b"ok"
 COMMENT_EXTRA = struct.pack(
     "<HH", 0x6375, len(COMMENT_EXTRA_PAYLOAD)) + COMMENT_EXTRA_PAYLOAD
 # An xattr-bearing subfield the normalizer must reject (machine state).
 XATTR_EXTRA = struct.pack("<HH", 0x5835, 3) + b"\x00" + b"p\x00"
+# 0x5455 "UT" extended timestamp (flags, mtime, atime), which would carry
+# the drifting atime.
+UT_EXTRA = struct.pack("<HHBII", 0x5455, 9, 3, MTIME, ATIME)
 # The other Unix ownership subfields, which carry the staging uid/gid and
 # must be rejected: 0x000d PKWARE Unix (atime mtime, 16-bit uid gid),
 # 0x756e ASi Unix (CRC-32, mode, sizdev, 16-bit uid gid), 0x7855 "Ux"
@@ -160,21 +164,18 @@ def _drifted_ux_central():
 
 INPUT_ENTRIES = [
     (b"pkg/", b"", _drifted_ux_local(), _drifted_ux_central()),
-    (b"pkg/readme.txt", README,
-     _drifted_ux_local() + COMMENT_EXTRA,
-     _drifted_ux_central() + COMMENT_EXTRA),
+    (b"pkg/readme.txt", README, _drifted_ux_local(), _drifted_ux_central()),
     (b"pkg/._readme.txt", SIDECAR, _drifted_ux_local(),
      _drifted_ux_central()),
 ]
 
 # What the normalizer must produce: the sidecar dropped, every atime word
 # aligned with the mtime word, every local uid/gid word zeroed, the
-# 0x6375 subfield and the archive comment untouched.
+# archive comment untouched.
 EXPECTED_ENTRIES = [
     (b"pkg/", b"", _ux([MTIME, MTIME, 0]), _ux([MTIME, MTIME])),
     (b"pkg/readme.txt", README,
-     _ux([MTIME, MTIME, 0]) + COMMENT_EXTRA,
-     _ux([MTIME, MTIME]) + COMMENT_EXTRA),
+     _ux([MTIME, MTIME, 0]), _ux([MTIME, MTIME])),
 ]
 
 
@@ -217,13 +218,6 @@ class NormalizeZipTestCase(unittest.TestCase):
             uid, gid = struct.unpack("<HH", struct.pack("<I",
                                                         local_words[0][2]))
             self.assertEqual((uid, gid), (0, 0))
-
-    def test_other_subfield_untouched(self):
-        proc = self._run()
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        entries = _archive_entries(self._read())
-        for extra in (entries[1][1], entries[1][2]):
-            self.assertIn((0x6375, COMMENT_EXTRA_PAYLOAD), _subfields(extra))
 
     def test_summary_line(self):
         proc = self._run()
@@ -269,6 +263,23 @@ class NormalizeZipTestCase(unittest.TestCase):
                              _drifted_ux_central(),
                              "unexpected 0x5835 (XAttr) subfield len=3")
 
+    def test_xattr_subfield_in_central_directory_is_refused(self):
+        self._assert_refused(_drifted_ux_local(),
+                             _drifted_ux_central() + XATTR_EXTRA,
+                             "unexpected 0x5835 (XAttr) subfield len=3")
+
+    def test_extended_timestamp_subfield_is_refused(self):
+        self._assert_refused(_drifted_ux_local() + UT_EXTRA,
+                             _drifted_ux_central(),
+                             "unexpected 0x5455 (extended timestamp) "
+                             "subfield len=9")
+
+    def test_unknown_subfield_is_refused(self):
+        self._assert_refused(_drifted_ux_local(),
+                             _drifted_ux_central() + COMMENT_EXTRA,
+                             "unexpected 0x6375 (not written by ditto) "
+                             "subfield len=7")
+
     def test_pkware_unix_subfield_is_refused(self):
         self._assert_refused(_drifted_ux_local() + PKWARE_UNIX_EXTRA,
                              _drifted_ux_central(),
@@ -311,6 +322,19 @@ class NormalizeZipTestCase(unittest.TestCase):
         self._assert_refused(_drifted_ux_local() + b"\x00\x00",
                              _drifted_ux_central(),
                              "2 trailing bytes in extra field")
+
+
+class SanityTestCase(unittest.TestCase):
+    def test_accepts_normalized_archive(self):
+        blob = _build(EXPECTED_ENTRIES, COMMENT)
+        self.assertEqual(normalize_zip.sanity(blob, "archive.zip"), 2)
+
+    def test_rejects_unnormalized_extra(self):
+        blob = _build(INPUT_ENTRIES, COMMENT)
+        with self.assertRaises(SystemExit) as raised:
+            normalize_zip.sanity(blob, "archive.zip")
+        self.assertIn("rebuilt archive: extra field not normalized",
+                      str(raised.exception))
 
 
 class WalkCentralTestCase(unittest.TestCase):
