@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
-bundle_id=net.projectflora.appauth-rust.ios-flow-smoke
+bundle_id=net.project-flora.appauth.ios-flow-smoke
 app_bundle="$repo_root/target/apple/ios-authorization-flow-smoke.app"
 executable=AppAuthRustIOSFlowSmoke
 generated="$repo_root/target/uniffi/swift"
