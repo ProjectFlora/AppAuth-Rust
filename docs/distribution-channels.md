@@ -261,7 +261,7 @@ Findings:
 The adopted channels are implemented in separate issues that reference this
 document:
 
-- **Publish the Android AAR to Maven Central** ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)) — Central Portal account and
+- **Publish the Android AAR to Maven Central** ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)) — planned for v0.6.0. Central Portal account and
   `com.projectflora` namespace registration (lead-time item), GPG key and
   signing setup, POM generation for the library module with the three
   transitive dependencies (jna as `aar` type, per Spike B), publication step
@@ -280,4 +280,4 @@ document:
   manifest against the archive, commits it as a release commit on top of the
   dispatched `main` commit, and creates the version tag there; the published
   release consumer workflow resolves the tag by URL (see
-  [Releasing](releasing.md)). Remaining: the first SPM release.
+  [Releasing](releasing.md)). The first SPM release is v0.5.0.

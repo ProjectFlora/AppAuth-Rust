@@ -176,9 +176,10 @@ The crate is not published on crates.io. Binary distribution uses versioned
 GitHub Releases on all platforms. The package-channel evaluation recorded in
 [docs/distribution-channels.md](docs/distribution-channels.md) (issue #44)
 adopts Maven Central for Android and Swift Package Manager for Apple, with the
-GitHub Release assets remaining the fallback channel; those channels are not
-published yet and are implemented in [#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)
-and [#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82). Carthage
+GitHub Release assets remaining the fallback channel. Swift Package Manager is
+available from v0.5.0 ([#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82));
+Maven Central publication is planned for v0.6.0
+([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)). Carthage
 was evaluated and declined. The published [v0.1.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.1.0) contains the
 Apple XCFramework, Android AAR, API reference, and checksums; it predates the
 Windows adapter. The published [v0.2.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.2.0) adds the Windows DLL/C ABI package with
@@ -186,7 +187,9 @@ C/C++ and .NET interop files. The published [v0.3.0 release](https://github.com/
 adds token revocation to the Rust, UniFFI, and Windows C ABI public-client
 APIs. The published [v0.4.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.4.0)
 adds token refresh and OIDC end-session to the Windows C ABI and .NET
-wrapper.
+wrapper. The published [v0.5.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.5.0)
+is the first release distributed through Swift Package Manager and makes the
+Apple release archive reproducible.
 The release workflow is dispatched manually with a SemVer version that matches
 the crate version. A run without `publish` validates and packages a release
 candidate. A `publish` run must be dispatched from `main`: it writes the Apple
@@ -196,24 +199,24 @@ checksums. See [Releasing](docs/releasing.md) for the maintainer procedure. Rele
 documented interoperability or support-policy gaps; see `CHANGELOG.md` and
 `ROADMAP.md`.
 
-## Download and verify v0.4.0
+## Download and verify v0.5.0
 
 The following versioned assets are available from GitHub Releases, independently
 of the temporary CI validation artifacts:
 
 | Asset | Download |
 | --- | --- |
-| Apple XCFramework and generated Swift API | [AppAuthRust-Apple-0.4.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/AppAuthRust-Apple-0.4.0.zip) |
-| Android AAR | [appauth-rust-android-0.4.0.aar](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/appauth-rust-android-0.4.0.aar) |
-| Windows DLL/C ABI and C++/.NET interop files | [appauth-rust-windows-0.4.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/appauth-rust-windows-0.4.0.zip) |
-| Rust API reference | [AppAuthRust-API-Docs-0.4.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/AppAuthRust-API-Docs-0.4.0.zip) |
-| SHA-256 checksums for all four assets | [SHA256SUMS](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/SHA256SUMS) |
+| Apple XCFramework and generated Swift API | [AppAuthRust-Apple-0.5.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/AppAuthRust-Apple-0.5.0.zip) |
+| Android AAR | [appauth-rust-android-0.5.0.aar](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/appauth-rust-android-0.5.0.aar) |
+| Windows DLL/C ABI and C++/.NET interop files | [appauth-rust-windows-0.5.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/appauth-rust-windows-0.5.0.zip) |
+| Rust API reference | [AppAuthRust-API-Docs-0.5.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/AppAuthRust-API-Docs-0.5.0.zip) |
+| SHA-256 checksums for all four assets | [SHA256SUMS](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/SHA256SUMS) |
 
 Download the desired asset and `SHA256SUMS` from the same release. For example,
 from the directory containing the Android AAR and checksum file:
 
 ```sh
-grep -F '  appauth-rust-android-0.4.0.aar' SHA256SUMS | shasum -a 256 -c -
+grep -F '  appauth-rust-android-0.5.0.aar' SHA256SUMS | shasum -a 256 -c -
 ```
 
 Use the exact downloaded asset name when verifying another package. GitHub
@@ -290,8 +293,8 @@ host-side smoke of the generated API, and builds for the iOS simulator.
 ## Apple binary package
 
 - Build a package for a specific version with
-  `scripts/package-apple-xcframework.sh 0.4.0`. It creates
-  `target/apple/release-package/AppAuthRust-Apple-0.4.0.zip`, containing an
+  `scripts/package-apple-xcframework.sh 0.5.0`. It creates
+  `target/apple/release-package/AppAuthRust-Apple-0.5.0.zip`, containing an
   `AppAuthRust.xcframework` with static Rust libraries for iOS device,
   iOS simulator, and universal macOS, the generated Swift API source, the
   platform adapters (the same sources the Swift package target compiles),
@@ -299,7 +302,7 @@ host-side smoke of the generated API, and builds for the iOS simulator.
   See [Swift XCFramework installation](docs/swift-xcframework.md).
   The CI `apple-xcframework` artifact is for validation and expires after
   14 days. Use the published Apple archive and `SHA256SUMS` linked in
-  [Download and verify v0.4.0](#download-and-verify-v040) for distribution.
+  [Download and verify v0.5.0](#download-and-verify-v050) for distribution.
 
 ## Apple Swift Package Manager (SPM)
 
@@ -428,15 +431,15 @@ binary target, which may not match its newer Swift sources.
   verifies both entries and uploads the AAR as a workflow artifact. The
   current output is
   `native/android/build/outputs/aar/appauth-rust-android-release.aar`.
-- Download `appauth-rust-android-0.4.0.aar` from the
-  [published release](#download-and-verify-v040), verify its checksum, and copy
+- Download `appauth-rust-android-0.5.0.aar` from the
+  [published release](#download-and-verify-v050), verify its checksum, and copy
   it into the Android app's `libs` directory.
   Because a raw AAR has no dependency metadata, also declare the runtime
   dependencies used by this module:
 
   ```kotlin
   dependencies {
-      implementation(files("libs/appauth-rust-android-0.4.0.aar"))
+      implementation(files("libs/appauth-rust-android-0.5.0.aar"))
       implementation("net.java.dev.jna:jna:5.12.0@aar")
       implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
       implementation("androidx.browser:browser:1.8.0")
@@ -513,9 +516,9 @@ binary target, which may not match its newer Swift sources.
   protocol implementation behind that API. Pin both the UniFFI runtime and
   binding generator to 0.32.2, matching the validated binding spike. Generate
   Swift and Kotlin bindings reproducibly; do not hand-edit generated files.
-- v0.4.0 publishes a versioned Apple XCFramework archive, Android AAR,
+- v0.5.0 publishes a versioned Apple XCFramework archive, Android AAR,
   Windows DLL/C ABI package, API reference, and `SHA256SUMS` as
-  [GitHub Release assets](#download-and-verify-v040). The
+  [GitHub Release assets](#download-and-verify-v050). The
   XCFramework contains the generated
   Swift API and Rust library for the documented Apple targets; the AAR contains
   the generated Kotlin API and Rust libraries for Android `arm64-v8a` and
