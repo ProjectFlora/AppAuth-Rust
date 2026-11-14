@@ -66,17 +66,23 @@ def die(path, message):
     raise SystemExit(f"{os.path.basename(path)}: {message}")
 
 
-def patch_ux(extra, slen_expected, path):
+def is_sidecar(name):
+    """True for an AppleDouble `._*` entry, which the rebuild drops."""
+    return name.split(b"/")[-1].startswith(b"._")
+
+
+def patch_ux(extra, local, path):
     """Normalize every 0x5855 subfield in place and count the words written.
 
-    slen_expected is the only shape accepted at this location: 8 in the
-    central directory (atime mtime), where the atime word is set to the
-    mtime word; 12 in a local header (atime mtime uid gid), where the
-    uid/gid word is also zeroed so the archive does not record the staging
-    machine's owner. Any other size, a subfield that overruns the extra
-    field, trailing bytes, and the subfields listed in REJECTED_TAGS are not
-    shapes this tool can interpret and are rejected.
+    Each location accepts one shape. In the central directory (local false)
+    it is 8 bytes, atime mtime: the atime word is set to the mtime word. In
+    a local header (local true) it is 12 bytes, atime mtime uid gid: do
+    that, and zero the uid/gid word so the archive does not record the
+    staging machine's owner. Any other size, a subfield that overruns the
+    extra field, trailing bytes, and the subfields listed in REJECTED_TAGS
+    are not shapes this tool can interpret and are rejected.
     """
+    slen_expected = 12 if local else 8
     rewritten = 0
     i = 0
     while i + 4 <= len(extra):
@@ -93,7 +99,7 @@ def patch_ux(extra, slen_expected, path):
                 if struct.unpack_from("<I", extra, off)[0] != mtime:
                     struct.pack_into("<I", extra, off, mtime)
                     rewritten += 1
-            if slen == 12 and struct.unpack_from("<I", extra, i + 12)[0] != 0:
+            if local and struct.unpack_from("<I", extra, i + 12)[0] != 0:
                 struct.pack_into("<I", extra, i + 12, 0)
                 rewritten += 1
         elif tag in REJECTED_TAGS:
@@ -146,23 +152,23 @@ def main():
     patched = 0
     dropped = 0
     for pos, fields, name in entries:
-        # Sidecars are dropped below, so their rewrites are not counted.
-        sidecar = name.split(b"/")[-1].startswith(b"._")
-        c_start = pos + 46 + fields[9]
-        c_extra = bytearray(data[c_start:c_start + fields[10]])
-        rewritten = patch_ux(c_extra, 8, path)
-        data[c_start:c_start + fields[10]] = c_extra
-
+        # Sidecars are dropped below, so their extra fields are neither
+        # normalized nor checked: nothing in them reaches the output.
+        sidecar = is_sidecar(name)
         lhref = fields[15]
         if data[lhref:lhref + 4] != LOCAL_MAGIC:
             die(path, f"lhref {lhref} is not a local file header")
         lfields = struct.unpack_from(LOCAL_FIELDS, data, lhref + 4)
         l_start = lhref + 30 + lfields[8]
-        l_extra = bytearray(data[l_start:l_start + lfields[9]])
-        rewritten += patch_ux(l_extra, 12, path)
-        data[l_start:l_start + lfields[9]] = l_extra
         if not sidecar:
-            patched += rewritten
+            c_start = pos + 46 + fields[9]
+            c_extra = bytearray(data[c_start:c_start + fields[10]])
+            patched += patch_ux(c_extra, False, path)
+            data[c_start:c_start + fields[10]] = c_extra
+
+            l_extra = bytearray(data[l_start:l_start + lfields[9]])
+            patched += patch_ux(l_extra, True, path)
+            data[l_start:l_start + lfields[9]] = l_extra
 
         body = data[l_start + lfields[9]:l_start + lfields[9] + fields[7]]
         if fields[3] == 0:
@@ -194,7 +200,7 @@ def main():
     total = len(entries)
     kept = 0
     for i, (pos, fields, name) in enumerate(entries):
-        if name.split(b"/")[-1].startswith(b"._"):
+        if is_sidecar(name):
             continue
         start = fields[15]
         end = entries[i + 1][1][15] if i + 1 < total else cd_off

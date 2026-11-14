@@ -26,7 +26,9 @@ policies are still evolving. Each release records its known limitations.
 - Stop recording the staging machine's owner in the Apple release archive:
   the zip normalizer zeros the local-header 0x5855 (Info-ZIP "UX") uid/gid
   word instead of overwriting it with the pinned mtime, which left a
-  meaningless uid/gid that a root `unzip` could chown extracted files to.
+  meaningless uid/gid derived from the timestamp. The word still records
+  an owner, now uid 0 / gid 0, which a root `unzip -X` restores
+  (#114).
   The normalizer now also rejects a 0x5855 subfield unless it is the 8-byte
   shape in the central directory or the 12-byte shape in a local header,
   rejects the other Unix ownership subfields (0x7855 "Ux" and 0x7875
@@ -34,8 +36,9 @@ policies are still evolving. Each release records its known limitations.
   fields whose subfields overrun or leave trailing bytes, and enforces the
   documented rejection of 0x5835 (XAttr) subfields that the code never
   implemented, so no extended attribute can reach the published archive.
-  The normalized-word count in its summary line no longer includes the
-  removed AppleDouble sidecars. The in-run determinism self-test is
+  The removed AppleDouble sidecars are no longer normalized or checked,
+  and the normalized-word count in its summary line no longer includes
+  them. The in-run determinism self-test is
   unchanged.
 - Parse the end-of-central-directory record once in the zip normalizer:
   the central directory walk returns the central directory offset, so the

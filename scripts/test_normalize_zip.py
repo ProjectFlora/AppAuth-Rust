@@ -225,6 +225,7 @@ class NormalizeZipTestCase(unittest.TestCase):
 
     def test_summary_line(self):
         proc = self._run()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn(
             "archive.zip: 3 entries, 1 AppleDouble sidecars removed, "
             "6 0x5855 words normalized",
@@ -275,6 +276,20 @@ class NormalizeZipTestCase(unittest.TestCase):
         self._assert_refused(_drifted_ux_local() + UX3_EXTRA,
                              _drifted_ux_central(),
                              "unexpected 0x7875 (Info-ZIP Unix ux) subfield")
+
+    def test_sidecar_extra_is_not_checked(self):
+        with open(self.path, "wb") as handle:
+            handle.write(_build(
+                [(b"pkg/f.txt", b"x", _drifted_ux_local(),
+                  _drifted_ux_central()),
+                 (b"pkg/._f.txt", SIDECAR, _drifted_ux_local() + XATTR_EXTRA,
+                  _drifted_ux_local())],
+                COMMENT))
+        proc = self._run()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(
+            [name for name, _, _ in _archive_entries(self._read())],
+            [b"pkg/f.txt"])
 
     def test_truncated_subfield_is_refused(self):
         self._assert_refused(_drifted_ux_local()[:-6], _drifted_ux_central(),
