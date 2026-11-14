@@ -188,8 +188,7 @@ adds token revocation to the Rust, UniFFI, and Windows C ABI public-client
 APIs. The published [v0.4.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.4.0)
 adds token refresh and OIDC end-session to the Windows C ABI and .NET
 wrapper. The published [v0.5.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.5.0)
-is the first release distributed through Swift Package Manager and makes the
-Apple release archive reproducible.
+is the first release distributed through Swift Package Manager.
 The release workflow is dispatched manually with a SemVer version that matches
 the crate version. A run without `publish` validates and packages a release
 candidate. A `publish` run must be dispatched from `main`: it writes the Apple
@@ -352,11 +351,13 @@ the checked-in Swift API and platform adapters alongside it, so there is no
 need to download the archive or copy its Swift sources into your project. Each
 release tag's `Package.swift` pins the archive URL and SHA-256 checksum, which
 the release pipeline writes into a release commit after building and
-validating the archive. The archive is built reproducibly — a self-test in
-the run requires two builds of it to be byte-identical — so the pinned
-checksum is exactly the asset SPM downloads and verifies. Depend on a released
-version rather than the `main` branch: `main` keeps the previous release's
-binary target, which may not match its newer Swift sources.
+validating the archive. The pinned checksum is computed from that same
+published asset, which SPM downloads and verifies; see
+[What the packaging self-test checks](docs/releasing.md#what-the-packaging-self-test-checks)
+for the scope of the packaging determinism check. Depend on a released
+version rather than the `main` branch: the release workflow never updates
+`main`'s `Package.swift`, so its binary target stays on an older release
+that may not match the newer Swift sources.
 
 ## Android adapter
 

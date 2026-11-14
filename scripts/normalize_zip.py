@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Normalize a ditto-produced zip for byte-level reproducibility.
+"""Normalize a ditto-produced zip for deterministic packaging.
 
 Usage: normalize_zip.py <archive.zip>
 

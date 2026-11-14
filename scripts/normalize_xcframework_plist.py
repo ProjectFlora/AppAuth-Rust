@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Canonicalize an xcframework's Info.plist for reproducible archives.
+"""Canonicalize an xcframework's Info.plist for deterministic packaging.
 
 xcodebuild -create-xcframework writes AvailableLibraries in an order that
 varies between runs (it follows its internal enumeration of the slices,
 not the -input order), so the same package yields a different plist — and
-therefore a different release archive — from run to run. The release
-checksum gate compares archive bytes, so rewrite the plist deterministically:
-the slice array is sorted by LibraryIdentifier and each slice's architecture
-list is sorted, after validating that the slice set is exactly the expected
-one.
+therefore a different release archive — from run to run. The packaging
+self-test in scripts/package-apple-xcframework.sh re-creates the framework
+and requires identical canonicalized plists, so rewrite the plist
+deterministically: the slice array is sorted by LibraryIdentifier and each
+slice's architecture list is sorted, after validating that the slice set is
+exactly the expected one.
 
 Usage: scripts/normalize_xcframework_plist.py <xcframework/Info.plist>
 """

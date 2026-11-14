@@ -89,10 +89,10 @@ xcodebuild -create-xcframework \
 # xcodebuild writes AvailableLibraries in a run-varying order (its internal
 # slice enumeration, not the input order), so the same package yields a
 # different Info.plist — and therefore a different release archive — from
-# run to run; the release checksum gate compares archive bytes. Create the
-# framework a second time, canonicalize both plists
+# run to run. The in-run determinism self-test below therefore creates the
+# framework a second time, canonicalizes both plists
 # (scripts/normalize_xcframework_plist.py: validate the slice set, sort the
-# array and each architecture list, rewrite in a fixed format), and require
+# array and each architecture list, rewrite in a fixed format), and requires
 # identical bytes before the archive embeds the framework.
 scratch_xcframework="$output_root/AppAuthRust-Apple-scratch.xcframework"
 xcodebuild -create-xcframework \
@@ -125,9 +125,13 @@ xcrun swiftc \
 "$repo_root/target/apple/mac-authorization-flow-smoke-static"
 scripts/check-ios-authorization-flow.sh
 
-# The release checksum gate rebuilds the archive from source and requires an
-# identical SHA-256, so the archive bytes must not depend on the build
-# machine. Three layers enforce that:
+# Keep the archive bytes free of build-time and file-state inputs that
+# `ditto` would otherwise record. The in-run self-test below zips the same
+# staged tree a second time and requires an identical SHA-256. It runs on
+# one machine in one job, so it checks only that this zip step repeats; it
+# cannot detect differences between machines or between staging passes
+# (see docs/releasing.md: "What the packaging self-test checks"). Three
+# layers remove those inputs:
 #
 # 1. Fixed timestamps. `ditto` records each file's modification time in the
 #    zip DOS time fields and as atime + mtime words in the 0x5855 (UT)
@@ -157,9 +161,8 @@ archive="$output_root/AppAuthRust-Apple-$version.zip"
 ditto -c -k --keepParent "$package_root" "$archive"
 python3 "$repo_root/scripts/normalize_zip.py" "$archive"
 
-# The release checksum gate rebuilds the archive and requires a matching
-# SHA-256. Prove this packaging step is deterministic by zipping the same
-# package a second time, normalizing both, and demanding identical hashes.
+# The in-run determinism self-test: zip the same staged tree a second time,
+# normalize both, and demand identical hashes. Staging is not repeated.
 # (The raw double-ditto hashes would differ: the first zip's read of the
 # tree advances file atimes, which the second zip records in the UT extra
 # field; the normalizer is what makes the comparison meaningful.)
@@ -170,7 +173,7 @@ first_hash=$(shasum -a 256 "$archive" | awk '{print $1}')
 second_hash=$(shasum -a 256 "$recheck" | awk '{print $1}')
 rm "$recheck"
 if [[ "$first_hash" != "$second_hash" ]]; then
-    echo "Apple release archive is not deterministic: $first_hash != $second_hash" >&2
+    echo "Apple release archive packaging is not deterministic: $first_hash != $second_hash" >&2
     exit 1
 fi
-echo "Apple release archive is deterministic ($first_hash)"
+echo "Apple release archive packaging is deterministic ($first_hash)"
