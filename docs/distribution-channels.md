@@ -71,7 +71,7 @@ properties of the current (2026) Central Portal:
 The main consumer win is dependency resolution: a hand-written or
 `maven-publish`-generated POM declares `jna` (as an AAR-typed dependency),
 `kotlinx-coroutines-android`, and `androidx.browser`, so a consumer writes a
-single `implementation("net.project-flora:appauth-rust-android:0.4.0")`
+single `implementation("net.project-flora:appauth-rust-android:<version>")`
 line and the transitive closure arrives automatically. Version pinning,
 upgrades, and overrides use ordinary Gradle mechanisms.
 
