@@ -71,38 +71,43 @@ xcrun lipo -create \
     target/x86_64-apple-darwin/release/libappauth_rust.a \
     -output "$macos_library"
 
+# The slice inputs are shared by both create-xcframework calls below; the
+# xcframework names derive from the libraries, so only -output differs.
+xcframework_args=(
+    -library target/aarch64-apple-ios/release/libappauth_rust.a
+    -headers "$headers"
+    -library target/aarch64-apple-ios-sim/release/libappauth_rust.a
+    -headers "$headers"
+    -library "$macos_library"
+    -headers "$headers"
+)
+
 xcodebuild -create-xcframework \
-    -library target/aarch64-apple-ios/release/libappauth_rust.a \
-    -headers "$headers" \
-    -library target/aarch64-apple-ios-sim/release/libappauth_rust.a \
-    -headers "$headers" \
-    -library "$macos_library" \
-    -headers "$headers" \
+    "${xcframework_args[@]}" \
     -output "$xcframework"
 
-python3 - "$xcframework/Info.plist" <<'PY'
-import plistlib
-import sys
+# xcodebuild writes AvailableLibraries in a run-varying order (its internal
+# slice enumeration, not the input order), so the same package yields a
+# different Info.plist — and therefore a different release archive — from
+# run to run; the release checksum gate compares archive bytes. Create the
+# framework a second time, canonicalize both plists
+# (scripts/normalize_xcframework_plist.py: validate the slice set, sort the
+# array and each architecture list, rewrite in a fixed format), and require
+# identical bytes before the archive embeds the framework.
+scratch_xcframework="$output_root/AppAuthRust-Apple-scratch.xcframework"
+xcodebuild -create-xcframework \
+    "${xcframework_args[@]}" \
+    -output "$scratch_xcframework"
 
-with open(sys.argv[1], "rb") as info_file:
-    libraries = plistlib.load(info_file)["AvailableLibraries"]
-
-actual = {
-    (
-        library["SupportedPlatform"],
-        library.get("SupportedPlatformVariant"),
-        tuple(sorted(library["SupportedArchitectures"])),
-    )
-    for library in libraries
-}
-expected = {
-    ("ios", None, ("arm64",)),
-    ("ios", "simulator", ("arm64",)),
-    ("macos", None, ("arm64", "x86_64")),
-}
-if actual != expected:
-    raise SystemExit(f"unexpected XCFramework slices: {actual!r}")
-PY
+python3 "$repo_root/scripts/normalize_xcframework_plist.py" \
+    "$xcframework/Info.plist"
+python3 "$repo_root/scripts/normalize_xcframework_plist.py" \
+    "$scratch_xcframework/Info.plist"
+if ! cmp -s "$xcframework/Info.plist" "$scratch_xcframework/Info.plist"; then
+    echo "XCFramework Info.plist is not stable across create-xcframework runs (run-varying order survived canonicalization)" >&2
+    exit 1
+fi
+rm -rf "$scratch_xcframework"
 
 xcrun swiftc \
     -parse-as-library \
@@ -120,6 +125,52 @@ xcrun swiftc \
 "$repo_root/target/apple/mac-authorization-flow-smoke-static"
 scripts/check-ios-authorization-flow.sh
 
-ditto -c -k --sequesterRsrc --keepParent \
-    "$package_root" \
-    "$output_root/AppAuthRust-Apple-$version.zip"
+# The release checksum gate rebuilds the archive from source and requires an
+# identical SHA-256, so the archive bytes must not depend on the build
+# machine. Three layers enforce that:
+#
+# 1. Fixed timestamps. `ditto` records each file's modification time in the
+#    zip DOS time fields and as atime + mtime words in the 0x5855 (UT)
+#    extra field; unpinned build outputs would carry their build time.
+#    `touch -t` pins both to 2026-01-01 00:00:00.
+# 2. Empty attribute sets. `xattr -cr` drops extended attributes so `ditto`
+#    does not embed build-machine metadata in the archive.
+# 3. Post-zip normalization (scripts/normalize_zip.py). Two things escape
+#    filesystem-level pinning. APFS advances atimes when `ditto` reads the
+#    tree, so the UT atime word drifts between zips even though the files
+#    were pinned; the normalizer rewrites every 0x5855 word to the pinned
+#    mtime word. And the `com.apple.provenance` attribute cannot be removed
+#    (`xattr -d` is a silent no-op), so `ditto` always emits a constant
+#    `._*` AppleDouble sidecar per entry; the normalizer strips them.
+#    `--sequesterRsrc` is deliberately omitted: the `__MACOSX/` shadow tree
+#    it creates inside the archive is stamped with the zip run time.
+#
+# The timezone is fixed for the metadata and zip steps: `touch -t` interprets
+# the pin in the local timezone and `ditto` derives the DOS time fields from
+# it, so the same wall-clock pin would otherwise yield different archive
+# bytes on machines in different time zones.
+export TZ=UTC
+xattr -cr "$package_root"
+find "$package_root" -print0 | xargs -0 touch -t 202601010000.00
+
+archive="$output_root/AppAuthRust-Apple-$version.zip"
+ditto -c -k --keepParent "$package_root" "$archive"
+python3 "$repo_root/scripts/normalize_zip.py" "$archive"
+
+# The release checksum gate rebuilds the archive and requires a matching
+# SHA-256. Prove this packaging step is deterministic by zipping the same
+# package a second time, normalizing both, and demanding identical hashes.
+# (The raw double-ditto hashes would differ: the first zip's read of the
+# tree advances file atimes, which the second zip records in the UT extra
+# field; the normalizer is what makes the comparison meaningful.)
+recheck="$output_root/AppAuthRust-Apple-$version-determinism.zip"
+ditto -c -k --keepParent "$package_root" "$recheck"
+python3 "$repo_root/scripts/normalize_zip.py" "$recheck"
+first_hash=$(shasum -a 256 "$archive" | awk '{print $1}')
+second_hash=$(shasum -a 256 "$recheck" | awk '{print $1}')
+rm "$recheck"
+if [[ "$first_hash" != "$second_hash" ]]; then
+    echo "Apple release archive is not deterministic: $first_hash != $second_hash" >&2
+    exit 1
+fi
+echo "Apple release archive is deterministic ($first_hash)"
