@@ -42,6 +42,8 @@ EOCD_MAGIC = b"PK" + bytes((5, 6))
 UNIX_EXTRA = struct.pack(
     "<HH", 0x6375, 8) + struct.pack(
     "<HHHH", STAGING_UID, STAGING_GID, 0, 0)
+# An xattr-bearing subfield the normalizer must reject (machine state).
+XATTR_EXTRA = struct.pack("<HH", 0x5835, 5) + b"\x00" + b"p\x00"
 COMMENT = b"determinism-fixture"
 
 README = b"AppAuth-Rust packaging fixture\n"
@@ -246,6 +248,19 @@ class NormalizeZipTestCase(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("unexpected 0x5855 subfield shape len=16",
                       proc.stderr)
+        self.assertEqual(self._read(), before)
+
+    def test_xattr_subfield_is_refused(self):
+        with open(self.path, "wb") as handle:
+            handle.write(_build(
+                [(b"pkg/f.txt", b"x",
+                  _drifted_ut_local() + XATTR_EXTRA,
+                  _drifted_ut_central())],
+                COMMENT))
+        before = self._read()
+        proc = self._run()
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("unexpected 0x5835 (XAttr) subfield", proc.stderr)
         self.assertEqual(self._read(), before)
 
 

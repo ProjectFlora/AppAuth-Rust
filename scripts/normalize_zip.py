@@ -79,6 +79,8 @@ def patch_ut(extra, path):
             if slen == 12 and struct.unpack_from("<I", extra, i + 12)[0] != 0:
                 struct.pack_into("<I", extra, i + 12, 0)
                 rewritten += 1
+        elif tag == 0x5835:
+            die(path, f"unexpected 0x5835 (XAttr) subfield len={slen}")
         i += 4 + slen
     return rewritten
 

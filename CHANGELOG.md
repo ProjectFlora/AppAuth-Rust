@@ -28,8 +28,10 @@ policies are still evolving. Each release records its known limitations.
   instead of overwriting it with the pinned mtime, which left a
   meaningless uid/gid that a root `unzip` could chown extracted files to.
   The normalizer now also rejects 0x5855 subfields that are neither the
-  8-byte central nor the 12-byte local shape, and the in-run determinism
-  self-test is unchanged.
+  8-byte central nor the 12-byte local shape, and enforces the documented
+  rejection of 0x5835 (XAttr) subfields that the code never implemented,
+  so no extended attribute can reach the published archive. The in-run
+  determinism self-test is unchanged.
 - Parse the end-of-central-directory record once in the zip normalizer:
   the central directory walk returns the central directory offset, so the
   main path no longer rescans the archive for it. The normalized archive
