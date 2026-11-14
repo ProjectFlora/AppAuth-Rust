@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>AppAuthRustIOSFlowSmoke</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.projectflora.appauth-rust.ios-flow-smoke</string>
+	<string>net.projectflora.appauth-rust.ios-flow-smoke</string>
 	<key>CFBundleName</key>
 	<string>AppAuthRustIOSFlowSmoke</string>
 	<key>CFBundlePackageType</key>
