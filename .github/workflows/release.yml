@@ -1,16 +1,24 @@
 name: Release
 
+# Releases are dispatched from main. A run without `publish` validates and
+# packages a release candidate. With `publish`, the workflow also writes the
+# Apple archive's URL and SHA-256 checksum into Package.swift, commits that as
+# a release commit on top of the dispatched main commit, tags it, and
+# publishes the GitHub Release. The checksum is only known after the archive
+# is built, so the tag is created here rather than pushed beforehand.
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: Release candidate version to validate
+        description: Release version (MAJOR.MINOR.PATCH)
         required: true
-        default: 0.4.0
+        default: 0.5.0
         type: string
+      publish:
+        description: Create the release commit, tag and GitHub Release
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -27,33 +35,35 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - id: version
-        name: Match SemVer tag to Cargo package version
+        name: Match SemVer release version to Cargo package version
         env:
           RELEASE_VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            version="$RELEASE_VERSION"
-            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Release candidate versions must use MAJOR.MINOR.PATCH" >&2
-              exit 1
-            fi
-          else
-            tag="$GITHUB_REF_NAME"
-            if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Release tags must use vMAJOR.MINOR.PATCH" >&2
-              exit 1
-            fi
-            version="${tag#v}"
+          version="$RELEASE_VERSION"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release versions must use MAJOR.MINOR.PATCH" >&2
+            exit 1
           fi
           git fetch origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "Release tags must point to a commit on main" >&2
+            echo "Releases must be built from a commit on main" >&2
             exit 1
+          fi
+          if [[ "$PUBLISH" == "true" ]]; then
+            if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+              echo "Publishing releases must be dispatched from main" >&2
+              exit 1
+            fi
+            if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+              echo "Tag v$version already exists" >&2
+              exit 1
+            fi
           fi
           package_version=$(cargo metadata --locked --no-deps --format-version 1 |
             jq -r '.packages[] | select(.name == "appauth-rust") | .version')
           if [[ "$version" != "$package_version" ]]; then
-            echo "Tag version $version does not match Cargo package version $package_version" >&2
+            echo "Release version $version does not match Cargo package version $package_version" >&2
             exit 1
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
@@ -239,10 +249,42 @@ jobs:
       - shell: pwsh
         run: scripts/check-windows-release-consumer.ps1 -Package dist/appauth-rust-windows-${{ needs.validate_version.outputs.version }}.zip
 
+  spm_manifest:
+    name: Prepare and validate release Package.swift
+    needs: [validate_version, apple]
+    runs-on: macos-15
+    env:
+      RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apple
+          path: dist
+      - name: Point Package.swift at the release archive
+        run: |
+          archive="dist/AppAuthRust-Apple-$RELEASE_VERSION.zip"
+          checksum=$(swift package compute-checksum "$archive")
+          python3 scripts/update-package-swift.py \
+            --repository "$GITHUB_REPOSITORY" "$RELEASE_VERSION" "$checksum"
+          # The release commit may change nothing but Package.swift.
+          git diff --exit-code --stat -- . ':(exclude)Package.swift'
+          grep -F "url: \"https://github.com/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION/AppAuthRust-Apple-$RELEASE_VERSION.zip\"," Package.swift
+          grep -F "checksum: \"$checksum\"" Package.swift
+          git diff -- Package.swift
+      # Build and test the rewritten manifest against the archive (the check
+      # swaps only the binary target's url/checksum for the local path).
+      - run: scripts/check-spm-package.sh "dist/AppAuthRust-Apple-$RELEASE_VERSION.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-package-swift
+          path: Package.swift
+          if-no-files-found: error
+
   publish:
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ inputs.publish }}
     name: Publish GitHub Release
-    needs: [validate_version, apple, android, api_docs, windows, apple_consumer, android_consumer, windows_consumer]
+    needs: [validate_version, apple, android, api_docs, windows, apple_consumer, android_consumer, windows_consumer, spm_manifest]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -266,33 +308,43 @@ jobs:
         with:
           name: release-windows
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-package-swift
+          path: release-manifest
+      - name: Create release commit and tag
+        env:
+          RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp release-manifest/Package.swift Package.swift
+          git commit -m "release: v$RELEASE_VERSION" -- Package.swift
+          if [[ "$(git diff --name-only HEAD~1 HEAD)" != Package.swift ]]; then
+            echo "The release commit must change only Package.swift" >&2
+            exit 1
+          fi
+          git tag -a "v$RELEASE_VERSION" -m "AppAuth-Rust v$RELEASE_VERSION"
+          # Push only the tag; main keeps the previous release's manifest.
+          git push origin "refs/tags/v$RELEASE_VERSION"
       - name: Generate checksums and publish assets
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
         run: |
           cd dist
-          # Checksums for all artifacts
           shasum -a 256 \
             "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
             "appauth-rust-android-$RELEASE_VERSION.aar" \
             "appauth-rust-windows-$RELEASE_VERSION.zip" \
             "AppAuthRust-API-Docs-$RELEASE_VERSION.zip" \
             > SHA256SUMS
-
-          # Get the checksum for the Apple binary
-          APP_CHECKSUM=$(grep "AppAuthRust-Apple-$RELEASE_VERSION.zip" SHA256SUMS | awk '{print $1}')
-          
-          # Update Package.swift
-          python3 ../scripts/update-package-swift.py $RELEASE_VERSION $APP_CHECKSUM
-
-          # Publish to GitHub Release
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "v$RELEASE_VERSION" \
             "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
             "appauth-rust-android-$RELEASE_VERSION.aar" \
             "appauth-rust-windows-$RELEASE_VERSION.zip" \
             "AppAuthRust-API-Docs-$RELEASE_VERSION.zip" \
             SHA256SUMS \
             --verify-tag \
-            --title "AppAuth-Rust $GITHUB_REF_NAME" \
+            --title "AppAuth-Rust v$RELEASE_VERSION" \
             --generate-notes

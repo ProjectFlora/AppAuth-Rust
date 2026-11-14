@@ -1,54 +1,59 @@
 #!/usr/bin/env python3
-import sys
-import os
+"""Point Package.swift's AppAuthRustBinary target at a published release archive.
+
+The release workflow runs this after building and validating the Apple
+archive, then commits the result as the release commit that the version tag
+points to, so the tagged manifest carries the archive's URL and checksum.
+
+Usage: update-package-swift.py --repository OWNER/NAME [--manifest PATH] VERSION CHECKSUM
+"""
+import argparse
+import pathlib
 import re
+import sys
 
-def update_package_swift(version, app_checksum):
-    package_file = "Package.swift"
-    if not os.path.exists(package_file):
-        print(f"Error: {package_file} not found.")
-        sys.exit(1)
+BINARY_TARGET = re.compile(
+    r'(\.binaryTarget\(\s*name:\s*"AppAuthRustBinary",\s*url:\s*")[^"]+'
+    r'("\s*,\s*checksum:\s*")[0-9a-f]+(")'
+)
 
-    with open(package_file, "r") as f:
-        content = f.read()
 
-    # Ensure version starts with 'v' for the URL part
-    # But we might want to keep it as is for other parts if needed.
-    # The current Package.swift uses v0.4.0 in the URL.
-    url_version = version if version.startswith("v") else f"v{version}"
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--manifest",
+        type=pathlib.Path,
+        default=pathlib.Path(__file__).resolve().parent.parent / "Package.swift",
+    )
+    parser.add_argument("--repository", required=True, help="OWNER/NAME")
+    parser.add_argument("version", help="MAJOR.MINOR.PATCH (no leading v)")
+    parser.add_argument("checksum", help="SHA-256 of the Apple release archive")
+    args = parser.parse_args()
 
-    # We want to find the binaryTarget block and update its url and checksum.
-    # The structure is:
-    #         .binaryTarget(
-    #             name: "AppAuthRustBinary",
-    #             url: "...",
-    #             checksum: "..."
-    #         ),
-    
-    # We'll use a regex to find the block of AppAuthRustBinary
-    # and replace the url and checksum lines within it.
-    
-    # Pattern to find the binaryTarget block for "AppAuthRustBinary"
-    # This regex looks for .binaryTarget( ... ) where name: "AppAuthRustBinary" is present
-    pattern = r'\.binaryTarget\(\s*name: "AppAuthRustBinary",\s*url: ".*?",\s*checksum: ".*?"\s*\)'
-    
-    def replace_block(match):
-        block = match.group(0)
-        # Replace URL
-        block = re.sub(r'url: ".*?",', f'url: "https://github.com/ProjectFlora/AppAuth-Rust/releases/download/{url_version}/AppAuthRust-Apple-{url_version}.zip",', block)
-        # Replace Checksum
-        block = re.sub(r'checksum: ".*?"', f'checksum: "{app_checksum}"', block)
-        return block
+    if not re.fullmatch(r"\d+\.\d+\.\d+", args.version):
+        sys.exit(f"invalid version: {args.version!r}")
+    if not re.fullmatch(r"[0-9a-f]{64}", args.checksum):
+        sys.exit(f"invalid SHA-256 checksum: {args.checksum!r}")
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", args.repository):
+        sys.exit(f"invalid repository: {args.repository!r}")
 
-    new_content = re.sub(pattern, replace_block, content, flags=re.DOTALL)
+    url = (
+        f"https://github.com/{args.repository}/releases/download/"
+        f"v{args.version}/AppAuthRust-Apple-{args.version}.zip"
+    )
+    content = args.manifest.read_text(encoding="utf-8")
+    updated, count = BINARY_TARGET.subn(
+        lambda m: f"{m[1]}{url}{m[2]}{args.checksum}{m[3]}", content
+    )
+    if count != 1:
+        sys.exit(
+            f"expected one AppAuthRustBinary target in {args.manifest}, found {count}"
+        )
 
-    with open(package_file, "w") as f:
-        f.write(new_content)
-    print(f"Successfully updated {package_file}")
+    args.manifest.write_text(updated, encoding="utf-8")
+    print(f"{args.manifest}: {url} ({args.checksum})")
+    return 0
+
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: update_package_swift.py <version> <checksum>")
-        sys.exit(1)
-    
-    update_package_swift(sys.argv[1], sys.argv[2])
+    sys.exit(main())
