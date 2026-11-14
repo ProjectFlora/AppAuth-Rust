@@ -120,14 +120,10 @@ def _build(entries, comment):
 
 
 def _subfields(extra):
-    """Return the (tag, payload) pairs of every extra subfield."""
-    fields = []
-    i = 0
-    while i + 4 <= len(extra):
-        tag, slen = struct.unpack_from("<HH", extra, i)
-        fields.append((tag, bytes(extra[i + 4:i + 4 + slen])))
-        i += 4 + slen
-    return fields
+    """Return the (tag, payload) pairs of every extra subfield, rejecting a
+    malformed extra field the way the normalizer does."""
+    return [(tag, bytes(extra[i + 4:i + 4 + slen]))
+            for i, tag, slen in normalize_zip.subfields(extra, "archive.zip")]
 
 
 def _ux_words(extra):

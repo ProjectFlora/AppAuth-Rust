@@ -73,6 +73,24 @@ def is_sidecar(name):
     return name.split(b"/")[-1].startswith(b"._")
 
 
+def subfields(extra, path):
+    """Yield (offset, tag, slen) for each extra subfield, in order.
+
+    A subfield that overruns the extra field, and trailing bytes too short
+    to be a subfield header, are rejected.
+    """
+    i = 0
+    while i + 4 <= len(extra):
+        tag, slen = struct.unpack_from("<HH", extra, i)
+        if i + 4 + slen > len(extra):
+            die(path, f"extra subfield 0x{tag:04x} len={slen} overruns "
+                      f"the extra field")
+        yield i, tag, slen
+        i += 4 + slen
+    if i != len(extra):
+        die(path, f"{len(extra) - i} trailing bytes in extra field")
+
+
 def patch_ux(extra, local, path):
     """Normalize every 0x5855 subfield in place and count the words written.
 
@@ -86,12 +104,7 @@ def patch_ux(extra, local, path):
     """
     slen_expected = 12 if local else 8
     rewritten = 0
-    i = 0
-    while i + 4 <= len(extra):
-        tag, slen = struct.unpack_from("<HH", extra, i)
-        if i + 4 + slen > len(extra):
-            die(path, f"extra subfield 0x{tag:04x} len={slen} overruns "
-                      f"the extra field")
+    for i, tag, slen in subfields(extra, path):
         if tag == 0x5855:
             if slen != slen_expected:
                 die(path, f"unexpected 0x5855 subfield shape len={slen}")
@@ -107,9 +120,6 @@ def patch_ux(extra, local, path):
         elif tag in REJECTED_TAGS:
             die(path, f"unexpected 0x{tag:04x} ({REJECTED_TAGS[tag]}) "
                       f"subfield len={slen}")
-        i += 4 + slen
-    if i != len(extra):
-        die(path, f"{len(extra) - i} trailing bytes in extra field")
     return rewritten
 
 
@@ -151,12 +161,11 @@ def main():
         data = bytearray(fh.read())
 
     entries, comment, cd_off = walk_central(data, path)
+    # Sidecars are dropped by the rebuild, so their extra fields are
+    # neither normalized nor checked: nothing in them reaches the output.
+    drop = [is_sidecar(name) for _, _, name in entries]
     patched = 0
-    dropped = 0
-    for pos, fields, name in entries:
-        # Sidecars are dropped below, so their extra fields are neither
-        # normalized nor checked: nothing in them reaches the output.
-        sidecar = is_sidecar(name)
+    for (pos, fields, name), sidecar in zip(entries, drop):
         lhref = fields[15]
         if data[lhref:lhref + 4] != LOCAL_MAGIC:
             die(path, f"lhref {lhref} is not a local file header")
@@ -190,8 +199,6 @@ def main():
 
         if b"__MACOSX/" in name:
             die(path, f"unexpected __MACOSX entry {name!r}")
-        if sidecar:
-            dropped += 1
 
     # Rebuild the archive from the kept entries. Each entry's raw region is
     # bounded by the *next entry in the full list* (kept or dropped), so a
@@ -202,7 +209,7 @@ def main():
     total = len(entries)
     kept = 0
     for i, (pos, fields, name) in enumerate(entries):
-        if is_sidecar(name):
+        if drop[i]:
             continue
         start = fields[15]
         end = entries[i + 1][1][15] if i + 1 < total else cd_off
@@ -231,7 +238,7 @@ def main():
         fh.write(out)
     os.replace(tmp, path)
     print(f"{os.path.basename(path)}: {len(entries)} entries, "
-          f"{dropped} AppleDouble sidecars removed, "
+          f"{sum(drop)} AppleDouble sidecars removed, "
           f"{patched} 0x5855 words normalized")
 
 
