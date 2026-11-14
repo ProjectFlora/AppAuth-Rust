@@ -26,8 +26,8 @@ policies are still evolving. Each release records its known limitations.
 - Replace the staging machine's owner in the Apple release archive with
   uid 0 / gid 0: the zip normalizer zeros the local-header 0x5855
   (Info-ZIP "UX") uid/gid word instead of overwriting it with the pinned
-  mtime, which left a meaningless uid/gid derived from the timestamp. The word still records
-  an owner, now uid 0 / gid 0, which a root `unzip -X` restores (#114).
+  mtime, which left a meaningless uid/gid derived from the timestamp. A
+  root `unzip -X` still restores the 0/0 owner (#114).
   The normalizer now accepts only the extra subfield `ditto` writes, a
   0x5855 subfield of 8 bytes in the central directory or 12 bytes in a
   local header, and rejects every other subfield: no owner (such as 0x7855
