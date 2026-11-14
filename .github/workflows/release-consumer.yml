@@ -97,7 +97,7 @@ jobs:
                   // The same host-side smoke the in-tree package runs in its
                   // tests: exercise the generated API through the binary
                   // target's FFI module, with no network activity.
-                  let stateJson = #"{\"token_response\":{\"access_token\":\"old\",\"token_type\":\"Bearer\",\"refresh_token\":\"refresh\"}}"#
+                  let stateJson = #"{"token_response":{"access_token":"old","token_type":"Bearer","refresh_token":"refresh"}}"#
                   let state = try FfiAuthenticationState.fromJson(serialized: stateJson)
                   let serialized = try await state.toJson()
                   let restored = try FfiAuthenticationState.fromJson(serialized: serialized)
