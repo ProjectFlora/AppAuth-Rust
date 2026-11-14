@@ -272,12 +272,21 @@ jobs:
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
         run: |
           cd dist
+          # Checksums for all artifacts
           shasum -a 256 \
             "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
             "appauth-rust-android-$RELEASE_VERSION.aar" \
             "appauth-rust-windows-$RELEASE_VERSION.zip" \
             "AppAuthRust-API-Docs-$RELEASE_VERSION.zip" \
             > SHA256SUMS
+
+          # Get the checksum for the Apple binary
+          APP_CHECKSUM=$(grep "AppAuthRust-Apple-$RELEASE_VERSION.zip" SHA256SUMS | awk '{print $1}')
+          
+          # Update Package.swift
+          python3 ../scripts/update-package-swift.py $RELEASE_VERSION $APP_CHECKSUM
+
+          # Publish to GitHub Release
           gh release create "$GITHUB_REF_NAME" \
             "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
             "appauth-rust-android-$RELEASE_VERSION.aar" \

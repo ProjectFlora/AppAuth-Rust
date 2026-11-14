@@ -337,6 +337,20 @@ and Swift source steps in
 [Swift XCFramework installation](docs/swift-xcframework.md); its callback
 configuration still applies.
 
+### Advantages of using SPM
+By using SPM, the library automatically handles the inclusion of the
+Swift API and platform adapters. This eliminates the need to manually
+check in or copy generated source files into the repository, ensuring that
+the distributed package always matches the latest released binary. This
+approach avoids "double management" of versioned artifacts and source code,
+as the `Package.swift` is dynamically updated during the release process to
+point to the correct SHA-256 checksum of the published archive.
+
+By using SPM, the library automatically handles the inclusion of the
+Swift API and platform adapters. This eliminates the need to manually
+check in or copy generated source files into the repository, ensuring that
+the distributed package always matches the latest released binary.
+
 ## Android adapter
 
 - `native/android` launches authorization in a Custom Tab. It uses the HTTPS
