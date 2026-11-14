@@ -24,11 +24,12 @@ permissions:
   contents: read
 
 concurrency:
-  # Two dispatch runs of the same version must not race: the first one to
-  # publish pushes the version tag, and a racing second run would fail at
-  # the tag push only after a full rebuild. Serialize runs of the same
-  # version; a publish dispatched behind a candidate run waits for it
-  # rather than colliding.
+  # Serialize runs of the same version so that only one publishes.
+  # cancel-in-progress: false protects the first run to start executing, but
+  # a second dispatch while the first is still pending will cancel it: at most
+  # one run can be pending or running per version. Avoid dispatching multiple
+  # runs of the same version concurrently; if a publish is queued behind a
+  # candidate, another dispatch will cancel the pending one.
   group: release-${{ inputs.version }}
   cancel-in-progress: false
 
