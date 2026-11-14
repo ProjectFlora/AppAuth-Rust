@@ -5,13 +5,16 @@ Usage: normalize_zip.py <archive.zip>
 
 Applied in-place to the release archive after `ditto -c -k --keepParent`:
 
-1. Rewrite every word of every 0x5855 (UT) extra subfield to the word-2
-   value (the pinned mtime) in both the local file headers and the central
-   directory. APFS can advance atimes while ditto reads the tree (cache-
-   and size-dependent), and ditto records the atime here; making every word
-   equal the pinned mtime renders the archive independent of atime drift.
-   Word 2 is trusted because `touch -t` pins mtime and reading never moves
-   it.
+1. Normalize every 0x5855 (UT) extra subfield in both the local file
+   headers and the central directory. The central shape is 8 bytes
+   (atime mtime); the local shape is 12 bytes (atime mtime uid gid).
+   APFS can advance atimes while ditto reads the tree (cache- and
+   size-dependent), and ditto records the atime here; setting the atime
+   word to the mtime word renders the archive independent of atime drift.
+   The mtime word is trusted because `touch -t` pins mtime and reading
+   never moves it. The local uid/gid word is zeroed: the staging user is
+   a machine-state input whose values must not reach the published
+   archive.
 
 2. Remove AppleDouble `._*` sidecar entries. The com.apple.provenance xattr
    cannot be removed, so ditto emits a constant sidecar for every entry; the
@@ -52,20 +55,30 @@ def die(path, message):
 
 
 def patch_ut(extra, path):
-    """Set every word of every 0x5855 subfield to the word-2 value."""
+    """Normalize every 0x5855 subfield in place and count the words written.
+
+    The 8-byte shape (central directory) is atime mtime: the atime word is
+    set to the mtime word. The 12-byte shape (local header) is atime mtime
+    uid gid: do that, and zero the uid/gid word so the archive does not
+    record the staging machine's owner. Any other size is not a shape this
+    tool can interpret and is rejected.
+    """
     rewritten = 0
     i = 0
     while i + 4 <= len(extra):
         tag, slen = struct.unpack_from("<HH", extra, i)
         if tag == 0x5855:
-            if slen < 8 or slen % 4:
+            if slen not in (8, 12):
                 die(path, f"unexpected 0x5855 subfield shape len={slen}")
-            target = struct.unpack_from("<I", extra, i + 8)[0]
-            for w in range(slen // 4):
+            mtime = struct.unpack_from("<I", extra, i + 8)[0]
+            for w in range(2):
                 off = i + 4 + 4 * w
-                if struct.unpack_from("<I", extra, off)[0] != target:
-                    struct.pack_into("<I", extra, off, target)
+                if struct.unpack_from("<I", extra, off)[0] != mtime:
+                    struct.pack_into("<I", extra, off, mtime)
                     rewritten += 1
+            if slen == 12 and struct.unpack_from("<I", extra, i + 12)[0] != 0:
+                struct.pack_into("<I", extra, i + 12, 0)
+                rewritten += 1
         i += 4 + slen
     return rewritten
 
@@ -91,11 +104,11 @@ def walk_central(blob, path):
     if pos != eocd:
         die(path, "central directory walk does not end at EOCD")
     comment = bytes(blob[eocd + 22:])
-    return entries, comment
+    return entries, comment, cd_off
 
 
 def sanity(blob, path):
-    entries, _ = walk_central(bytes(blob), path)
+    entries, _, _ = walk_central(bytes(blob), path)
     for _, fields, name in entries:
         if blob[fields[15]:fields[15] + 4] != LOCAL_MAGIC:
             die(path, f"rebuilt archive: lhref invalid for {name!r}")
@@ -107,10 +120,7 @@ def main():
     with open(path, "rb") as fh:
         data = bytearray(fh.read())
 
-    entries, comment = walk_central(data, path)
-    cd_off = struct.unpack_from(
-        "<I", data[data.rfind(EOCD_MAGIC) + 16:
-                   data.rfind(EOCD_MAGIC) + 20])[0]
+    entries, comment, cd_off = walk_central(data, path)
     patched = 0
     dropped = 0
     for pos, fields, name in entries:
@@ -188,7 +198,7 @@ def main():
     os.replace(tmp, path)
     print(f"{os.path.basename(path)}: {len(entries)} entries, "
           f"{dropped} AppleDouble sidecars removed, "
-          f"{patched} 0x5855 timestamp words normalized")
+          f"{patched} 0x5855 words normalized")
 
 
 if __name__ == "__main__":

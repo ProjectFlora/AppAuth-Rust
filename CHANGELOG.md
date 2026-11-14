@@ -21,6 +21,20 @@ policies are still evolving. Each release records its known limitations.
   target last committed to it by hand, not the previous release's. See
   [Releasing](docs/releasing.md#what-the-packaging-self-test-checks).
 
+### Changed
+
+- Stop recording the staging machine's owner in the Apple release archive:
+  the zip normalizer zeros the local-header 0x5855 (UT) uid/gid word
+  instead of overwriting it with the pinned mtime, which left a
+  meaningless uid/gid that a root `unzip` could chown extracted files to.
+  The normalizer now also rejects 0x5855 subfields that are neither the
+  8-byte central nor the 12-byte local shape, and the in-run determinism
+  self-test is unchanged.
+- Parse the end-of-central-directory record once in the zip normalizer:
+  the central directory walk returns the central directory offset, so the
+  main path no longer rescans the archive for it. The normalized archive
+  bytes are unchanged.
+
 ## [0.5.0] - 2026-11-14
 
 ### Security

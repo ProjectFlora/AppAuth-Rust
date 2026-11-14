@@ -139,13 +139,16 @@ scripts/check-ios-authorization-flow.sh
 #    `touch -t` pins both to 2026-01-01 00:00:00.
 # 2. Empty attribute sets. `xattr -cr` drops extended attributes so `ditto`
 #    does not embed build-machine metadata in the archive.
-# 3. Post-zip normalization (scripts/normalize_zip.py). Two things escape
+# 3. Post-zip normalization (scripts/normalize_zip.py). Three things escape
 #    filesystem-level pinning. APFS advances atimes when `ditto` reads the
 #    tree, so the UT atime word drifts between zips even though the files
-#    were pinned; the normalizer rewrites every 0x5855 word to the pinned
-#    mtime word. And the `com.apple.provenance` attribute cannot be removed
-#    (`xattr -d` is a silent no-op), so `ditto` always emits a constant
-#    `._*` AppleDouble sidecar per entry; the normalizer strips them.
+#    were pinned; the normalizer aligns every UT atime word with the pinned
+#    mtime word. The local-header UT field also records the staging user's
+#    uid/gid; the normalizer zeros it so the archive bytes do not depend on
+#    who ran the packaging. And the `com.apple.provenance` attribute cannot
+#    be removed (`xattr -d` is a silent no-op), so `ditto` always emits a
+#    constant `._*` AppleDouble sidecar per entry; the normalizer strips
+#    them.
 #    `--sequesterRsrc` is deliberately omitted: the `__MACOSX/` shadow tree
 #    it creates inside the archive is stamped with the zip run time.
 #
