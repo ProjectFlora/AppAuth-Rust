@@ -103,8 +103,8 @@ and then tags a release commit that carries it:
 
 ```text
 main ── A ── B            (B: dispatched commit)
-              \
-               R          release: vX.Y.Z  (Package.swift only)  ← tag vX.Y.Z
+               \
+                R          release: vX.Y.Z  (Package.swift only)  ← tag vX.Y.Z
 ```
 
 The release commit is reachable only from its tag; the workflow never
@@ -145,20 +145,22 @@ is published.
 
 - **Failed before "Create release commit and tag"**: nothing was published.
   Fix the cause and dispatch the workflow again.
+
 - **Tag pushed, but the GitHub Release was not created**: SPM cannot resolve
   the tag yet because its binary asset does not exist. Delete the tag, then
   use **Re-run failed jobs** so that the same built artifacts are reused:
 
-  ```sh
-  git push origin :refs/tags/vX.Y.Z
-  ```
+```sh
+git push origin :refs/tags/vX.Y.Z
+```
 
-- **Release published with a problem**: do not move or recreate the tag or
-  replace its assets. Consumers may already have resolved it, and SPM caches
-  the checksum. Fix forward with a new patch version.
+- **Release published with a problem**: do not move or recreate the tag or replace its assets. Consumers may already have resolved it, and SPM caches the checksum. Fix forward with a new patch version.
+
+- **Publish run cancelled (same-version dispatch)**: if you accidentally dispatched another release candidate while a publish was queued, the pending publish may be cancelled without notice. Check the Actions tab for a cancelled run; if so, dispatch the publish again.
 
 ## Repository settings
 
 - The `publish` job needs `contents: write`. If tag rulesets protect `v*`,
   allow `github-actions[bot]` (the GitHub Actions app) to create those tags.
+
 - Branch protection on `main` is unaffected: the workflow pushes only tags.
