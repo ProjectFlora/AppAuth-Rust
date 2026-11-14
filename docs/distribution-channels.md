@@ -71,7 +71,7 @@ properties of the current (2026) Central Portal:
 The main consumer win is dependency resolution: a hand-written or
 `maven-publish`-generated POM declares `jna` (as an AAR-typed dependency),
 `kotlinx-coroutines-android`, and `androidx.browser`, so a consumer writes a
-single `implementation("com.projectflora.appauth:appauth-rust-android:0.4.0")`
+single `implementation("net.project-flora:appauth-rust-android:0.4.0")`
 line and the transitive closure arrives automatically. Version pinning,
 upgrades, and overrides use ordinary Gradle mechanisms.
 
@@ -262,7 +262,7 @@ The adopted channels are implemented in separate issues that reference this
 document:
 
 - **Publish the Android AAR to Maven Central** ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)) — planned for v0.6.0. Central Portal account and
-  `com.projectflora` namespace registration (lead-time item), GPG key and
+  `net.project-flora` namespace registration (lead-time item), GPG key and
   signing setup, POM generation for the library module with the three
   transitive dependencies (jna as `aar` type, per Spike B), publication step
   in the release workflow, and consumer documentation updates.

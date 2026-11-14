@@ -1,4 +1,4 @@
-package com.projectflora.appauth
+package net.projectflora.appauth
 
 import android.app.Activity
 import kotlinx.coroutines.CoroutineScope

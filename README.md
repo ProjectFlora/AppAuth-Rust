@@ -367,7 +367,7 @@ that may not match the newer Swift sources.
   the registered custom-scheme fallback.
 - Declare both registered redirect URIs with the authorization server. The
   host app must register
-  `com.projectflora.appauth.AndroidAuthorizationCallbackActivity` with
+  `net.projectflora.appauth.AndroidAuthorizationCallbackActivity` with
   `android:exported="true"` and browsable intent filters for those URIs. Set
   `android:autoVerify="true"` on the HTTPS filter and host the matching
   `assetlinks.json` file. The adapter ignores callbacks that do not match the
@@ -378,7 +378,7 @@ that may not match the newer Swift sources.
 
   ```xml
   <activity
-      android:name="com.projectflora.appauth.AndroidAuthorizationCallbackActivity"
+      android:name="net.projectflora.appauth.AndroidAuthorizationCallbackActivity"
       android:exported="true"
       android:noHistory="true">
       <intent-filter android:autoVerify="true">

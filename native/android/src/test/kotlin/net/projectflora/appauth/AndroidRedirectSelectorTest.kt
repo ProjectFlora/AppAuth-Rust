@@ -1,4 +1,4 @@
-package com.projectflora.appauth
+package net.projectflora.appauth
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
