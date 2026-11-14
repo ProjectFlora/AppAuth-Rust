@@ -259,6 +259,9 @@ and fails before running the consumer check when the value differs.
 
 Run the **Published release consumer validation** workflow with a published
 version to repeat these checks against the immutable GitHub Release assets.
+It also validates the SPM channel: on a clean macOS runner, an external
+consumer package resolves the release tag as a remote dependency, runs a
+host-side smoke of the generated API, and builds for the iOS simulator.
 
 ## Apple adapters
 
@@ -346,9 +349,11 @@ the checked-in Swift API and platform adapters alongside it, so there is no
 need to download the archive or copy its Swift sources into your project. Each
 release tag's `Package.swift` pins the archive URL and SHA-256 checksum, which
 the release pipeline writes into a release commit after building and
-validating the archive. Depend on a released version rather than the `main`
-branch: `main` keeps the previous release's binary target, which may not match
-its newer Swift sources.
+validating the archive. The archive is built reproducibly — a self-test in
+the run requires two builds of it to be byte-identical — so the pinned
+checksum is exactly the asset SPM downloads and verifies. Depend on a released
+version rather than the `main` branch: `main` keeps the previous release's
+binary target, which may not match its newer Swift sources.
 
 ## Android adapter
 

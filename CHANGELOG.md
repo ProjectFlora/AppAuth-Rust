@@ -55,6 +55,32 @@ policies are still evolving. Each release records its known limitations.
   names or an `error` member, preventing ambiguous responses from being
   accepted during code exchange or refresh.
 
+### Changed
+
+- Support Swift Package Manager as an Apple distribution channel: the
+  release workflow computes the release archive's SHA-256 checksum, writes
+  it and the archive URL into `Package.swift` as a release commit, and
+  creates the version tag on top of it, so the manifest is maintained by
+  the pipeline instead of by hand. The release preparation pull request
+  (version, changelog, docs) is the only manual step before dispatch; see
+  [Releasing](docs/releasing.md).
+- Make the Apple release archive reproducible: the packaging step pins
+  entry timestamps and metadata, normalizes the zip and the xcframework
+  Info.plist, and requires a second in-run build to be byte-identical, so
+  the checksum recorded in the manifest is stable and verifiable.
+- Pin the release apple job to exact Rust and Xcode toolchain versions and
+  record them in the run summary, so the archive's bytes — and the manifest
+  checksum computed from them — cannot drift with a stable release or a
+  runner image update.
+- Published release consumer validation covers the SPM channel: an external
+  consumer package resolves the release tag as a remote dependency, runs a
+  host-side smoke of the generated API, and builds for the iOS simulator
+  (the arm64 slice the release xcframework ships).
+- CI now checks that the committed `Package.swift` binary target stays
+  consistent: a canonical asset URL, a SHA-256 checksum, and a release
+  version that never leads the Cargo version (main intentionally keeps the
+  previous release's binary target).
+
 ## [0.4.0] - 2026-11-12
 
 ### Added

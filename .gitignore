@@ -16,6 +16,9 @@ target
 # rustc will dump stack traces when hitting an internal compiler error to PWD
 rustc-ice-*.txt
 
+# Python
+__pycache__/
+
 # SwiftPM
 .build/
 .swiftpm/
