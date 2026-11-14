@@ -2,8 +2,10 @@
 
 Tracking: [#62](https://github.com/ProjectFlora/AppAuth-Rust/issues/62),
 [PR #74](https://github.com/ProjectFlora/AppAuth-Rust/pull/74).
-Baseline: v0.4.0, `9f061b6`. The remaining native lifecycle and package-consumer
-findings are tracked in [#75](https://github.com/ProjectFlora/AppAuth-Rust/issues/75).
+Baseline: v0.4.0, `9f061b6`. The native lifecycle and package-consumer
+follow-up findings were tracked in [#75](https://github.com/ProjectFlora/AppAuth-Rust/issues/75).
+The audit was accepted and both issues were closed when PR #74 merged on
+2026-11-12 (`559a4c4`).
 This audit covers the declared library boundary; it is not a security
 certification or a declaration that all 1.0.0 readiness criteria are complete.
 
@@ -144,11 +146,12 @@ and its [checks](https://github.com/ProjectFlora/AppAuth-Rust/pull/74/checks).
   Broken pipe errors. The initial hosted CI normal Gradle pass supersedes the
   supplemental local JVM result. New instrumentation/consumer cases must pass
   hosted CI; the earlier 14-test JVM fallback is not evidence for them.
-- Final gate: all latest-commit PR CI jobs, including the new package consumers
-  and simulator/emulator cases, must pass. The immutable run/commit link is
-  recorded in the PR verification section. Follow-up #75 tracks these findings
-  through merge; #62 remains open until the audit is accepted. No 1.0.0-ready
-  claim follows merely from a green PR or increased coverage.
+- Final gate: follow-up commit `691e554` passed every job in
+  [CI run 43215438140](https://github.com/ProjectFlora/AppAuth-Rust/actions/runs/43215438140),
+  including the new package consumers and simulator/emulator cases. PR #74
+  merged with that result on 2026-11-12, closing #62 (audit accepted) and #75
+  (follow-up findings resolved). No 1.0.0-ready claim follows merely from a
+  green PR or increased coverage.
 
 ## References
 
