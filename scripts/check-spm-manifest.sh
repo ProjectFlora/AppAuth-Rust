@@ -10,8 +10,9 @@ set -euo pipefail
 # tag, never to main (see docs/releasing.md: "Why CI creates the tag"). Main
 # therefore keeps the previous release's binary target while the Cargo
 # version moves forward in the release preparation pull request, so the
-# manifest version may lag the Cargo version by one release but must never
-# lead it (a leading URL would point at a release that does not exist yet).
+# manifest version may lag the Cargo version — normally by exactly one
+# release, but by any number of releases in general — and must never lead
+# it (a leading URL would point at a release that does not exist yet).
 #
 # Usage: scripts/check-spm-manifest.sh
 

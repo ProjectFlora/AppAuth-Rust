@@ -91,10 +91,11 @@ the release tracking issue.
 
 Swift Package Manager reads `Package.swift` at the version tag, and that
 manifest must contain the SHA-256 checksum of the published XCFramework
-archive. The checksum is a build output: the packaging step proves the
-archive is reproducible (two builds in the same run must be byte-identical),
-but its checksum is only known after the archive is actually built, so a tag
-pushed before the build can never contain it. The workflow therefore builds
+archive. The checksum is a build output: the run proves the packaging step
+is deterministic (it packages the archive a second time and requires
+byte-identical output; the Rust build itself runs once), but the checksum
+is only known after the archive is actually built, so a tag pushed before
+the build can never contain it. The workflow therefore builds
 and validates the archive first and then tags a release commit that carries
 it:
 

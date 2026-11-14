@@ -274,10 +274,12 @@ document:
   Its source target carries the checked-in UniFFI-generated Swift API (a
   CI check verifies it matches the Rust source) plus the platform adapters,
   and its binary target references the release zip by URL with a per-release
-  checksum. Because the archive is not reproducible, the checksum is only
-  known after the build, so the release workflow (dispatched from `main`)
-  writes the URL and checksum into `Package.swift`, validates the rewritten
-  manifest against the archive, commits it as a release commit on top of the
-  dispatched `main` commit, and creates the version tag there; the published
-  release consumer workflow resolves the tag by URL (see
+  checksum. The checksum is only known after the build: the archive is a
+  build output, and the in-run self-test proves only that its packaging
+  step is deterministic, not that a rebuild would be byte-identical. The
+  release workflow (dispatched from `main`) therefore writes the URL and
+  checksum into `Package.swift`, validates the rewritten manifest against
+  the archive, commits it as a release commit on top of the dispatched
+  `main` commit, and creates the version tag there; the published release
+  consumer workflow resolves the tag by URL (see
   [Releasing](releasing.md)). The first SPM release is v0.5.0.
