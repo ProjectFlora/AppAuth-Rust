@@ -186,8 +186,8 @@ wrapper. CI also packages an Apple XCFramework and verifies Rust libraries are
 packaged in the Android release AAR. Live identity-provider interoperability
 remains explicitly unverified.
 
-Security edge-case audit progress and remaining gaps are tracked in
-[the audit ledger](docs/security-edge-case-audit.md) ([#62](https://github.com/ProjectFlora/AppAuth-Rust/issues/62)).
+Security edge-case audit results and scope boundaries are recorded in
+[the audit ledger](docs/security-edge-case-audit.md) ([#62](https://github.com/ProjectFlora/AppAuth-Rust/issues/62), accepted 2026-11-12).
 
 ## Initial validation checkpoints
 
