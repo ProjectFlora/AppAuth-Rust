@@ -5,16 +5,19 @@ Usage: normalize_zip.py <archive.zip>
 
 Applied in-place to the release archive after `ditto -c -k --keepParent`:
 
-1. Normalize every 0x5855 (UT) extra subfield in both the local file
-   headers and the central directory. The central shape is 8 bytes
-   (atime mtime); the local shape is 12 bytes (atime mtime uid gid).
+1. Normalize every 0x5855 (Info-ZIP "UX", original Unix) extra subfield
+   in both the local file headers and the central directory. The central
+   shape is 8 bytes (atime mtime); the local shape is 12 bytes (atime mtime
+   uid gid).
    APFS can advance atimes while ditto reads the tree (cache- and
    size-dependent), and ditto records the atime here; setting the atime
    word to the mtime word renders the archive independent of atime drift.
    The mtime word is trusted because `touch -t` pins mtime and reading
    never moves it. The local uid/gid word is zeroed: the staging user is
    a machine-state input whose values must not reach the published
-   archive.
+   archive. The other Unix ownership subfields, 0x7855 ("Ux") and 0x7875
+   ("ux"), are rejected rather than parsed, so no owner can reach the
+   archive through them either.
 
 2. Remove AppleDouble `._*` sidecar entries. The com.apple.provenance xattr
    cannot be removed, so ditto emits a constant sidecar for every entry; the
@@ -29,9 +32,10 @@ and the per-entry local header offset; the raw byte stream is never scanned
 for PK signatures (deflate payloads could contain false-positive signatures
 and would corrupt content if the walk desynchronized). Every entry's data
 region is size- and CRC-32-verified (decompressing for deflate entries),
-unsupported methods, unexpected 0x5855 shapes, and any 0x5835 (XAttr)
-subfield are rejected, and the rebuilt archive is re-parsed before being
-written.
+unsupported methods, malformed extra fields, 0x5855 subfields whose size
+is not the one expected at their location, and any 0x5835 (XAttr), 0x7855
+or 0x7875 subfield are rejected, and the rebuilt archive is re-parsed
+before being written.
 """
 import os
 import struct
@@ -49,26 +53,39 @@ CD_FIELDS = "<" + "H" * 6 + "I" * 3 + "H" * 5 + "I" * 2
 LOCAL_FIELDS = "<" + "H" * 5 + "I" * 3 + "H" * 2
 # ver flags method time date crc csize usize nlen elen
 
+# Extra subfields that carry machine state (extended attributes, or the
+# staging user's uid/gid) in a shape this tool does not normalize.
+REJECTED_TAGS = {
+    0x5835: "XAttr",
+    0x7855: "Info-ZIP Unix Ux",
+    0x7875: "Info-ZIP Unix ux",
+}
+
 
 def die(path, message):
     raise SystemExit(f"{os.path.basename(path)}: {message}")
 
 
-def patch_ut(extra, path):
+def patch_ux(extra, slen_expected, path):
     """Normalize every 0x5855 subfield in place and count the words written.
 
-    The 8-byte shape (central directory) is atime mtime: the atime word is
-    set to the mtime word. The 12-byte shape (local header) is atime mtime
-    uid gid: do that, and zero the uid/gid word so the archive does not
-    record the staging machine's owner. Any other size is not a shape this
-    tool can interpret and is rejected.
+    slen_expected is the only shape accepted at this location: 8 in the
+    central directory (atime mtime), where the atime word is set to the
+    mtime word; 12 in a local header (atime mtime uid gid), where the
+    uid/gid word is also zeroed so the archive does not record the staging
+    machine's owner. Any other size, a subfield that overruns the extra
+    field, trailing bytes, and the subfields listed in REJECTED_TAGS are not
+    shapes this tool can interpret and are rejected.
     """
     rewritten = 0
     i = 0
     while i + 4 <= len(extra):
         tag, slen = struct.unpack_from("<HH", extra, i)
+        if i + 4 + slen > len(extra):
+            die(path, f"extra subfield 0x{tag:04x} len={slen} overruns "
+                      f"the extra field")
         if tag == 0x5855:
-            if slen not in (8, 12):
+            if slen != slen_expected:
                 die(path, f"unexpected 0x5855 subfield shape len={slen}")
             mtime = struct.unpack_from("<I", extra, i + 8)[0]
             for w in range(2):
@@ -79,9 +96,12 @@ def patch_ut(extra, path):
             if slen == 12 and struct.unpack_from("<I", extra, i + 12)[0] != 0:
                 struct.pack_into("<I", extra, i + 12, 0)
                 rewritten += 1
-        elif tag == 0x5835:
-            die(path, f"unexpected 0x5835 (XAttr) subfield len={slen}")
+        elif tag in REJECTED_TAGS:
+            die(path, f"unexpected 0x{tag:04x} ({REJECTED_TAGS[tag]}) "
+                      f"subfield len={slen}")
         i += 4 + slen
+    if i != len(extra):
+        die(path, f"{len(extra) - i} trailing bytes in extra field")
     return rewritten
 
 
@@ -126,9 +146,11 @@ def main():
     patched = 0
     dropped = 0
     for pos, fields, name in entries:
+        # Sidecars are dropped below, so their rewrites are not counted.
+        sidecar = name.split(b"/")[-1].startswith(b"._")
         c_start = pos + 46 + fields[9]
         c_extra = bytearray(data[c_start:c_start + fields[10]])
-        patched += patch_ut(c_extra, path)
+        rewritten = patch_ux(c_extra, 8, path)
         data[c_start:c_start + fields[10]] = c_extra
 
         lhref = fields[15]
@@ -137,8 +159,10 @@ def main():
         lfields = struct.unpack_from(LOCAL_FIELDS, data, lhref + 4)
         l_start = lhref + 30 + lfields[8]
         l_extra = bytearray(data[l_start:l_start + lfields[9]])
-        patched += patch_ut(l_extra, path)
+        rewritten += patch_ux(l_extra, 12, path)
         data[l_start:l_start + lfields[9]] = l_extra
+        if not sidecar:
+            patched += rewritten
 
         body = data[l_start + lfields[9]:l_start + lfields[9] + fields[7]]
         if fields[3] == 0:
@@ -158,7 +182,7 @@ def main():
 
         if b"__MACOSX/" in name:
             die(path, f"unexpected __MACOSX entry {name!r}")
-        if name.split(b"/")[-1].startswith(b"._"):
+        if sidecar:
             dropped += 1
 
     # Rebuild the archive from the kept entries. Each entry's raw region is

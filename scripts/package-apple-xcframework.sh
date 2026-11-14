@@ -134,16 +134,16 @@ scripts/check-ios-authorization-flow.sh
 # layers remove those inputs:
 #
 # 1. Fixed timestamps. `ditto` records each file's modification time in the
-#    zip DOS time fields and as atime + mtime words in the 0x5855 (UT)
-#    extra field; unpinned build outputs would carry their build time.
+#    zip DOS time fields and as atime + mtime words in the 0x5855 (Info-ZIP
+#    "UX") extra field; unpinned build outputs would carry their build time.
 #    `touch -t` pins both to 2026-01-01 00:00:00.
 # 2. Empty attribute sets. `xattr -cr` drops extended attributes so `ditto`
 #    does not embed build-machine metadata in the archive.
 # 3. Post-zip normalization (scripts/normalize_zip.py). Three things escape
 #    filesystem-level pinning. APFS advances atimes when `ditto` reads the
-#    tree, so the UT atime word drifts between zips even though the files
-#    were pinned; the normalizer aligns every UT atime word with the pinned
-#    mtime word. The local-header UT field also records the staging user's
+#    tree, so the UX atime word drifts between zips even though the files
+#    were pinned; the normalizer aligns every UX atime word with the pinned
+#    mtime word. The local-header UX field also records the staging user's
 #    uid/gid; the normalizer zeros it so the archive bytes do not depend on
 #    who ran the packaging. And the `com.apple.provenance` attribute cannot
 #    be removed (`xattr -d` is a silent no-op), so `ditto` always emits a
@@ -167,7 +167,7 @@ python3 "$repo_root/scripts/normalize_zip.py" "$archive"
 # The in-run determinism self-test: zip the same staged tree a second time,
 # normalize both, and demand identical hashes. Staging is not repeated.
 # (The raw double-ditto hashes would differ: the first zip's read of the
-# tree advances file atimes, which the second zip records in the UT extra
+# tree advances file atimes, which the second zip records in the UX extra
 # field; the normalizer is what makes the comparison meaningful.)
 recheck="$output_root/AppAuthRust-Apple-$version-determinism.zip"
 ditto -c -k --keepParent "$package_root" "$recheck"
