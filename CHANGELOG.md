@@ -23,22 +23,24 @@ policies are still evolving. Each release records its known limitations.
 
 ### Changed
 
-- Replace the staging machine's owner in the Apple release archive with
-  uid 0 / gid 0: the zip normalizer zeros the local-header 0x5855
-  (Info-ZIP "UX") uid/gid word instead of overwriting it with the pinned
-  mtime, which left a meaningless uid/gid derived from the timestamp. A
-  root `unzip -X` still restores the 0/0 owner (#114).
-  The normalizer now accepts only the extra subfield `ditto` writes, a
-  0x5855 subfield of 8 bytes in the central directory or 12 bytes in a
-  local header, and rejects every other subfield: no owner (such as 0x7855
+- Record no owner in the Apple release archive. The zip normalizer
+  rewrites the 12-byte local-header 0x5855 (Info-ZIP "UX") subfield to
+  the 8-byte shape, dropping the uid/gid word, so the archive records no
+  owner at all: a zeroed word would record root:root, and the staging
+  user's uid/gid is a machine-state input that must not reach the
+  published archive. The normalizer accepts only the extra subfield
+  `ditto` writes, a 0x5855 subfield of 8 bytes in the central directory
+  or 8 or 12 bytes in a local header (the 12-byte shape is rewritten to
+  8 bytes), and rejects every other subfield: no owner (such as 0x7855
   "Ux" or 0x7875 "ux"), extended attribute (0x5835 XAttr, a rejection the
   code documented but never implemented) or timestamp (0x5455) can reach
   the published archive. It also rejects extra fields whose subfields
   overrun or leave trailing bytes, and checks that every extra field in
   the rebuilt archive is already normalized. The removed AppleDouble
   sidecars are no longer normalized or checked, and the normalizer's
-  summary line no longer counts their words. The in-run determinism
-  self-test is unchanged.
+  summary line no longer counts their words. The published archive's bytes,
+  and the manifest checksum computed from them, change; the in-run
+  determinism self-test is unchanged.
 - Parse the end-of-central-directory record once in the zip normalizer:
   the central directory walk returns the central directory offset, so the
   main path no longer rescans the archive for it. The normalized archive

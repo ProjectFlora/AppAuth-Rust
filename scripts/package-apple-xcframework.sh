@@ -144,11 +144,12 @@ scripts/check-ios-authorization-flow.sh
 #    tree, so the UX atime word drifts between zips even though the files
 #    were pinned; the normalizer aligns every UX atime word with the pinned
 #    mtime word. The local-header UX field also records the staging user's
-#    uid/gid; the normalizer zeros it so the archive bytes do not depend on
-#    who ran the packaging. And the `com.apple.provenance` attribute cannot
-#    be removed (`xattr -d` is a silent no-op), so `ditto` always emits a
-#    constant `._*` AppleDouble sidecar per entry; the normalizer strips
-#    them.
+#    uid/gid; the normalizer drops it, rewriting the 12-byte shape to the
+#    8-byte shape, so the archive records no owner and its bytes do not
+#    depend on who ran the packaging. And the `com.apple.provenance`
+#    attribute cannot be removed (`xattr -d` is a silent no-op), so `ditto`
+#    always emits a constant `._*` AppleDouble sidecar per entry; the
+#    normalizer strips them.
 #    `--sequesterRsrc` is deliberately omitted: the `__MACOSX/` shadow tree
 #    it creates inside the archive is stamped with the zip run time.
 #
