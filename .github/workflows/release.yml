@@ -275,8 +275,6 @@ jobs:
           grep -F "url: \"https://github.com/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION/AppAuthRust-Apple-$RELEASE_VERSION.zip\"," Package.swift
           grep -F "checksum: \"$checksum\"" Package.swift
           git diff -- Package.swift
-      # Build and test the rewritten manifest against the archive (the check
-      # swaps only the binary target's url/checksum for the local path).
       - run: scripts/check-spm-package.sh "dist/AppAuthRust-Apple-$RELEASE_VERSION.zip"
       - uses: actions/upload-artifact@v4
         with:
@@ -355,12 +353,13 @@ jobs:
   publish_maven:
     if: ${{ inputs.publish }}
     name: Publish to Maven Central
-    needs: android
+    needs: [validate_version, android, android_consumer, publish]
     runs-on: ubuntu-latest
     env:
+      ANDROID_API_LEVEL: '28'
       MAVEN_USER: ${{ secrets.MAVEN_USER }}
       MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
-      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PRIVATE_KEY_FILE: ${{ secrets.GPG_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -368,8 +367,15 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Import GPG Key
+      - name: Setup Android SDK
         run: |
-          echo "$GPG_PRIVATE_KEY" | gpg --import --batch --quiet
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify Rust bindings
+        run: scripts/check-android-targets.sh native/android/build/generated/rust/jniLibs
       - name: Publish to Maven Central
-        run: ./native/android/gradlew -p native/android publishRelease
+        env:
+          RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+        run: |
+          ./native/android/gradlew -p native/android publishRelease

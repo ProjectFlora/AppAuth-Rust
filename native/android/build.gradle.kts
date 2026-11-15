@@ -2,7 +2,10 @@ plugins {
     id("com.android.library") version "8.11.1"
     id("org.jetbrains.kotlin.android") version "2.2.20"
     id("maven-publish")
+    id("signing")
 }
+
+val releaseVersion = providers.gradleProperty("releaseVersion").orNull ?: "0.5.1"
 
 val repositoryRoot = rootDir.resolve("../..").canonicalFile
 val generatedBindings = layout.buildDirectory.dir("generated/uniffi")
@@ -88,39 +91,41 @@ dependencies {
 }
 
 afterEvaluate {
+    signing {
+        useGpgCmd()
+        sign(publishing.publications["release"])
+    }
+    
     publishing {
         publications {
             create<MavenPublication>("release") {
                 groupId = "net.project-flora"
                 artifactId = "appauth-rust-android"
-                version = "${needs.validate_version.outputs.version}"
+                version = releaseVersion
 
-                with(androidComponents.getByName("release")) {
-                    artifact(file("${buildDir}/outputs/aar/${artifactId}-release.aar"))
-                    // Note: sources.jar and javadoc.jar are optional for Maven Central, but recommended.
-                    // They can be added later if needed by using androidJar() or custom tasks.
-                }
-
+                from(components["release"])
+                
                 pom {
-                    licenses {
-                        ap licenseUrl = "https://github.com/ProjectFlora/AppAuth-Rust"
-                        ap name = "Apache License 2.0"
-                        ap url = "https://github.com/ProjectFlora/AppAuth-Rust/LICENSE"
+                    name.set("AppAuth-Rust Android")
+                    description.set("Rust-based AppAuth library for Android")
+                    url.set("https://github.com/ProjectFlora/AppAuth-Rust")
+                    licenses { 
+                        license { 
+                            name.set("Apache License 2.0")
+                            url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                            distribution.set("repo" as String)
+                        }
                     }
-                    developers {
-                        organization = "ProjectFlora"
-                        name = "ProjectFlora"
-                        url = "https://github.com/ProjectFlora"
+                    developers { 
+                        developer { 
+                            id.set("projectflora") 
+                            name.set("ProjectFlora")
+                            email.set("oss@projectflora.net")
+                        }
                     }
-                    description = { "Rust-based AppAuth library for Android" }
-                    url = "https://github.com/ProjectFlora/AppAuth-Rust"
-                    license = "Apache 2.0"
-                    
-                    dependencies {
-                        // Explicitly specify API dependencies (jna, kotlinx-coroutines-android) to be included in POM
-                        dependency("net.java.dev.jna:jna:5.12.0").classification("api")
-                        dependency("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2").classification("api")
-                        // browser is implementation-only, so it's not an API dependency
+                    scm { 
+                        url.set("https://github.com/ProjectFlora/AppAuth-Rust")
+                        connection.set("scm:git:https://github.com/ProjectFlora/AppAuth-Rust.git")
                     }
                 }
             }
