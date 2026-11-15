@@ -36,7 +36,13 @@ policies are still evolving. Each release records its known limitations.
   code documented but never implemented) or timestamp (0x5455) can reach
   the published archive. It also rejects extra fields whose subfields
   overrun or leave trailing bytes, and checks that every extra field in
-  the rebuilt archive is already normalized. The extra fields of the
+  the rebuilt archive is already normalized. It also verifies each entry's
+  record before reading the data: the payload — the compressed data plus,
+  for bit-3 entries, the 16-byte data descriptor that follows it — must
+  run exactly to the next record, so a malformed record is reported as a
+  range problem, not a data error; a bit-3 entry's data descriptor must
+  carry the `PK\x07\x08` signature and the central directory's crc,
+  compressed-size, and uncompressed-size words. The extra fields of the
   removed AppleDouble sidecars are no longer normalized or checked, and the
   normalizer's summary line no longer counts their words; their records
   are still range-, data-descriptor- and CRC-checked, and a macOS-only test
