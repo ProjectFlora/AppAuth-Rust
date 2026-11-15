@@ -136,7 +136,8 @@ scripts/check-ios-authorization-flow.sh
 # 1. Fixed timestamps. `ditto` records each file's modification time in the
 #    zip DOS time fields and as atime + mtime words in the 0x5855 (Info-ZIP
 #    "UX") extra field; unpinned build outputs would carry their build time.
-#    `touch -t` pins both to 2026-01-01 00:00:00.
+#    `touch -h -t` pins both to 2026-01-01 00:00:00; `-h` stamps symlinks
+#    themselves (ditto records their lstat times) instead of their targets.
 # 2. Empty attribute sets. `xattr -cr` drops extended attributes so `ditto`
 #    does not embed build-machine metadata in the archive.
 # 3. Post-zip normalization (scripts/normalize_zip.py). Three things escape
@@ -159,7 +160,7 @@ scripts/check-ios-authorization-flow.sh
 # bytes on machines in different time zones.
 export TZ=UTC
 xattr -cr "$package_root"
-find "$package_root" -print0 | xargs -0 touch -t 202601010000.00
+find "$package_root" -print0 | xargs -0 touch -h -t 202601010000.00
 
 archive="$output_root/AppAuthRust-Apple-$version.zip"
 ditto -c -k --keepParent "$package_root" "$archive"
