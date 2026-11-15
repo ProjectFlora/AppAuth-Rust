@@ -25,8 +25,7 @@ the shared authentication-state lifecycle, and public API coverage by language.
 - Model authentication state in the Rust core and make it serializable; host
   applications are responsible for persistence and encryption.
 - Expose explicit cancellation for in-flight operations, distinguish it from
-  authorization-server errors, and propagate it to active work where the
-  platform and transport allow.
+  authorization-server errors, and propagate it to active work where the platform and transport allow.
 - Use an asynchronous HTTP transport abstraction, with a Rust `reqwest`
   implementation by default and the option for native adapters to provide
   their own transport. Rust callers provide the Tokio runtime used by the
@@ -291,8 +290,8 @@ version to repeat these checks against the immutable GitHub Release assets.
   `target/apple/release-package/AppAuthRust-Apple-0.4.0.zip`, containing an
   `AppAuthRust.xcframework` with static Rust libraries for iOS device,
   iOS simulator, and universal macOS, the generated Swift API source, the
-  platform adapters (the same sources the Swift package target compiles),
-  and an installation guide.
+  platform adapters (the same sources the Swift package target compiles), and
+  an installation guide.
   See [Swift XCFramework installation](docs/swift-xcframework.md).
   The CI `apple-xcframework` artifact is for validation and expires after
   14 days. Use the published Apple archive and `SHA256SUMS` linked in
@@ -364,24 +363,19 @@ its newer Swift sources.
   `assetlinks.json` file. The adapter ignores callbacks that do not match the
   active redirect's scheme, host, port, and path; the Rust core validates the
   complete callback and state.
-- For example, add these filters to the callback activity in the host app's
-  manifest, replacing the sample host and scheme with the registered values:
-
-  ```xml
-
 
 ### Maven Central Installation (Recommended)
 
-Add to your project-level `build.gradle.kts`:
+Add to your module-level `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("net.projectflora:appauth-rust-android:0.5.1")
+    implementation("net.projectflora.appauth:appauth-rust-android:0.5.1")
 }
 ```
 
 Maven Central resolves the AAR and its transitive dependencies automatically:
-- ````com.projectflora.appauth:appauth-rust-android:<version>```` (AAR)
+- ````net.projectflora.appauth:appauth-rust-android:<version>```` (AAR)
 - ````net.java.dev.jna:jna:5.12.0@aar````
 - ````org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2````
 - ````androidx.browser:browser:1.8.0````
@@ -389,46 +383,51 @@ Maven Central resolves the AAR and its transitive dependencies automatically:
 Pin the version in your `build.gradle.kts`: **`0.5.1`**. The Maven Central
 artifact is published by GitHub Actions on each release tag (see
 [.github/workflows/release.yml](.github/workflows/release.yml)).
-  <activity
-      android:name="com.projectflora.appauth.AndroidAuthorizationCallbackActivity"
-      android:exported="true"
-      android:noHistory="true">
-      <intent-filter android:autoVerify="true">
-          <action android:name="android.intent.action.VIEW" />
-          <category android:name="android.intent.category.DEFAULT" />
-          <category android:name="android.intent.category.BROWSABLE" />
-          <data
-              android:scheme="https"
-              android:host="login.example.com"
-              android:path="/oauth/callback" />
-      </intent-filter>
-      <intent-filter>
-          <action android:name="android.intent.action.VIEW" />
-          <category android:name="android.intent.category.DEFAULT" />
-          <category android:name="android.intent.category.BROWSABLE" />
-          <data
-              android:scheme="com.example.app"
-              android:path="/oauth/callback" />
-      </intent-filter>
-  </activity>
-  ```
+
+For example, add these filters to the callback activity in the host app's
+manifest, replacing the sample host and scheme with the registered values:
+
+```xml
+<activity
+    android:name="com.projectflora.appauth.AndroidAuthorizationCallbackActivity"
+    android:exported="true"
+    android:noHistory="true">
+    <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data
+            android:scheme="https"
+            android:host="login.example.com"
+            android:path="/oauth/callback" />
+    </intent-filter>
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data
+            android:scheme="com.example.app"
+            android:path="/oauth/callback" />
+    </intent-filter>
+</activity>
+```
 
 - Pass both URIs in `AndroidRedirectConfiguration`; the adapter selects the
   verified HTTPS App Link when available and otherwise uses the custom scheme.
   Supply a native transport when authorizing:
 
-  ```kotlin
-  val adapter = AndroidAuthorizationAdapter(activity)
-  val state = adapter.authorize(
-      configuration,
-      options,
-      AndroidRedirectConfiguration(
-          appLinkUri = "https://login.example.com/oauth/callback",
-          customSchemeUri = "com.example.app:/oauth/callback",
-      ),
-      UrlConnectionNativeHttpTransport(),
-  )
-  ```
+```kotlin
+val adapter = AndroidAuthorizationAdapter(activity)
+val state = adapter.authorize(
+    configuration,
+    options,
+    AndroidRedirectConfiguration(
+        appLinkUri = "https://login.example.com/oauth/callback",
+        customSchemeUri = "com.example.app:/oauth/callback",
+    ),
+    UrlConnectionNativeHttpTransport(),
+)
+```
 
 - `UrlConnectionNativeHttpTransport` does not follow HTTP redirects and
   disconnects active requests when its cancellation handle is cancelled.
@@ -450,14 +449,14 @@ artifact is published by GitHub Actions on each release tag (see
   Because a raw AAR has no dependency metadata, also declare the runtime
   dependencies used by this module:
 
-  ```kotlin
-  dependencies {
-      implementation(files("libs/appauth-rust-android-0.4.0.aar"))
-      implementation("net.java.dev.jna:jna:5.12.0@aar")
-      implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-      implementation("androidx.browser:browser:1.8.0")
-  }
-  ```
+```kotlin
+dependencies {
+    implementation(files("libs/appauth-rust-android-0.4.0.aar"))
+    implementation("net.java.dev.jna:jna:5.12.0@aar")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.browser:browser:1.8.0")
+}
+```
 
 - The CI `android-aar` artifact uses the build output name
   `appauth-rust-android-release.aar` and expires after 14 days. The versioned
@@ -483,10 +482,10 @@ artifact is published by GitHub Actions on each release tag (see
   stored securely.
 - Build the Windows shared library and run its adapter tests with:
 
-  ```powershell
-  cargo build --locked --lib --target x86_64-pc-windows-msvc
-  cargo test --locked --lib --target x86_64-pc-windows-msvc
-  ```
+```powershell
+cargo build --locked --lib --target x86_64-pc-windows-msvc
+cargo test --locked --lib --target x86_64-pc-windows-msvc
+```
 
 - The adapter targets `x86_64-pc-windows-msvc`. Review Microsoft's supported
   Windows client versions at each release and update the support matrix and

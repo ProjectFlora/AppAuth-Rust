@@ -5,7 +5,7 @@ plugins {
     id("signing")
 }
 
-val releaseVersion = providers.gradleProperty("releaseVersion").orNull ?: "0.5.1"
+val releaseVersion = providers.gradleProperty("releaseVersion").orNull ?: "0.0.0-SNAPSHOT"
 
 val repositoryRoot = rootDir.resolve("../..").canonicalFile
 val generatedBindings = layout.buildDirectory.dir("generated/uniffi")
@@ -43,7 +43,7 @@ val buildAndroidRustLibraries by tasks.registering(Exec::class) {
 }
 
 android {
-    namespace = "net.projectflora.appauth"
+    namespace = "com.projectflora.appauth"
     compileSdk = 35
 
     defaultConfig {
@@ -65,6 +65,13 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
     }
 }
 
@@ -91,11 +98,6 @@ dependencies {
 }
 
 afterEvaluate {
-    signing {
-        useGpgCmd()
-        sign(publishing.publications["release"])
-    }
-    
     publishing {
         publications {
             create<MavenPublication>("release") {
@@ -129,6 +131,11 @@ afterEvaluate {
                     }
                 }
             }
+        }
+        
+        signing {
+            useGpgCmd()
+            sign(publishing.publications["release"])
         }
     }
 }
