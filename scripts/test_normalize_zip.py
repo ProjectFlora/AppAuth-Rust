@@ -474,7 +474,16 @@ class SanityTestCase(unittest.TestCase):
             "subfield len=3 for b'pkg/f.txt'")
 
 
-@unittest.skipUnless(shutil.which("ditto"), "ditto exists only on macOS")
+# The system tools are named by path: a Python `xattr` package on PATH, for
+# example, installs an `xattr` CLI that takes different flags.
+DITTO = "/usr/bin/ditto"
+XATTR = "/usr/bin/xattr"
+TOUCH = "/usr/bin/touch"
+
+
+@unittest.skipUnless(all(os.access(tool, os.X_OK)
+                         for tool in (DITTO, XATTR, TOUCH)),
+                     "ditto, xattr and BSD touch exist only on macOS")
 class RealDittoTestCase(unittest.TestCase):
     """The normalizer accepts the sidecars real `ditto` writes.
 
@@ -482,7 +491,7 @@ class RealDittoTestCase(unittest.TestCase):
     range check and the data descriptor comparison (Issue #119), so the
     synthetic fixtures alone cannot show that a real sidecar passes. The
     tree is staged the way the package script stages it (TZ=UTC,
-    `xattr -cr`, `touch -t`), except that one file is given extended
+    `xattr -cr`, `touch -h -t`), except that one file is given extended
     attributes and another a resource fork, so ditto writes sidecars
     whether or not the machine adds com.apple.provenance.
     """
@@ -506,26 +515,30 @@ class RealDittoTestCase(unittest.TestCase):
                 handle.write(data)
         os.symlink("AppAuthRust.framework/Headers",
                    os.path.join(self.root, "link"))
-        subprocess.run(["xattr", "-cr", self.root], check=True)
-        # A small attribute and one large enough to need a multi-block
-        # deflate stream in its sidecar.
-        for name, value in (("com.example.small", "v"),
-                            ("com.example.large", "x" * 60000)):
-            subprocess.run(["xattr", "-w", name, value,
+        subprocess.run([XATTR, "-cr", self.root], check=True)
+        # A small attribute and a large incompressible one, so the large
+        # sidecar's deflate stream spans several blocks.
+        for name, value in (("com.example.small", b"v"),
+                            ("com.example.large", os.urandom(60000))):
+            subprocess.run([XATTR, "-wx", name, value.hex(),
                             os.path.join(self.root, "xattr.txt")], check=True)
-        with open(os.path.join(self.root, "rsrc.txt", "..namedfork", "rsrc"),
-                  "wb") as handle:
-            handle.write(os.urandom(5000))
+        try:
+            with open(os.path.join(self.root, "rsrc.txt", "..namedfork",
+                                   "rsrc"), "wb") as handle:
+                handle.write(os.urandom(5000))
+        except OSError as error:
+            self.skipTest(f"no resource fork support in {self.tmpdir}: "
+                          f"{error}")
         for path in [self.root] + [
                 os.path.join(base, name)
                 for base, dirs, names in os.walk(self.root)
                 for name in dirs + names]:
-            subprocess.run(["touch", "-h", "-t", "202601010000.00", path],
+            subprocess.run([TOUCH, "-h", "-t", "202601010000.00", path],
                            check=True, env=self.env)
 
     def _zip(self, name):
         archive = os.path.join(self.tmpdir, name)
-        subprocess.run(["ditto", "-c", "-k", "--keepParent", self.root,
+        subprocess.run([DITTO, "-c", "-k", "--keepParent", self.root,
                         archive], check=True, env=self.env)
         return archive
 
@@ -554,12 +567,18 @@ class RealDittoTestCase(unittest.TestCase):
         # comparison is exercised, not skipped.
         self.assertTrue(any(flags & 8 for _, flags in sidecars), sidecars)
         stdout = self._normalize(archive)
-        self.assertIn(f"{len(sidecars)} AppleDouble sidecars removed", stdout)
+        # The leading ", " keeps a count of 2 from matching "12".
+        self.assertIn(f", {len(sidecars)} AppleDouble sidecars removed, ",
+                      stdout)
         self.assertEqual(self._sidecars(archive), [])
 
     def test_double_ditto_normalizes_to_identical_bytes(self):
         first = self._zip("first.zip")
         second = self._zip("second.zip")
+        # Both raw zips carry sidecars, so the identical result shows the
+        # normalizer removed them rather than that there was nothing to do.
+        self.assertNotEqual(self._sidecars(first), [])
+        self.assertNotEqual(self._sidecars(second), [])
         self._normalize(first)
         self._normalize(second)
         with open(first, "rb") as one, open(second, "rb") as two:
