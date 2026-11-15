@@ -23,6 +23,18 @@ policies are still evolving. Each release records its known limitations.
 
 ### Changed
 
+- Clean up the Apple packaging self-test's scratch outputs on every exit.
+  The scratch XCFramework is now removed before it is created, which makes
+  a re-run possible after any earlier failed or interrupted run, including
+  exits a trap cannot observe (SIGKILL, power loss); an EXIT trap removes
+  it, and the determinism zip, whenever the script exits any other way, and
+  the determinism zip is pre-removed before its second `ditto`. Previously
+  the scratch was removed only when its Info.plist comparison succeeded, so
+  a failed comparison or an interruption stranded it in
+  `target/apple/release-package`, outside the package directory the guard
+  checks; the next run then failed in `create-xcframework`, which refuses
+  an existing output path, even after the user removed the package
+  directory as the guard's message directs.
 - Record no owner in the Apple release archive. The zip normalizer
   rewrites the 12-byte local-header 0x5855 (Info-ZIP "UX") subfield to
   the 8-byte shape, dropping the uid/gid word, so the archive records no
