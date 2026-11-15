@@ -36,11 +36,13 @@ policies are still evolving. Each release records its known limitations.
   code documented but never implemented) or timestamp (0x5455) can reach
   the published archive. It also rejects extra fields whose subfields
   overrun or leave trailing bytes, and checks that every extra field in
-  the rebuilt archive is already normalized. The removed AppleDouble
-  sidecars are no longer normalized or checked, and the normalizer's
-  summary line no longer counts their words. The published archive's bytes,
-  and the manifest checksum computed from them, change; the in-run
-  determinism self-test is unchanged.
+  the rebuilt archive is already normalized. The extra fields of the
+  removed AppleDouble sidecars are no longer normalized or checked, and the
+  normalizer's summary line no longer counts their words; their records
+  are still range-, data-descriptor- and CRC-checked, and a macOS-only test
+  confirms that the sidecars real `ditto` writes pass those checks. The
+  published archive's bytes, and the manifest checksum computed from them,
+  change; the in-run determinism self-test is unchanged.
 - Parse the end-of-central-directory record once in the zip normalizer:
   the central directory walk returns the central directory offset, so the
   main path no longer rescans the archive for it. The normalized archive

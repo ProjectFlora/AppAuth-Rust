@@ -8,7 +8,10 @@ exists on macOS, so the fixtures are synthetic zips built from raw records
 that mirror ditto's layout (12-byte local UX, 8-byte central UX,
 AppleDouble sidecar); the package script's
 in-run double-ditto self-test then covers the real machine on a macOS
-runner.
+runner. That self-test sees no sidecars on a CI runner (its files carry no
+com.apple.provenance attribute), so RealDittoTestCase, which runs only
+where `ditto` exists, zips a tree that is given extended attributes and a
+resource fork so real ditto sidecars always reach the normalizer.
 
 Run with: python3 -m unittest discover -s scripts -p 'test_*.py'
 """
@@ -469,6 +472,98 @@ class SanityTestCase(unittest.TestCase):
             str(raised.exception),
             "archive.zip: rebuilt archive: unexpected 0x5835 (XAttr) "
             "subfield len=3 for b'pkg/f.txt'")
+
+
+@unittest.skipUnless(shutil.which("ditto"), "ditto exists only on macOS")
+class RealDittoTestCase(unittest.TestCase):
+    """The normalizer accepts the sidecars real `ditto` writes.
+
+    Sidecars are dropped from the output, but their records still pass the
+    range check and the data descriptor comparison (Issue #119), so the
+    synthetic fixtures alone cannot show that a real sidecar passes. The
+    tree is staged the way the package script stages it (TZ=UTC,
+    `xattr -cr`, `touch -t`), except that one file is given extended
+    attributes and another a resource fork, so ditto writes sidecars
+    whether or not the machine adds com.apple.provenance.
+    """
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp(prefix="normalize-zip-ditto-")
+        self.addCleanup(shutil.rmtree, self.tmpdir, ignore_errors=True)
+        self.env = dict(os.environ, TZ="UTC")
+        self.root = os.path.join(self.tmpdir, "AppAuthRust-Apple")
+        headers = os.path.join(self.root, "AppAuthRust.framework", "Headers")
+        os.makedirs(headers)
+        files = {
+            os.path.join(headers, "appauth_rust.h"): b"/* header */\n",
+            os.path.join(self.root, "empty"): b"",
+            os.path.join(self.root, "big.bin"): os.urandom(200000),
+            os.path.join(self.root, "xattr.txt"): b"xattr\n",
+            os.path.join(self.root, "rsrc.txt"): b"rsrc\n",
+        }
+        for path, data in files.items():
+            with open(path, "wb") as handle:
+                handle.write(data)
+        os.symlink("AppAuthRust.framework/Headers",
+                   os.path.join(self.root, "link"))
+        subprocess.run(["xattr", "-cr", self.root], check=True)
+        # A small attribute and one large enough to need a multi-block
+        # deflate stream in its sidecar.
+        for name, value in (("com.example.small", "v"),
+                            ("com.example.large", "x" * 60000)):
+            subprocess.run(["xattr", "-w", name, value,
+                            os.path.join(self.root, "xattr.txt")], check=True)
+        with open(os.path.join(self.root, "rsrc.txt", "..namedfork", "rsrc"),
+                  "wb") as handle:
+            handle.write(os.urandom(5000))
+        for path in [self.root] + [
+                os.path.join(base, name)
+                for base, dirs, names in os.walk(self.root)
+                for name in dirs + names]:
+            subprocess.run(["touch", "-h", "-t", "202601010000.00", path],
+                           check=True, env=self.env)
+
+    def _zip(self, name):
+        archive = os.path.join(self.tmpdir, name)
+        subprocess.run(["ditto", "-c", "-k", "--keepParent", self.root,
+                        archive], check=True, env=self.env)
+        return archive
+
+    def _normalize(self, archive):
+        proc = subprocess.run([sys.executable, NORMALIZER, archive],
+                              capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout
+
+    def _sidecars(self, archive):
+        """Return (name, local flags) for every sidecar in the archive."""
+        with open(archive, "rb") as handle:
+            blob = handle.read()
+        entries, _, _ = normalize_zip.walk_central(blob, archive)
+        return [(name, struct.unpack_from(normalize_zip.LOCAL_FIELDS, blob,
+                                          fields[15] + 4)[1])
+                for _, fields, name in entries
+                if normalize_zip.is_sidecar(name)]
+
+    def test_real_sidecars_are_verified_and_removed(self):
+        archive = self._zip("archive.zip")
+        sidecars = self._sidecars(archive)
+        names = {name.split(b"/")[-1] for name, _ in sidecars}
+        self.assertTrue({b"._xattr.txt", b"._rsrc.txt"} <= names, names)
+        # The sidecars carry a data descriptor, so the descriptor
+        # comparison is exercised, not skipped.
+        self.assertTrue(any(flags & 8 for _, flags in sidecars), sidecars)
+        stdout = self._normalize(archive)
+        self.assertIn(f"{len(sidecars)} AppleDouble sidecars removed", stdout)
+        self.assertEqual(self._sidecars(archive), [])
+
+    def test_double_ditto_normalizes_to_identical_bytes(self):
+        first = self._zip("first.zip")
+        second = self._zip("second.zip")
+        self._normalize(first)
+        self._normalize(second)
+        with open(first, "rb") as one, open(second, "rb") as two:
+            self.assertEqual(one.read(), two.read())
 
 
 class WalkCentralTestCase(unittest.TestCase):
