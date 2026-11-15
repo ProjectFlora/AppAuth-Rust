@@ -3,9 +3,10 @@
 The normalizer rewrites the 0x5855 (Info-ZIP "UX") extra subfields of a ditto-produced
 zip so the release archive does not depend on filesystem or machine state:
 the atime word is aligned with the pinned mtime word, and the local-header
-uid/gid word is zeroed. `ditto` only exists on macOS, so the fixtures are
-synthetic zips built from raw records that mirror ditto's layout (12-byte
-local UX, 8-byte central UX, AppleDouble sidecar); the package script's
+uid/gid word is dropped, so the archive records no owner. `ditto` only
+exists on macOS, so the fixtures are synthetic zips built from raw records
+that mirror ditto's layout (12-byte local UX, 8-byte central UX,
+AppleDouble sidecar); the package script's
 in-run double-ditto self-test then covers the real machine on a macOS
 runner.
 
@@ -91,6 +92,31 @@ def _local(name, data, extra):
     return header + name + extra + data
 
 
+def _local_desc(name, data, extra):
+    """A local record in the shape `ditto` writes for a file entry: bit 3
+    of the general-purpose flags is set, the local header's crc/csize/usize
+    are zeroed, and a data descriptor (crc, csize, usize) follows the data.
+    The real sizes live only in the central directory and the descriptor.
+    """
+    crc = zlib.crc32(data)
+    time, date = _dos(MTIME)
+    header = LOCAL_MAGIC + struct.pack(
+        "<5H3I2H", 20, 8, 0, time, date, 0, 0, 0, len(name), len(extra))
+    descriptor = b"PK" + bytes((7, 8)) + struct.pack(
+        "<III", crc, len(data), len(data))
+    return header + name + extra + data + descriptor
+
+
+def _local_bit3(name, data, extra):
+    """A malformed local record: bit 3 is set (so a data descriptor is
+    expected after the data) but the descriptor is absent. The normalizer
+    must reject the entry rather than silently corrupt it."""
+    time, date = _dos(MTIME)
+    header = LOCAL_MAGIC + struct.pack(
+        "<5H3I2H", 20, 8, 0, time, date, 0, 0, 0, len(name), len(extra))
+    return header + name + extra + data
+
+
 def _central(name, data, extra, local_off):
     crc = zlib.crc32(data)
     time, date = _dos(MTIME)
@@ -100,17 +126,19 @@ def _central(name, data, extra, local_off):
     return header + name + extra
 
 
-def _build(entries, comment):
+def _build(entries, comment, local_builder=_local):
     """Build a zip from (name, data, local_extra, central_extra) entries.
 
     Local records are written in order, then the central directory, then
     the EOCD, with every offset consistent the way a real zip is.
+    `local_builder` picks the local-record shape (default the plain `_local`;
+    `_local_desc` for the `ditto` bit-3 / data-descriptor shape).
     """
     local_blob = b""
     local_offsets = []
     for name, data, local_extra, _central_extra in entries:
         local_offsets.append(len(local_blob))
-        local_blob += _local(name, data, local_extra)
+        local_blob += local_builder(name, data, local_extra)
     cd_off = len(local_blob)
     records = [
         _central(name, data, central_extra, local_off)
@@ -170,12 +198,13 @@ INPUT_ENTRIES = [
 ]
 
 # What the normalizer must produce: the sidecar dropped, every atime word
-# aligned with the mtime word, every local uid/gid word zeroed, the
-# archive comment untouched.
+# aligned with the mtime word, every local uid/gid word removed (the
+# 12-byte shape rewritten to the 8-byte shape), the archive comment
+# untouched.
 EXPECTED_ENTRIES = [
-    (b"pkg/", b"", _ux([MTIME, MTIME, 0]), _ux([MTIME, MTIME])),
+    (b"pkg/", b"", _ux([MTIME, MTIME]), _ux([MTIME, MTIME])),
     (b"pkg/readme.txt", README,
-     _ux([MTIME, MTIME, 0]), _ux([MTIME, MTIME])),
+     _ux([MTIME, MTIME]), _ux([MTIME, MTIME])),
 ]
 
 
@@ -202,7 +231,7 @@ class NormalizeZipTestCase(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(self._read(), self.expected)
 
-    def test_uid_gid_zeroed_and_atime_aligned(self):
+    def test_local_owner_removed_and_atime_aligned(self):
         proc = self._run()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         entries = _archive_entries(self._read())
@@ -213,11 +242,10 @@ class NormalizeZipTestCase(unittest.TestCase):
             central_words = _ux_words(central_extra)
             self.assertEqual(len(local_words), 1)
             self.assertEqual(len(central_words), 1)
-            self.assertEqual(local_words[0][:2], (MTIME, MTIME))
+            # The local UX is the 8-byte shape: exactly atime and
+            # mtime, no uid/gid word at all.
+            self.assertEqual(local_words[0], (MTIME, MTIME))
             self.assertEqual(central_words[0], (MTIME, MTIME))
-            uid, gid = struct.unpack("<HH", struct.pack("<I",
-                                                        local_words[0][2]))
-            self.assertEqual((uid, gid), (0, 0))
 
     def test_summary_line(self):
         proc = self._run()
@@ -254,9 +282,14 @@ class NormalizeZipTestCase(unittest.TestCase):
         self._assert_refused(_drifted_ux_local(), _drifted_ux_local(),
                              "unexpected 0x5855 subfield shape len=12")
 
-    def test_central_shape_in_local_header_is_refused(self):
-        self._assert_refused(_drifted_ux_central(), _drifted_ux_central(),
-                             "unexpected 0x5855 subfield shape len=8")
+    def test_central_shape_in_local_header_is_accepted(self):
+        # An 8-byte local UX is already the documented minimal shape: it is
+        # accepted, and only its atime word is aligned.
+        self._assert_normalized(
+            [(b"pkg/f.txt", b"x", _drifted_ux_central(),
+              _drifted_ux_central())],
+            [(b"pkg/f.txt", b"x", _ux([MTIME, MTIME]),
+              _ux([MTIME, MTIME]))])
 
     def test_xattr_subfield_is_refused(self):
         self._assert_refused(_drifted_ux_local() + XATTR_EXTRA,
@@ -300,12 +333,13 @@ class NormalizeZipTestCase(unittest.TestCase):
                              _drifted_ux_central(),
                              "unexpected 0x7875 (Info-ZIP Unix ux) subfield")
 
-    def _assert_normalized(self, entries, expected):
+    def _assert_normalized(self, entries, expected, local_builder=_local):
         with open(self.path, "wb") as handle:
-            handle.write(_build(entries, COMMENT))
+            handle.write(_build(entries, COMMENT, local_builder))
         proc = self._run()
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(self._read(), _build(expected, COMMENT))
+        self.assertEqual(self._read(),
+                         _build(expected, COMMENT, local_builder))
 
     def test_entry_without_extra_is_kept(self):
         # ditto writes no extra field at all for a symlink entry.
@@ -313,13 +347,39 @@ class NormalizeZipTestCase(unittest.TestCase):
             [(b"pkg/link", b"readme.txt", b"", b"")],
             [(b"pkg/link", b"readme.txt", b"", b"")])
 
+    def test_data_descriptor_entry_is_normalized(self):
+        # A `ditto` file entry sets bit 3 and carries a data descriptor after
+        # its data. The normalizer rewrites the UX and preserves the
+        # descriptor, so the rebuilt record is still a valid zip entry.
+        self._assert_normalized(
+            [(b"pkg/f.txt", b"payload\n", _drifted_ux_local(),
+              _drifted_ux_central())],
+            [(b"pkg/f.txt", b"payload\n", _ux([MTIME, MTIME]),
+              _ux([MTIME, MTIME]))],
+            local_builder=_local_desc)
+
+    def test_missing_data_descriptor_is_refused(self):
+        # bit 3 is set but the data descriptor is absent: the payload does
+        # not match the declared data size, so the entry is rejected.
+        with open(self.path, "wb") as handle:
+            handle.write(_build(
+                [(b"pkg/f.txt", b"payload\n", _drifted_ux_local(),
+                  _drifted_ux_central())], COMMENT,
+                local_builder=_local_bit3))
+        before = self._read()
+        proc = self._run()
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("local record payload", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertEqual(self._read(), before)
+
     def test_every_duplicate_ux_subfield_is_normalized(self):
         self._assert_normalized(
             [(b"pkg/f.txt", b"x",
               _drifted_ux_local() + _drifted_ux_local(),
               _drifted_ux_central() + _drifted_ux_central())],
             [(b"pkg/f.txt", b"x",
-              _ux([MTIME, MTIME, 0]) + _ux([MTIME, MTIME, 0]),
+              _ux([MTIME, MTIME]) + _ux([MTIME, MTIME]),
               _ux([MTIME, MTIME]) + _ux([MTIME, MTIME]))])
 
     def test_sidecar_extra_is_not_checked(self):
@@ -359,7 +419,7 @@ class SanityTestCase(unittest.TestCase):
                       str(raised.exception))
 
     def test_rejected_subfield_names_the_rebuilt_archive(self):
-        blob = _build([(b"pkg/f.txt", b"x", _ux([MTIME, MTIME, 0]),
+        blob = _build([(b"pkg/f.txt", b"x", _ux([MTIME, MTIME]),
                         _ux([MTIME, MTIME]) + XATTR_EXTRA)], COMMENT)
         with self.assertRaises(SystemExit) as raised:
             normalize_zip.sanity(blob, "archive.zip")
