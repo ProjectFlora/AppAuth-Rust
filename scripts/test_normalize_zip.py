@@ -37,6 +37,7 @@ STAGING_GID = 20
 
 LOCAL_MAGIC = normalize_zip.LOCAL_MAGIC
 CD_MAGIC = normalize_zip.CD_MAGIC
+DD_MAGIC = normalize_zip.DD_MAGIC
 EOCD_MAGIC = normalize_zip.EOCD_MAGIC
 
 # A subfield ditto does not write, which the normalizer must reject even
@@ -92,18 +93,21 @@ def _local(name, data, extra):
     return header + name + extra + data
 
 
-def _local_desc(name, data, extra):
+def _local_desc(name, data, extra, descriptor=None):
     """A local record in the shape `ditto` writes for a file entry: bit 3
     of the general-purpose flags is set, the local header's crc/csize/usize
     are zeroed, and a data descriptor (crc, csize, usize) follows the data.
     The real sizes live only in the central directory and the descriptor.
+    `descriptor` overrides the whole 16-byte descriptor, for the
+    corrupted-descriptor fixtures.
     """
     crc = zlib.crc32(data)
     time, date = _dos(MTIME)
     header = LOCAL_MAGIC + struct.pack(
         "<5H3I2H", 20, 8, 0, time, date, 0, 0, 0, len(name), len(extra))
-    descriptor = b"PK" + bytes((7, 8)) + struct.pack(
-        "<III", crc, len(data), len(data))
+    if descriptor is None:
+        descriptor = DD_MAGIC + struct.pack(
+            "<III", crc, len(data), len(data))
     return header + name + extra + data + descriptor
 
 
@@ -278,6 +282,15 @@ class NormalizeZipTestCase(unittest.TestCase):
         self._assert_refused(_ux([ATIME, MTIME, 1, 2]), _drifted_ux_central(),
                              "unexpected 0x5855 subfield shape len=16")
 
+    def test_short_ux_subfield_is_refused(self):
+        # A 4-byte UX is framed correctly (it fits inside the extra field)
+        # but is too short to hold atime and mtime: it is a clean
+        # rejection, not an unpack error.
+        self._assert_refused(
+            struct.pack("<HH", 0x5855, 4) + struct.pack("<I", ATIME),
+            _drifted_ux_central(),
+            "unexpected 0x5855 subfield shape len=4")
+
     def test_local_shape_in_central_directory_is_refused(self):
         self._assert_refused(_drifted_ux_local(), _drifted_ux_local(),
                              "unexpected 0x5855 subfield shape len=12")
@@ -372,6 +385,35 @@ class NormalizeZipTestCase(unittest.TestCase):
         self.assertIn("local record payload", proc.stderr)
         self.assertNotIn("Traceback", proc.stderr)
         self.assertEqual(self._read(), before)
+
+    def test_data_descriptor_mismatch_is_refused(self):
+        # The descriptor is present and correctly sized, but its signature
+        # or its crc/csize/usize words disagree with the central directory:
+        # the entry is rejected, with the archive left untouched.
+        crc = zlib.crc32(b"payload\n")
+        descriptors = (
+            b"PK" + bytes((7, 9)) + struct.pack("<III", crc, 8, 8),
+            DD_MAGIC + struct.pack("<III", crc ^ 0xff, 8, 8),
+            DD_MAGIC + struct.pack("<III", crc, 8 ^ 1, 8),
+            DD_MAGIC + struct.pack("<III", crc, 8, 8 ^ 1),
+        )
+        for descriptor in descriptors:
+            # Bind `descriptor` now, so the builder cannot pick up a
+            # later value of the loop variable.
+            builder = lambda name, data, extra, descriptor=descriptor: \
+                _local_desc(name, data, extra, descriptor=descriptor)
+            with open(self.path, "wb") as handle:
+                handle.write(_build(
+                    [(b"pkg/f.txt", b"payload\n", _drifted_ux_local(),
+                      _drifted_ux_central())], COMMENT,
+                    local_builder=builder))
+            before = self._read()
+            proc = self._run()
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("does not match the central directory",
+                          proc.stderr)
+            self.assertNotIn("Traceback", proc.stderr)
+            self.assertEqual(self._read(), before)
 
     def test_every_duplicate_ux_subfield_is_normalized(self):
         self._assert_normalized(

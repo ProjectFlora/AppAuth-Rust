@@ -37,12 +37,16 @@ Safety: entries are located via the central directory (exact record stride)
 and the per-entry local header offset; the raw byte stream is never scanned
 for PK signatures (deflate payloads could contain false-positive signatures
 and would corrupt content if the walk desynchronized). Every entry's data
-region is size- and CRC-32-verified (decompressing for deflate entries) and
-must not overrun the next entry, unsupported methods, malformed extra
-fields, 0x5855 subfields whose size is not accepted at their location (8
-bytes central; 8 or 12 bytes local), and any other subfield are rejected,
-and the rebuilt archive is re-parsed, with every extra field required to
-be already normalized, before being written.
+region is size- and CRC-32-verified (decompressing for deflate entries),
+and its payload -- the data plus the data descriptor that follows it when
+bit 3 is set -- must run exactly to the next record; the descriptor's
+signature and crc/size words must match the central directory. The record
+bounds are checked before the data is read, so a malformed record is
+reported as a range problem, not a data error. Unsupported methods,
+malformed extra fields, 0x5855 subfields whose size is not accepted at
+their location (8 bytes central; 8 or 12 bytes local), and any other
+subfield are rejected, and the rebuilt archive is re-parsed, with every
+extra field required to be already normalized, before being written.
 """
 import os
 import struct
@@ -52,6 +56,7 @@ import zlib
 # Zip record signatures (built without backslash escapes on purpose).
 LOCAL_MAGIC = b"PK" + bytes((3, 4))   # local file header
 CD_MAGIC = b"PK" + bytes((1, 2))      # central directory header
+DD_MAGIC = b"PK" + bytes((7, 8))      # data descriptor (after bit-3 data)
 EOCD_MAGIC = b"PK" + bytes((5, 6))    # end of central directory
 
 CD_FIELDS = "<" + "H" * 6 + "I" * 3 + "H" * 5 + "I" * 2
@@ -123,18 +128,10 @@ def patch_ux(extra, local, path):
             die(path, f"unexpected 0x{tag:04x} "
                       f"({TAG_NAMES.get(tag, 'not written by ditto')}) "
                       f"subfield len={slen}")
-        payload = extra[i + 4:i + 4 + slen]
-        atime = struct.unpack_from("<I", payload, 0)[0]
-        mtime = struct.unpack_from("<I", payload, 4)[0]
-        if local and slen == 12:
-            if atime != mtime:
-                rewritten += 1
-            rewritten += 1  # the uid/gid word is dropped
-        elif slen == 8:
-            if atime != mtime:
-                rewritten += 1
-        else:
+        if not (slen == 8 or (local and slen == 12)):
             die(path, f"unexpected 0x5855 subfield shape len={slen}")
+        atime, mtime = struct.unpack_from("<II", extra, i + 4)
+        rewritten += (atime != mtime) + (slen == 12)
         new_extra += struct.pack("<HH", 0x5855, 8)
         new_extra += struct.pack("<II", mtime, mtime)
     return bytes(new_extra), rewritten
@@ -197,28 +194,58 @@ def main():
     # neither normalized nor checked: nothing in them reaches the output.
     drop = [is_sidecar(name) for _, _, name in entries]
     # The local UX rewrite changes the record size, so the rewritten local
-    # extras are kept here and re-emitted by the rebuild.
+    # extras are kept here and re-emitted by the rebuild. Each entry's
+    # parsed local fields and record bounds are kept the same way, so the
+    # local header is unpacked once.
     new_local_extras = [None] * len(entries)
+    records = [None] * len(entries)
     patched = 0
+    total = len(entries)
     for i, ((pos, fields, name), sidecar) in enumerate(zip(entries, drop)):
         lhref = fields[15]
         if data[lhref:lhref + 4] != LOCAL_MAGIC:
             die(path, f"lhref {lhref} is not a local file header")
         lfields = struct.unpack_from(LOCAL_FIELDS, data, lhref + 4)
+        elen = lfields[9]
         l_start = lhref + 30 + lfields[8]
+        next_lhref = entries[i + 1][1][15] if i + 1 < total else cd_off
+        # The record's payload -- the data plus, when bit 3 is set, the
+        # 16-byte data descriptor that follows it -- must run exactly to
+        # the next record. This is checked before the data is read, so a
+        # malformed record is reported as a range problem, not a data
+        # error.
+        if next_lhref <= lhref:
+            die(path, f"invalid entry range for {name!r}")
+        expected = fields[7] + (16 if (lfields[1] >> 3) & 1 else 0)
+        if next_lhref - (l_start + elen) != expected:
+            die(path, f"local record payload for {name!r} is "
+                      f"{next_lhref - l_start - elen} bytes, "
+                      f"expected {expected}")
+        # The data descriptor, where present, must match the central
+        # directory; the data itself is copied verbatim.
+        if (lfields[1] >> 3) & 1:
+            descriptor = data[next_lhref - 16:next_lhref]
+            if (descriptor[:4] != DD_MAGIC
+                    or struct.unpack_from("<III", descriptor, 4)
+                    != (fields[6], fields[7], fields[8])):
+                die(path, f"data descriptor for {name!r} does not match "
+                          f"the central directory")
         if not sidecar:
             c_start = pos + 46 + fields[9]
             c_extra, c_words = patch_ux(
                 bytearray(data[c_start:c_start + fields[10]]), False, path)
+            # The central extra is rewritten in place, so it must keep its
+            # length; a change would shift every later offset.
+            assert len(c_extra) == fields[10]
             data[c_start:c_start + fields[10]] = c_extra
             patched += c_words
 
             l_extra, l_words = patch_ux(
-                bytearray(data[l_start:l_start + lfields[9]]), True, path)
+                bytearray(data[l_start:l_start + elen]), True, path)
             new_local_extras[i] = l_extra
             patched += l_words
 
-        body = data[l_start + lfields[9]:l_start + lfields[9] + fields[7]]
+        body = data[l_start + elen:l_start + elen + fields[7]]
         if fields[3] == 0:
             raw = body
         elif fields[3] == 8:
@@ -237,6 +264,8 @@ def main():
         if b"__MACOSX/" in name:
             die(path, f"unexpected __MACOSX entry {name!r}")
 
+        records[i] = (lfields, l_start, next_lhref)
+
     # Rebuild the archive from the kept entries. Each local record is
     # re-emitted from its verified parts -- the header (with the updated
     # extra length), the name, the rewritten extra, and the payload (the
@@ -247,27 +276,13 @@ def main():
     # a kept entry and no orphan bytes survive into the output.
     out = bytearray()
     cd_out = bytearray()
-    total = len(entries)
     kept = 0
     for i, (pos, fields, name) in enumerate(entries):
         if drop[i]:
             continue
         lhref = fields[15]
-        next_lhref = entries[i + 1][1][15] if i + 1 < total else cd_off
-        if next_lhref <= lhref:
-            die(path, f"invalid entry range for {name!r}")
-        lfields = struct.unpack_from(LOCAL_FIELDS, data, lhref + 4)
-        nlen = lfields[8]
+        lfields, l_start, next_lhref = records[i]
         elen = lfields[9]
-        l_start = lhref + 30 + nlen
-        if l_start + elen + fields[7] > next_lhref:
-            die(path, f"local record for {name!r} overruns the next entry")
-        # The payload is the data plus, when bit 3 is set, the 16-byte data
-        # descriptor that follows it; together they run to the next record.
-        expected = fields[7] + (16 if (lfields[1] >> 3) & 1 else 0)
-        if next_lhref - (l_start + elen) != expected:
-            die(path, f"local record payload for {name!r} is "
-                      f"{next_lhref - l_start - elen} bytes, expected {expected}")
         header = bytearray(data[lhref:lhref + 30])
         struct.pack_into("<H", header, 28, len(new_local_extras[i]))
         new_off = len(out)
