@@ -1,49 +1,16 @@
+import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
+import org.jetbrains.kotlin.konan.properties.Properties
+
 plugins {
     id("com.android.library") version "8.11.1"
     id("org.jetbrains.kotlin.android") version "2.2.20"
-    id("maven-publish")
-    id("signing")
+    id("com.vanniktech.maven.publish") version "0.30.0"
 }
 
-val releaseVersion = providers.gradleProperty("releaseVersion").orNull ?: "0.0.0-SNAPSHOT"
-
-val repositoryRoot = rootDir.resolve("../..").canonicalFile
-val generatedBindings = layout.buildDirectory.dir("generated/uniffi")
-val androidRustLibraries = layout.buildDirectory.dir("generated/rust/jniLibs")
-val generateUniFfiBindings by tasks.registering(Exec::class) {
-    workingDir(repositoryRoot)
-    commandLine(
-        "bash",
-        repositoryRoot.resolve("scripts/generate-bindings.sh").absolutePath,
-        generatedBindings.get().asFile.absolutePath,
-    )
-    inputs.files(
-        repositoryRoot.resolve("Cargo.toml"),
-        repositoryRoot.resolve("Cargo.lock"),
-        repositoryRoot.resolve("scripts/generate-bindings.sh"),
-        fileTree(repositoryRoot.resolve("src")),
-    )
-    outputs.dir(generatedBindings)
-}
-
-val buildAndroidRustLibraries by tasks.registering(Exec::class) {
-    workingDir(repositoryRoot)
-    commandLine(
-        "bash",
-        repositoryRoot.resolve("scripts/check-android-targets.sh").absolutePath,
-        androidRustLibraries.get().asFile.absolutePath,
-    )
-    inputs.files(
-        repositoryRoot.resolve("Cargo.toml"),
-        repositoryRoot.resolve("Cargo.lock"),
-        repositoryRoot.resolve("scripts/check-android-targets.sh"),
-        fileTree(repositoryRoot.resolve("src")),
-    )
-    outputs.dir(androidRustLibraries)
-}
+val releaseVersion = providers.gradleProperty("releaseVersion").orNull ?: "0.5.0"
 
 android {
-    namespace = "com.projectflora.appauth"
+    namespace = "net.projectflora.appauth"
     compileSdk = 35
 
     defaultConfig {
@@ -66,22 +33,34 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+}
 
-    publishing {
-        singleVariant("release") {
-            withSourcesJar()
-            withJavadocJar()
-        }
-    }
+val generatedBindings by tasks.registering(Exec::class) {
+    val repositoryRoot = rootDir.resolve("../..").canonicalFile
+    val generatedBindingsDir = layout.buildDirectory.dir("generated/uniffi")
+
+    workingDir(repositoryRoot)
+    commandLine(
+        "bash",
+        repositoryRoot.resolve("scripts/generate-bindings.sh").absolutePath,
+        generatedBindingsDir.get().asFile.absolutePath,
+    )
+    inputs.files(
+        repositoryRoot.resolve("Cargo.toml"),
+        repositoryRoot.resolve("Cargo.lock"),
+        repositoryRoot.resolve("scripts/generate-bindings.sh"),
+        fileTree(repositoryRoot.resolve("src")),
+    )
+    outputs.dir(generatedBindingsDir)
 }
 
 tasks.named("preBuild").configure {
-    dependsOn(generateUniFfiBindings)
+    dependsOn(generatedBindings)
 }
 
 tasks.configureEach {
     if (name == "mergeDebugJniLibFolders" || name == "mergeReleaseJniLibFolders") {
-        dependsOn(buildAndroidRustLibraries)
+        dependsOn(generatedBindings)
     }
 }
 
@@ -97,45 +76,31 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-afterEvaluate {
-    publishing {
-        publications {
-            create<MavenPublication>("release") {
-                groupId = "net.project-flora"
-                artifactId = "appauth-rust-android"
-                version = releaseVersion
+mavenPublishing {
+    configure(AndroidSingleVariantLibrary(variant = "release", sourcesJar = true, publishJavadocJar = true))
+    coordinates("net.projectflora.appauth", "appauth-rust-android", releaseVersion)
+    publishToMavenCentral()
+    signAllPublications()
 
-                from(components["release"])
-                
-                pom {
-                    name.set("AppAuth-Rust Android")
-                    description.set("Rust-based AppAuth library for Android")
-                    url.set("https://github.com/ProjectFlora/AppAuth-Rust")
-                    licenses { 
-                        license { 
-                            name.set("Apache License 2.0")
-                            url.set("https://www.apache.org/licenses/LICENSE-2.0")
-                            distribution.set("repo" as String)
-                        }
-                    }
-                    developers { 
-                        developer { 
-                            id.set("projectflora") 
-                            name.set("ProjectFlora")
-                            email.set("oss@projectflora.net")
-                        }
-                    }
-                    scm { 
-                        url.set("https://github.com/ProjectFlora/AppAuth-Rust")
-                        connection.set("scm:git:https://github.com/ProjectFlora/AppAuth-Rust.git")
-                    }
-                }
+    pom {
+        name.set("AppAuth-Rust Android")
+        description.set("Rust-based AppAuth library for Android")
+        url.set("https://github.com/ProjectFlora/AppAuth-Rust")
+        licenses {
+            license {
+                name.set("Apache License 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0")
             }
         }
-        
-        signing {
-            useGpgCmd()
-            sign(publishing.publications["release"])
+        developers {
+            developer {
+                id.set("projectflora")
+                name.set("ProjectFlora")
+            }
+        }
+        scm {
+            url.set("https://github.com/ProjectFlora/AppAuth-Rust")
+            connection.set("scm:git:https://github.com/ProjectFlora/AppAuth-Rust.git")
         }
     }
 }

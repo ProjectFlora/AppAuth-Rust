@@ -12,7 +12,7 @@ on:
       version:
         description: Release version (MAJOR.MINOR.PATCH)
         required: true
-        default: 0.5.1
+        default: 0.5.0
         type: string
       publish:
         description: Create the release commit, tag and GitHub Release
@@ -275,6 +275,10 @@ jobs:
           grep -F "url: \"https://github.com/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION/AppAuthRust-Apple-$RELEASE_VERSION.zip\"," Package.swift
           grep -F "checksum: \"$checksum\"" Package.swift
           git diff -- Package.swift
+          # Build and test the manifest against the archive. The check copies the
+          # package to a temporary directory, where the binary target's
+          # url/checksum is swapped for the local path; the repository tree is
+          # left untouched.
       - run: scripts/check-spm-package.sh "dist/AppAuthRust-Apple-$RELEASE_VERSION.zip"
       - uses: actions/upload-artifact@v4
         with:
@@ -367,17 +371,25 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Setup Android SDK and NDK
-        run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Verify Rust bindings
-        run: scripts/check-android-targets.sh native/android/build/generated/rust/jniLibs
+      - name: Configure Android NDK
+        env:
+          ANDROID_API_LEVEL: '28'
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "ANDROID_API_LEVEL=$ANDROID_API_LEVEL" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
       - name: Publish to Maven Central with GPG signing
         env:
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_USER }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
         run: |
-          echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --import --batch --quiet
-          ./native/android/gradlew -p native/android publishRelease --info
+          ./native/android/gradlew -p native/android publishAndReleaseToMavenCentral \
+            -PreleaseVersion="$RELEASE_VERSION"

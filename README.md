@@ -351,45 +351,40 @@ its newer Swift sources.
 
 ## Android adapter
 
+### Installation from Maven Central (Recommended)
+
+Add to your module-level `build.gradle.kts`:
+
+```kotlin
+dependencies {
+    implementation("net.projectflora.appauth:appauth-rust-android:<version>")
+}
+```
+
+The POM declares `jna` (AAR), `kotlinx-coroutines-android`, and
+`androidx.browser`, so they resolve transitively.
+
+### Configuration
+
 - `native/android` launches authorization in a Custom Tab. It uses the HTTPS
   App Link redirect only when Android reports the host as verified and the
   configured callback activity resolves for that URI; otherwise it selects
   the registered custom-scheme fallback.
 - Declare both registered redirect URIs with the authorization server. The
   host app must register
-  `com.projectflora.appauth.AndroidAuthorizationCallbackActivity` with
+  `net.projectflora.appauth.AndroidAuthorizationCallbackActivity` with
   `android:exported="true"` and browsable intent filters for those URIs. Set
   `android:autoVerify="true"` on the HTTPS filter and host the matching
   `assetlinks.json` file. The adapter ignores callbacks that do not match the
   active redirect's scheme, host, port, and path; the Rust core validates the
   complete callback and state.
 
-### Maven Central Installation (Recommended)
-
-Add to your module-level `build.gradle.kts`:
-
-```kotlin
-dependencies {
-    implementation("net.projectflora.appauth:appauth-rust-android:0.5.1")
-}
-```
-
-Maven Central resolves the AAR and its transitive dependencies automatically:
-- ````net.projectflora.appauth:appauth-rust-android:<version>```` (AAR)
-- ````net.java.dev.jna:jna:5.12.0@aar````
-- ````org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2````
-- ````androidx.browser:browser:1.8.0````
-
-Pin the version in your `build.gradle.kts`: **`0.5.1`**. The Maven Central
-artifact is published by GitHub Actions on each release tag (see
-[.github/workflows/release.yml](.github/workflows/release.yml)).
-
 For example, add these filters to the callback activity in the host app's
 manifest, replacing the sample host and scheme with the registered values:
 
 ```xml
 <activity
-    android:name="com.projectflora.appauth.AndroidAuthorizationCallbackActivity"
+    android:name="net.projectflora.appauth.AndroidAuthorizationCallbackActivity"
     android:exported="true"
     android:noHistory="true">
     <intent-filter android:autoVerify="true">
