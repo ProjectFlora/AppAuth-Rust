@@ -1,4 +1,4 @@
-package com.projectflora.appauth
+package net.projectflora.appauth
 
 import java.net.IDN
 import java.net.URI

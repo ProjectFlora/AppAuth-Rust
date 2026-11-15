@@ -1,9 +1,12 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// The binary target downloads the static XCFramework from the GitHub Release
-// asset for the release this tag was published from; the release pipeline
-// keeps its URL and SHA-256 checksum in sync with the published archive.
+// The binary target downloads the static XCFramework from a GitHub Release
+// asset. At a version tag, the release pipeline has written the URL and
+// SHA-256 checksum of that release's archive. On main the pipeline never
+// updates them, so main points at an older release whose binary may not
+// match the newer Swift sources; depend on a release tag, not on main
+// (see docs/releasing.md: "Why CI creates the tag").
 // The source target carries the UniFFI-generated Swift API (do not edit;
 // CI verifies it matches the current Rust source) and the platform
 // adapters. The generated API is not Swift 6 strict-concurrency clean, so

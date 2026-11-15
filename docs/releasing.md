@@ -29,7 +29,9 @@ In a pull request to `main`:
   [final verification record](support-matrix.md#final-100-verification).
 
 Do not edit the `AppAuthRustBinary` URL or checksum in `Package.swift`; the
-release workflow writes them.
+release workflow writes them into the release commit at the version tag.
+`main`'s copy is not updated by a release (see
+[Why CI creates the tag](#why-ci-creates-the-tag)).
 
 Merge the pull request once CI passes.
 
@@ -60,7 +62,10 @@ Dispatch from `main` with **publish** checked:
 gh workflow run release.yml --ref main -f version=X.Y.Z -f publish=true
 ```
 
-The run rebuilds and revalidates everything, then the `publish` job:
+The run rebuilds and revalidates everything; the archive it publishes, and
+the checksum written into `Package.swift`, come from this run, not from the
+candidate run in step 2, and its bytes may differ from the candidate's.
+Then the `publish` job:
 
 1. Commits the validated `Package.swift` as `release: vX.Y.Z` on top of the
    dispatched `main` commit (it fails if anything else changed).
@@ -91,39 +96,80 @@ the release tracking issue.
 
 Swift Package Manager reads `Package.swift` at the version tag, and that
 manifest must contain the SHA-256 checksum of the published XCFramework
-archive. The archive is not byte-for-byte reproducible, so its checksum is
-only known after the workflow builds it. A tag pushed before the build can
-never contain the right checksum, so the workflow builds and validates the
-archive first and then tags a release commit that carries it:
+archive. The checksum is a build output: it is only known after the
+archive is actually built, so a tag pushed before the build can never
+contain it. The workflow therefore builds and validates the archive first
+and then tags a release commit that carries it:
 
 ```text
 main ── A ── B            (B: dispatched commit)
-              \
-               R          release: vX.Y.Z  (Package.swift only)  ← tag vX.Y.Z
+               \
+                R          release: vX.Y.Z  (Package.swift only)  ← tag vX.Y.Z
 ```
 
-As a consequence, `main`'s `Package.swift` keeps the previous release's
-binary target. SPM consumers resolve released versions by tag and are
-unaffected; depending on the `main` branch through SPM is not supported.
+The release commit is reachable only from its tag; the workflow never
+rewrites `main`'s `Package.swift`. `main` therefore keeps the binary target
+last committed to it by hand, and it falls further behind the Cargo version
+with every release unless someone updates it.
+`scripts/check-spm-manifest.sh` accepts any such lag and rejects only a
+manifest that leads the Cargo version. SPM consumers resolve released
+versions by tag and are unaffected; depending on the `main` branch through
+SPM is not supported.
+
+### What the packaging self-test checks
+
+This section is the reference description of the determinism self-test in
+`scripts/package-apple-xcframework.sh`; other documents link here rather
+than restating it.
+
+The release run builds the Rust libraries and stages the package once.
+The script then repeats two steps and requires identical bytes:
+
+- `xcodebuild -create-xcframework` runs a second time, and both
+  canonicalized `Info.plist` files must match
+  (`scripts/normalize_xcframework_plist.py`).
+- `ditto` zips the same staged tree a second time, and both archives must
+  have the same SHA-256 after `scripts/normalize_zip.py`.
+
+Staging (`cp`, `lipo`, `xattr -cr`, `touch -t`) runs once, and both
+comparisons run in the same job, on the same machine, with the same
+toolchain. Only the zip comparison runs under `TZ=UTC`; the plist
+comparison runs earlier, in the runner's local timezone. The self-test
+therefore shows only that the plist and zip steps repeat byte-identically
+within one run. It does not show that a rebuild, a repeated staging pass,
+or a run on another machine would produce the same archive. The manifest
+checksum does not rely on that: it is computed from the one archive that
+is published.
+
+Each self-test output is removed as soon as its comparison succeeds, and
+an EXIT trap removes whatever exists when the script exits any other way.
+Both are also removed before they are created, which covers the exits a
+trap cannot observe (SIGKILL, power loss): a failed or interrupted run
+cannot therefore leave behind a self-test output that would fail the next
+run. Re-running after a failure only requires removing the package
+directory the guard checks
+(`target/apple/release-package/AppAuthRust-Apple`).
 
 ## Recovering from a failed run
 
 - **Failed before "Create release commit and tag"**: nothing was published.
   Fix the cause and dispatch the workflow again.
+
 - **Tag pushed, but the GitHub Release was not created**: SPM cannot resolve
   the tag yet because its binary asset does not exist. Delete the tag, then
   use **Re-run failed jobs** so that the same built artifacts are reused:
 
-  ```sh
-  git push origin :refs/tags/vX.Y.Z
-  ```
+```sh
+git push origin :refs/tags/vX.Y.Z
+```
 
-- **Release published with a problem**: do not move or recreate the tag or
-  replace its assets. Consumers may already have resolved it, and SPM caches
-  the checksum. Fix forward with a new patch version.
+- **Release published with a problem**: do not move or recreate the tag or replace its assets. Consumers may already have resolved it, and SPM caches the checksum. Fix forward with a new patch version.
+
+- **Publish run cancelled (same-version dispatch)**: if you accidentally dispatched another release candidate while a publish was queued, the pending publish may be cancelled without notice. Check the Actions tab for a cancelled run; if so, dispatch the publish again.
 
 ## Repository settings
 
 - The `publish` job needs `contents: write`. If tag rulesets protect `v*`,
   allow `github-actions[bot]` (the GitHub Actions app) to create those tags.
+
 - Branch protection on `main` is unaffected: the workflow pushes only tags.

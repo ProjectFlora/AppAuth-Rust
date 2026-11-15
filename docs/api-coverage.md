@@ -69,8 +69,8 @@ and UniFFI facade. These records and enums form their input/output contracts:
   closure, Android redirect configuration, adapter exceptions and callback activity. See
   [Apple source](../native/apple/IOSAuthorizationAdapter.swift),
   [macOS source](../native/apple/MacOSAuthorizationAdapter.swift),
-  [Android source](../native/android/src/main/kotlin/com/projectflora/appauth/AndroidAuthorizationAdapter.kt)
-  and [internal redirect selection implementation](../native/android/src/main/kotlin/com/projectflora/appauth/AndroidRedirectSelector.kt)
+  [Android source](../native/android/src/main/kotlin/net/projectflora/appauth/AndroidAuthorizationAdapter.kt)
+  and [internal redirect selection implementation](../native/android/src/main/kotlin/net/projectflora/appauth/AndroidRedirectSelector.kt)
   (the selector is not public API).
 - All Windows handles, aliases, status constants, ten exported functions and
   four wrapper methods are listed in the [Windows reference](windows-api.md).

@@ -110,10 +110,12 @@ None.
   feature set or compatibility guarantees are complete. They may be published
   as regular GitHub Releases while known gaps remain; release notes must state
   the status and limitations.
-- v0.4.0 is the current implementation snapshot. It adds token refresh and
-  OIDC end-session to the Windows C ABI and .NET wrapper on top of the
-  previously published v0.3.0 assets, which include token revocation and the
-  Windows desktop adapter and release package.
+- v0.5.0 is the current implementation snapshot. It adds Swift Package
+  Manager distribution for the Apple package on top of the previously
+  published v0.4.0 assets, which include token refresh and OIDC end-session
+  in the Windows C ABI and .NET wrapper.
+  Maven Central publication of the Android AAR is planned for v0.6.0
+  ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)).
 - Do not declare 1.0.0 ready until all of these conditions are met:
   - Re-evaluate the support matrix against the then-current Apple security
     updates, Android Security Bulletin and device distribution, and
@@ -184,8 +186,8 @@ wrapper. CI also packages an Apple XCFramework and verifies Rust libraries are
 packaged in the Android release AAR. Live identity-provider interoperability
 remains explicitly unverified.
 
-Security edge-case audit progress and remaining gaps are tracked in
-[the audit ledger](docs/security-edge-case-audit.md) ([#62](https://github.com/ProjectFlora/AppAuth-Rust/issues/62)).
+Security edge-case audit results and scope boundaries are recorded in
+[the audit ledger](docs/security-edge-case-audit.md) ([#62](https://github.com/ProjectFlora/AppAuth-Rust/issues/62), accepted 2026-11-12).
 
 ## Initial validation checkpoints
 

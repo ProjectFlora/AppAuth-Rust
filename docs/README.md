@@ -39,11 +39,12 @@ includes the Windows Rust module. Full user-guide packaging remains #89.
 Repository documentation describes the source revision being read. Use the
 matching tag when installing a published release: current main's OS minimums,
 API additions, and packaging fixes may postdate that release. See the
-[support matrix](support-matrix.md) and [release downloads](../README.md#download-and-verify-v040).
-SPM and Maven Central publication are tracked by
-[#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82) and
-[#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81); use the documented
-GitHub Release installation until those channels are actually published.
+[support matrix](support-matrix.md) and [release downloads](../README.md#download-and-verify-v050).
+Swift Package Manager is available from v0.5.0
+([#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82)). Maven Central
+publication is planned for v0.6.0
+([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)); until then, use
+the documented GitHub Release installation for Android.
 
 Maintainers publishing a version follow the [release procedure](releasing.md).
 

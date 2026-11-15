@@ -71,7 +71,7 @@ properties of the current (2026) Central Portal:
 The main consumer win is dependency resolution: a hand-written or
 `maven-publish`-generated POM declares `jna` (as an AAR-typed dependency),
 `kotlinx-coroutines-android`, and `androidx.browser`, so a consumer writes a
-single `implementation("com.projectflora.appauth:appauth-rust-android:0.4.0")`
+single `implementation("net.project-flora.appauth:appauth-rust-android:<version>")`
 line and the transitive closure arrives automatically. Version pinning,
 upgrades, and overrides use ordinary Gradle mechanisms.
 
@@ -261,8 +261,8 @@ Findings:
 The adopted channels are implemented in separate issues that reference this
 document:
 
-- **Publish the Android AAR to Maven Central** ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)) — Central Portal account and
-  `com.projectflora` namespace registration (lead-time item), GPG key and
+- **Publish the Android AAR to Maven Central** ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)) — planned for v0.6.0. Central Portal account and
+  `net.project-flora` namespace registration (lead-time item), GPG key and
   signing setup, POM generation for the library module with the three
   transitive dependencies (jna as `aar` type, per Spike B), publication step
   in the release workflow, and consumer documentation updates.
@@ -274,10 +274,12 @@ document:
   Its source target carries the checked-in UniFFI-generated Swift API (a
   CI check verifies it matches the Rust source) plus the platform adapters,
   and its binary target references the release zip by URL with a per-release
-  checksum. Because the archive is not reproducible, the checksum is only
-  known after the build, so the release workflow (dispatched from `main`)
-  writes the URL and checksum into `Package.swift`, validates the rewritten
-  manifest against the archive, commits it as a release commit on top of the
-  dispatched `main` commit, and creates the version tag there; the published
-  release consumer workflow resolves the tag by URL (see
-  [Releasing](releasing.md)). Remaining: the first SPM release.
+  checksum. The checksum is a build output, so a tag pushed before the
+  build could never contain it (see
+  [Why CI creates the tag](releasing.md#why-ci-creates-the-tag)). The
+  release workflow (dispatched from `main`) therefore writes the URL and
+  checksum into `Package.swift`, validates the rewritten manifest against
+  the archive, commits it as a release commit on top of the dispatched
+  `main` commit, and creates the version tag there; the published release
+  consumer workflow resolves the tag by URL (see
+  [Releasing](releasing.md)). The first SPM release is v0.5.0.
