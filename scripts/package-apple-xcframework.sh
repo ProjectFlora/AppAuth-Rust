@@ -95,6 +95,17 @@ xcodebuild -create-xcframework \
 # array and each architecture list, rewrite in a fixed format), and requires
 # identical bytes before the archive embeds the framework.
 scratch_xcframework="$output_root/AppAuthRust-Apple-scratch.xcframework"
+# Remove any scratch left behind by an earlier failed or interrupted run
+# before creating it again: `xcodebuild -create-xcframework` refuses an
+# existing -output path, so a leftover would fail this step on a re-run
+# even though the guard above only checks $package_root. The pre-rm makes
+# the re-run possible after any earlier exit, including ones a trap cannot
+# observe (SIGKILL, power loss); the EXIT trap set alongside it backstops
+# the same cleanup on the other exit paths. The scratch stays in
+# $output_root, outside the staged $package_root, so a crashed run can never
+# leave it in the release tree that the archive embeds.
+rm -rf "$scratch_xcframework"
+trap 'rm -rf "$scratch_xcframework"' EXIT
 xcodebuild -create-xcframework \
     "${xcframework_args[@]}" \
     -output "$scratch_xcframework"
@@ -171,11 +182,17 @@ python3 "$repo_root/scripts/normalize_zip.py" "$archive"
 # tree advances file atimes, which the second zip records in the UX extra
 # field; the normalizer is what makes the comparison meaningful.)
 recheck="$output_root/AppAuthRust-Apple-$version-determinism.zip"
+# Extend the EXIT trap to the recheck zip as well (replacing the
+# scratch-only trap set with the scratch). `ditto` overwrites an existing
+# destination zip, so a leftover from an earlier run cannot fail this step;
+# the pre-rm keeps the cleanup explicit and symmetric with the scratch's.
+trap 'rm -rf "$scratch_xcframework" "$recheck"' EXIT
+rm -f "$recheck"
 ditto -c -k --keepParent "$package_root" "$recheck"
 python3 "$repo_root/scripts/normalize_zip.py" "$recheck"
 first_hash=$(shasum -a 256 "$archive" | awk '{print $1}')
 second_hash=$(shasum -a 256 "$recheck" | awk '{print $1}')
-rm "$recheck"
+rm -f "$recheck"
 if [[ "$first_hash" != "$second_hash" ]]; then
     echo "Apple release archive packaging is not deterministic: $first_hash != $second_hash" >&2
     exit 1

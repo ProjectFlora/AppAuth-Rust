@@ -141,6 +141,15 @@ or a run on another machine would produce the same archive. The manifest
 checksum does not rely on that: it is computed from the one archive that
 is published.
 
+Each self-test output is removed as soon as its comparison succeeds, and
+an EXIT trap removes whatever exists when the script exits any other way.
+Both are also removed before they are created, which covers the exits a
+trap cannot observe (SIGKILL, power loss): a failed or interrupted run
+cannot therefore leave behind a self-test output that would fail the next
+run. Re-running after a failure only requires removing the package
+directory the guard checks
+(`target/apple/release-package/AppAuthRust-Apple`).
+
 ## Recovering from a failed run
 
 - **Failed before "Create release commit and tag"**: nothing was published.
