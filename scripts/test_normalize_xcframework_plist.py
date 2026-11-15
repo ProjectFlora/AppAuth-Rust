@@ -86,6 +86,24 @@ class NormalizeXcframeworkPlistTestCase(unittest.TestCase):
             return [library["LibraryIdentifier"]
                     for library in plistlib.load(handle)["AvailableLibraries"]]
 
+    def _assert_refused(self, mutate, message):
+        """Rewrite the plist with mutate, then require a clean rejection:
+        nonzero exit, the named message on stderr, no traceback, and the
+        file left untouched."""
+        with open(self.plist, "rb") as handle:
+            info = plistlib.load(handle)
+        mutate(info)
+        with open(self.plist, "wb") as handle:
+            plistlib.dump(info, handle, fmt=plistlib.FMT_XML)
+        with open(self.plist, "rb") as handle:
+            before = handle.read()
+        proc = self._run()
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn(message, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        with open(self.plist, "rb") as handle:
+            self.assertEqual(handle.read(), before)
+
     def test_scrambled_input_is_canonicalized(self):
         proc = self._run()
         self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -124,8 +142,43 @@ class NormalizeXcframeworkPlistTestCase(unittest.TestCase):
         proc = self._run()
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("unexpected XCFramework slices", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
         with open(self.plist, "rb") as handle:
             self.assertEqual(handle.read(), before)
+
+    def test_missing_library_identifier_is_refused(self):
+        # LibraryIdentifier is the sort key: without the key check this
+        # slice would crash the sort with a KeyError traceback, and the
+        # fallback names it by its position.
+        self._assert_refused(
+            lambda info: info["AvailableLibraries"][0].pop(
+                "LibraryIdentifier"),
+            "library 'libraries[0]' is missing key 'LibraryIdentifier'")
+
+    def test_missing_supported_platform_is_refused(self):
+        self._assert_refused(
+            lambda info: info["AvailableLibraries"][1].pop(
+                "SupportedPlatform"),
+            "library 'ios-arm64' is missing key 'SupportedPlatform'")
+
+    def test_missing_supported_architectures_is_refused(self):
+        self._assert_refused(
+            lambda info: info["AvailableLibraries"][2].pop(
+                "SupportedArchitectures"),
+            "library 'ios-arm64-simulator' is missing key "
+            "'SupportedArchitectures'")
+
+    def test_missing_available_libraries_is_refused(self):
+        self._assert_refused(
+            lambda info: info.pop("AvailableLibraries"),
+            "missing key 'AvailableLibraries'")
+
+    def test_rejection_names_the_plist(self):
+        self._assert_refused(
+            lambda info: info["AvailableLibraries"][1].pop(
+                "SupportedPlatform"),
+            "Info.plist: library 'ios-arm64' is missing key "
+            "'SupportedPlatform'")
 
 
 if __name__ == "__main__":
