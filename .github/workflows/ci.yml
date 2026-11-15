@@ -75,6 +75,9 @@ jobs:
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # The macOS-only tests (real `ditto` sidecars) are skipped on Linux.
+      - name: Test Python scripts
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - run: scripts/check-apple-targets.sh
       - run: scripts/check-apple-adapters.sh
       - name: Remove cached XCFramework package output
