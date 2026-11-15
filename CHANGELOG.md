@@ -23,6 +23,18 @@ policies are still evolving. Each release records its known limitations.
 
 ### Changed
 
+- Report missing keys in the Apple Info.plist normalizer as a validation
+  error. `scripts/normalize_xcframework_plist.py` read the keys it sorts
+  and compares by before validating the slice set, so a plist missing
+  `AvailableLibraries`, or a slice missing `LibraryIdentifier`,
+  `SupportedPlatform`, or `SupportedArchitectures` — the shape a future
+  Xcode might write if it renamed or dropped a key — stopped the release
+  run with a Python traceback instead of a rejection message. The
+  normalizer now checks those keys before rewriting: a missing key is
+  reported as a message naming the plist, the library (or its index when
+  the identifier itself is missing) and the key, and the plist is left
+  untouched. Valid plists canonicalize exactly as before, so the release
+  archive is unchanged.
 - Clean up the Apple packaging self-test's scratch outputs on every exit.
   The scratch XCFramework is now removed before it is created, which makes
   a re-run possible after any earlier failed or interrupted run, including
