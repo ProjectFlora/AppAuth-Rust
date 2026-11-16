@@ -34,6 +34,15 @@ concurrency:
   group: release-${{ inputs.version }}
   cancel-in-progress: false
 
+env:
+  # Every Apple job (the release build and its consumer and manifest checks)
+  # selects this one Xcode on the macos-26 image. App Store Connect requires
+  # apps built with Xcode 26 or later, so the archive is built and validated
+  # with a stable Xcode 26.x — the one the macos-26 image ships as its
+  # default, so no extra download (Issue #135). Update the runner label and
+  # this version together, from the runner-images README, not the label.
+  XCODE_VERSION: '26.6'
+
 jobs:
   validate_version:
     name: Validate release version
@@ -85,7 +94,7 @@ jobs:
   apple:
     name: Build Apple release package
     needs: validate_version
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       IOS_SIMULATOR_MAJOR_VERSION: '18'
     steps:
@@ -93,15 +102,15 @@ jobs:
       # The archive's bytes are shaped by the toolchain (the rustc version is
       # part of rustc's -C metadata hash; the Xcode version shapes the
       # xcframework), and the manifest's checksum is computed from them. Pin
-      # both to exact versions — the macos-15 image ships Xcode 16.4, so no
-      # extra download — and record the exact versions in the step summary so
-      # a release archive can be tied to the toolchain that built it. Pinning
-      # does not make a rebuild byte-identical; the published checksum is
-      # always computed from this run's archive (see docs/releasing.md).
+      # both to exact versions (Xcode via XCODE_VERSION above) and record the
+      # exact versions in the step summary so a release archive can be tied
+      # to the toolchain that built it. Pinning does not make a rebuild
+      # byte-identical; the published checksum is always computed from this
+      # run's archive (see docs/releasing.md).
       - uses: dtolnay/rust-toolchain@1.100.0
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.4'
+          xcode-version: ${{ env.XCODE_VERSION }}
       - uses: Swatinem/rust-cache@v2
       - name: Record toolchain versions
         run: |
@@ -111,6 +120,11 @@ jobs:
             echo
             xcodebuild -version
           } >> "$GITHUB_STEP_SUMMARY"
+      # The iOS flow runs on the iOS 18 deployment minimum, but the macos-26
+      # image ships only iOS 26.x simulator runtimes, so install the last
+      # iOS 18 runtime. The flow's runtime is recorded in the step summary.
+      - name: Install iOS 18 simulator runtime
+        run: scripts/install-ios-simulator-runtime.sh 18.6
       - run: scripts/check-apple-adapters.sh
       - name: Remove cached XCFramework package output
         run: rm -rf target/apple/release-package
@@ -233,9 +247,20 @@ jobs:
   apple_consumer:
     name: Validate Apple release consumer
     needs: [validate_version, apple]
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+      - name: Record toolchain versions
+        run: |
+          {
+            echo "### Toolchain"
+            xcodebuild -version
+            echo
+            swift --version
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/download-artifact@v4
         with:
           name: release-apple
@@ -289,11 +314,22 @@ jobs:
   spm_manifest:
     name: Prepare and validate release Package.swift
     needs: [validate_version, apple]
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+      - name: Record toolchain versions
+        run: |
+          {
+            echo "### Toolchain"
+            xcodebuild -version
+            echo
+            swift --version
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/download-artifact@v4
         with:
           name: release-apple

@@ -12,12 +12,30 @@ on:
 permissions:
   contents: read
 
+env:
+  # The Apple and SPM jobs select the same Xcode as the release workflow's
+  # Apple jobs (XCODE_VERSION in release.yml), so the published archive is
+  # validated with the toolchain that built and pre-validated it
+  # (Issue #135). Keep the two in sync.
+  XCODE_VERSION: '26.6'
+
 jobs:
   apple:
     name: Validate published Apple consumer
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+      - name: Record toolchain versions
+        run: |
+          {
+            echo "### Toolchain"
+            xcodebuild -version
+            echo
+            swift --version
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Download and verify Apple release archive
         env:
           GH_TOKEN: ${{ github.token }}
@@ -40,15 +58,16 @@ jobs:
   # which is a fact about the library, tracked for removal in
   # Issue #133.
   #
-  # This job also deliberately pins no Xcode version: it tracks the
-  # toolchain the macos-15 image ships, so the consumer side is validated
-  # against a current toolchain. The accepted trade-off: a new Swift
-  # release can add diagnostics that fail this job on fixture or call-site
-  # code unrelated to the release artifact under validation. The job is a
-  # post-publication audit, so such a failure is triaged with the
-  # toolchain versions recorded in the first step, and fixed with a
-  # fixture pull request, or routed to Issue #133 when it reflects an API
-  # shape a real Swift 6 consumer would hit.
+  # This job selects the release workflow's Xcode (XCODE_VERSION above)
+  # rather than tracking whatever the image ships (Issue #135): the
+  # post-publication audit then validates the published archive with the
+  # toolchain that built and pre-validated it, a stable Xcode 26.x that
+  # App Store Connect accepts. A newer Swift reaches this job only when
+  # XCODE_VERSION is bumped, so new diagnostics show up in that pull
+  # request rather than in an audit run. A failure here is triaged with the
+  # toolchain versions recorded in the first step, and fixed with a fixture
+  # pull request, or routed to Issue #133 when it reflects an API shape a
+  # real Swift 6 consumer would hit.
   #
   # Every other Swift validation in this repository compiles in the Swift
   # 5 language mode (the in-tree package's targets are pinned to it, and
@@ -57,12 +76,14 @@ jobs:
   # See docs/distribution-channels.md, "Swift language mode".
   spm:
     name: Validate published SPM consumer
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
-      # Record the toolchain before any build: this job pins no Xcode
-      # version, so a red run must be attributable to a toolchain version
-      # at a glance.
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+      # Record the toolchain before any build, so a red run is attributable
+      # to a toolchain version at a glance.
       - name: Record toolchain versions
         run: |
           {

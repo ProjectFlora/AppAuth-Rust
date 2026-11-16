@@ -243,22 +243,26 @@ of the SPM channel in two:
   `release-consumer.yml`) is the one validation that builds from the
   Swift 6 side. Its generated consumer package uses `swift-tools-version:
   6.0` and pins no language mode, so it compiles in the Swift 6 language
-  mode, the mode new consumer apps ship in. It pins no Xcode version
-  either, and tracks the toolchain the runner image ships, recording the
-  versions in the step summary so a red run is attributable.
+  mode, the mode new consumer apps ship in. It selects the release
+  workflow's Xcode (`XCODE_VERSION`, a stable Xcode 26.x;
+  [Issue #135](https://github.com/ProjectFlora/AppAuth-Rust/issues/135)),
+  recording the versions in the step summary so a red run is
+  attributable.
 
-Both choices in the consumer job are deliberate
+The language-mode choice in the consumer job is deliberate
 ([Issue #107](https://github.com/ProjectFlora/AppAuth-Rust/issues/107)).
 A consumer of the published package pairs the v5-pinned library with its
 own language mode; the in-tree validations cover the Swift 5 mode
 pairing, and only the consumer job covers the Swift 6 mode pairing.
-Validating that pairing against a current toolchain keeps the signal
-honest for the consumers who matter most. The accepted trade-off is that
-a new Swift release can add diagnostics that fail the job on fixture or
-call-site code unrelated to the release artifact under validation. The
+The job no longer tracks whatever toolchain the runner image ships: it
+validates that pairing with the Xcode that built and pre-validated the
+published archive, a stable Xcode 26.x that App Store Connect accepts
+([Issue #135](https://github.com/ProjectFlora/AppAuth-Rust/issues/135)).
+A newer Swift reaches the job only when `XCODE_VERSION` is bumped, so new
+diagnostics surface in that pull request rather than in an audit run. The
 job is a post-publication audit (it consumes published artifacts; see
-[Releasing](releasing.md)), so such a failure is triaged with the
-recorded toolchain and fixed with a fixture pull request, or routed to
+[Releasing](releasing.md)), so a failure is triaged with the recorded
+toolchain and fixed with a fixture pull request, or routed to
 [Issue #133](https://github.com/ProjectFlora/AppAuth-Rust/issues/133)
 when it reflects an API shape a real Swift 6 consumer would hit.
 
