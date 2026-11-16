@@ -142,13 +142,13 @@ checksum does not rely on that: it is computed from the one archive that
 is published.
 
 Each self-test output is removed as soon as its comparison succeeds, and
-an EXIT trap removes whatever exists when the script exits any other way.
-Both are also removed before they are created, which covers the exits a
-trap cannot observe (SIGKILL, power loss): a failed or interrupted run
-cannot therefore leave behind a self-test output that would fail the next
-run. Re-running after a failure only requires removing the package
-directory the guard checks
-(`target/apple/release-package/AppAuthRust-Apple`).
+an EXIT trap removes whatever exists when the script exits any other way,
+so a run never leaves its self-test outputs behind. The guard checks the
+whole output directory rather than just the staged package, and the
+directory remains after any run — successful, failed, or interrupted —
+so re-running requires removing it in full
+(`rm -rf target/apple/release-package`). The removal also deletes archives
+of previous runs, so move any archive you keep somewhere else first.
 
 ## Recovering from a failed run
 

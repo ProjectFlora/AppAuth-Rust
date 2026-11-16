@@ -31,8 +31,14 @@ generated="$repo_root/target/uniffi"
 headers="$output_root/headers"
 macos_library="$repo_root/target/apple/libappauth_rust_macos.a"
 
-if [[ -e "$package_root" ]]; then
-    echo "Package output already exists: $package_root" >&2
+# Require the whole output directory to be absent: the CI workflows remove
+# it in full before each run, and a local re-run must not stage over a
+# previous run's contents (a partial staging, self-test outputs, or older
+# archives).
+if [[ -e "$output_root" ]]; then
+    echo "Package output directory already exists: $output_root" >&2
+    echo "Remove it before re-running (this also deletes previously generated archives; move any you need elsewhere first):" >&2
+    echo "  rm -rf \"$output_root\"" >&2
     exit 1
 fi
 
@@ -95,16 +101,12 @@ xcodebuild -create-xcframework \
 # array and each architecture list, rewrite in a fixed format), and requires
 # identical bytes before the archive embeds the framework.
 scratch_xcframework="$output_root/AppAuthRust-Apple-scratch.xcframework"
-# Remove any scratch left behind by an earlier failed or interrupted run
-# before creating it again: `xcodebuild -create-xcframework` refuses an
-# existing -output path, so a leftover would fail this step on a re-run
-# even though the guard above only checks $package_root. The pre-rm makes
-# the re-run possible after any earlier exit, including ones a trap cannot
-# observe (SIGKILL, power loss); the EXIT trap set alongside it backstops
-# the same cleanup on the other exit paths. The scratch stays in
-# $output_root, outside the staged $package_root, so a crashed run can never
-# leave it in the release tree that the archive embeds.
-rm -rf "$scratch_xcframework"
+# The guard above requires $output_root to be absent before the run, so no
+# scratch from an earlier run exists here; the EXIT trap removes it on
+# every exit path instead, so the run never leaves its self-test outputs
+# behind. The scratch stays in $output_root, outside the staged
+# $package_root, so a crashed run can never leave it in the release tree
+# that the archive embeds.
 trap 'rm -rf "$scratch_xcframework"' EXIT
 xcodebuild -create-xcframework \
     "${xcframework_args[@]}" \
@@ -184,11 +186,11 @@ python3 "$repo_root/scripts/normalize_zip.py" "$archive"
 # field; the normalizer is what makes the comparison meaningful.)
 recheck="$output_root/AppAuthRust-Apple-$version-determinism.zip"
 # Extend the EXIT trap to the recheck zip as well (replacing the
-# scratch-only trap set with the scratch). `ditto` overwrites an existing
-# destination zip, so a leftover from an earlier run cannot fail this step;
-# the pre-rm keeps the cleanup explicit and symmetric with the scratch's.
+# scratch-only trap set with the scratch). With the guard requiring
+# $output_root to be absent, no recheck zip from an earlier run exists
+# here either; the trap is what removes both self-test outputs on every
+# exit path.
 trap 'rm -rf "$scratch_xcframework" "$recheck"' EXIT
-rm -f "$recheck"
 ditto -c -k --keepParent "$package_root" "$recheck"
 python3 "$repo_root/scripts/normalize_zip.py" "$recheck"
 first_hash=$(shasum -a 256 "$archive" | awk '{print $1}')

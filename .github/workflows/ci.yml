@@ -81,6 +81,20 @@ jobs:
         run: python3 -m unittest discover -s scripts -p 'test_normalize_zip.py' -k RealDittoTestCase -v
       - run: scripts/check-apple-targets.sh
       - run: scripts/check-apple-adapters.sh
+      # The guard fires before any build step, so this regression-checks
+      # it in seconds: it must refuse an existing output directory, name
+      # that directory, and direct at removing it. The next step also
+      # removes the directory this check creates.
+      - name: Check the packaging output guard
+        run: |
+          mkdir -p target/apple/release-package
+          if scripts/package-apple-xcframework.sh 0.0.0-ci > "$RUNNER_TEMP/guard.log" 2>&1; then
+              cat "$RUNNER_TEMP/guard.log"
+              echo "the packaging output guard did not fire" >&2
+              exit 1
+          fi
+          grep -F "Package output directory already exists: $GITHUB_WORKSPACE/target/apple/release-package" "$RUNNER_TEMP/guard.log"
+          grep -F "rm -rf \"$GITHUB_WORKSPACE/target/apple/release-package\"" "$RUNNER_TEMP/guard.log"
       - name: Remove cached XCFramework package output
         run: rm -rf target/apple/release-package
       - name: Package Apple XCFramework
