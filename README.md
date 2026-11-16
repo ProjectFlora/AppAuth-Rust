@@ -195,24 +195,24 @@ checksums. See [Releasing](docs/releasing.md) for the maintainer procedure. Rele
 documented interoperability or support-policy gaps; see `CHANGELOG.md` and
 `ROADMAP.md`.
 
-## Download and verify v0.4.0
+## Download and verify v0.5.0
 
 The following versioned assets are available from GitHub Releases, independently
 of the temporary CI validation artifacts:
 
 | Asset | Download |
 | --- | --- |
-| Apple XCFramework and generated Swift API | [AppAuthRust-Apple-0.4.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/AppAuthRust-Apple-0.4.0.zip) |
-| Android AAR | [appauth-rust-android-0.4.0.aar](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/appauth-rust-android-0.4.0.aar) |
-| Windows DLL/C ABI and C++/.NET interop files | [appauth-rust-windows-0.4.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/appauth-rust-windows-0.4.0.zip) |
-| Rust API reference | [AppAuthRust-API-Docs-0.4.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/AppAuthRust-API-Docs-0.4.0.zip) |
-| SHA-256 checksums for all four assets | [SHA256SUMS](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/SHA256SUMS) |
+| Apple XCFramework and generated Swift API | [AppAuthRust-Apple-0.5.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/AppAuthRust-Apple-0.5.0.zip) |
+| Android AAR | [appauth-rust-android-0.5.0.aar](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/appauth-rust-android-0.5.0.aar) |
+| Windows DLL/C ABI and C++/.NET interop files | [appauth-rust-windows-0.5.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/appauth-rust-windows-0.5.0.zip) |
+| Rust API reference | [AppAuthRust-API-Docs-0.5.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/AppAuthRust-API-Docs-0.5.0.zip) |
+| SHA-256 checksums for all four assets | [SHA256SUMS](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.5.0/SHA256SUMS) |
 
 Download the desired asset and `SHA256SUMS` from the same release. For example,
 from the directory containing the Android AAR and checksum file:
 
 ```sh
-grep -F '  appauth-rust-android-0.4.0.aar' SHA256SUMS | shasum -a 256 -c -
+grep -F '  appauth-rust-android-0.5.0.aar' SHA256SUMS | shasum -a 256 -c -
 ```
 
 Use the exact downloaded asset name when verifying another package. GitHub
@@ -258,6 +258,9 @@ and fails before running the consumer check when the value differs.
 
 Run the **Published release consumer validation** workflow with a published
 version to repeat these checks against the immutable GitHub Release assets.
+It also validates the SPM channel: on a clean macOS runner, an external
+consumer package resolves the release tag as a remote dependency, runs a
+host-side smoke of the generated API, and builds for the iOS simulator.
 
 ## Apple adapters
 
@@ -295,7 +298,7 @@ version to repeat these checks against the immutable GitHub Release assets.
   See [Swift XCFramework installation](docs/swift-xcframework.md).
   The CI `apple-xcframework` artifact is for validation and expires after
   14 days. Use the published Apple archive and `SHA256SUMS` linked in
-  [Download and verify v0.4.0](#download-and-verify-v040) for distribution.
+  [Download and verify v0.5.0](#download-and-verify-v050) for distribution.
 
 ## Apple Swift Package Manager (SPM)
 
