@@ -1,9 +1,13 @@
 plugins {
     id("com.android.library") version "8.11.1"
     id("org.jetbrains.kotlin.android") version "2.2.20"
+    id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
 val repositoryRoot = rootDir.resolve("../..").canonicalFile
+// Release runs pass -PreleaseVersion=X.Y.Z. The SNAPSHOT fallback is rejected by
+// Maven Central, so a publish without an explicit version cannot succeed.
+val releaseVersion = providers.gradleProperty("releaseVersion").getOrElse("0.0.0-SNAPSHOT")
 val generatedBindings = layout.buildDirectory.dir("generated/uniffi")
 val androidRustLibraries = layout.buildDirectory.dir("generated/rust/jniLibs")
 val generateUniFfiBindings by tasks.registering(Exec::class) {
@@ -72,6 +76,10 @@ tasks.configureEach {
     if (name == "mergeDebugJniLibFolders" || name == "mergeReleaseJniLibFolders") {
         dependsOn(buildAndroidRustLibraries)
     }
+    // The published sources and javadoc jars read the generated bindings.
+    if (name == "sourceReleaseJar" || name.startsWith("javaDocRelease")) {
+        dependsOn(generateUniFfiBindings)
+    }
 }
 
 dependencies {
@@ -84,4 +92,40 @@ dependencies {
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 
     testImplementation("junit:junit:4.13.2")
+}
+
+mavenPublishing {
+    coordinates("net.project-flora.appauth", "appauth-rust-android", releaseVersion)
+    publishToMavenCentral()
+    // The release workflow supplies the key as ORG_GRADLE_PROJECT_signingInMemoryKey.
+    // Without it (local builds, CI checks) publications are left unsigned;
+    // Maven Central rejects unsigned uploads.
+    if (providers.gradleProperty("signingInMemoryKey").isPresent) {
+        signAllPublications()
+    }
+
+    pom {
+        name.set("AppAuth-Rust Android")
+        description.set("Android adapter and UniFFI Kotlin bindings for AppAuth-Rust, a Rust OAuth 2.0 and OpenID Connect client for native apps.")
+        url.set("https://github.com/ProjectFlora/AppAuth-Rust")
+        licenses {
+            license {
+                name.set("The Apache License, Version 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                distribution.set("repo")
+            }
+        }
+        developers {
+            developer {
+                id.set("projectflora")
+                name.set("ProjectFlora")
+                url.set("https://github.com/ProjectFlora")
+            }
+        }
+        scm {
+            url.set("https://github.com/ProjectFlora/AppAuth-Rust")
+            connection.set("scm:git:https://github.com/ProjectFlora/AppAuth-Rust.git")
+            developerConnection.set("scm:git:ssh://git@github.com/ProjectFlora/AppAuth-Rust.git")
+        }
+    }
 }

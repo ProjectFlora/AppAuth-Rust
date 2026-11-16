@@ -5,7 +5,8 @@ name: Release
 # Apple archive's URL and SHA-256 checksum into Package.swift, commits that as
 # a release commit on top of the dispatched main commit, tags it, and
 # publishes the GitHub Release. The checksum is only known after the archive
-# is built, so the tag is created here rather than pushed beforehand.
+# is built, so the tag is created here rather than pushed beforehand. Once the
+# GitHub Release exists, the Android library is published to Maven Central.
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +16,7 @@ on:
         default: 0.5.0
         type: string
       publish:
-        description: Create the release commit, tag and GitHub Release
+        description: Create the release commit, tag and GitHub Release, and publish to Maven Central
         required: true
         default: false
         type: boolean
@@ -164,6 +165,10 @@ jobs:
           unzip -Z1 "$aar" | grep -Fx jni/x86_64/libappauth_rust.so
           mkdir -p dist
           cp "$aar" "dist/appauth-rust-android-$RELEASE_VERSION.aar"
+      - name: Verify Maven Central publication contents
+        env:
+          RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+        run: scripts/check-android-maven-publication.sh "$RELEASE_VERSION"
       - uses: actions/upload-artifact@v4
         with:
           name: release-android
@@ -382,3 +387,49 @@ jobs:
             --verify-tag \
             --title "AppAuth-Rust v$RELEASE_VERSION" \
             --generate-notes
+
+  publish_maven:
+    if: ${{ inputs.publish }}
+    name: Publish Android library to Maven Central
+    # Maven Central versions are immutable, so publish only after every
+    # package is validated and the tag and GitHub Release exist.
+    needs: [validate_version, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The release commit differs from the dispatched commit only in
+          # Package.swift; build from the tag so the sources jar matches it.
+          ref: v${{ needs.validate_version.outputs.version }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Configure Android NDK
+        env:
+          ANDROID_API_LEVEL: '28'
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "ANDROID_API_LEVEL=$ANDROID_API_LEVEL" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify the signed publication locally
+        env:
+          RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
+        run: scripts/check-android-maven-publication.sh "$RELEASE_VERSION"
+      - name: Publish to Maven Central
+        env:
+          RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_USER }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          ./native/android/gradlew -p native/android publishAndReleaseToMavenCentral \
+            -PreleaseVersion="$RELEASE_VERSION"
