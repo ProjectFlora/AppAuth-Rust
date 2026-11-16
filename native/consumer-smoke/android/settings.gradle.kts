@@ -10,7 +10,13 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
-        mavenCentral()
+        mavenCentral {
+            // Disable Gradle Module Metadata to force verification of the POM file
+            metadataSources {
+                mavenPom()
+                ignoreGradleMetadataRedirection()
+            }
+        }
     }
 }
 
