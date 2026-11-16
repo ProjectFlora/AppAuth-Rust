@@ -9,4 +9,4 @@ fi
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 fixture="$repo_root/native/consumer-smoke/android"
 
-"$repo_root/native/android/gradlew" -p "$fixture" -PappauthVersion="$1" connectedDebugAndroidTest
+"$repo_root/native/android/gradlew" -p "$fixture" -PappauthVersion="$1" --refresh-dependencies connectedDebugAndroidTest
