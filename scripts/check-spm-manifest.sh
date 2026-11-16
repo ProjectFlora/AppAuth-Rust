@@ -28,13 +28,26 @@ if [[ ! -f Package.swift ]]; then
 fi
 
 # Canonical repository URL for the release asset: CI provides the
-# repository; local runs fall back to the origin remote.
+# repository; local runs fall back to the origin remote. The remote may
+# use any form git accepts for this repository — https, scp-style SSH
+# (git@github.com:OWNER/REPO) or ssh:// — with or without a .git suffix;
+# the two SSH forms normalize to the https form CI derives.
 if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
     repo_url="https://github.com/$GITHUB_REPOSITORY"
 else
     remote_url=$(git remote get-url origin)
     case "$remote_url" in
-        https://github.com/*) repo_url="${remote_url%.git}" ;;
+        https://github.com/*)
+            repo_url="${remote_url%.git}"
+            ;;
+        git@github.com:*)
+            repo_url="https://github.com/${remote_url#git@github.com:}"
+            repo_url="${repo_url%.git}"
+            ;;
+        ssh://git@github.com/*)
+            repo_url="https://github.com/${remote_url#ssh://git@github.com/}"
+            repo_url="${repo_url%.git}"
+            ;;
         *)
             echo "Cannot derive the repository URL from origin remote: $remote_url" >&2
             exit 1

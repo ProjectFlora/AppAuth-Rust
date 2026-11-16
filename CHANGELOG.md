@@ -23,6 +23,16 @@ policies are still evolving. Each release records its known limitations.
 
 ### Changed
 
+- Accept SSH origin remotes in the SPM manifest check.
+  `scripts/check-spm-manifest.sh` derived the repository URL for local
+  runs from the origin remote and accepted only `https://github.com`
+  URLs, so a repository cloned with an SSH remote — `git@github.com:OWNER/REPO`
+  or `ssh://git@github.com/OWNER/REPO`, with or without a `.git` suffix —
+  failed with "Cannot derive the repository URL from origin remote" before
+  it inspected the manifest. The check now normalizes all three remote
+  forms to the canonical `https://github.com/OWNER/REPO` URL it derives in
+  CI from `GITHUB_REPOSITORY`, so the manifest check runs from an https or
+  an SSH clone alike.
 - Report missing keys in the Apple Info.plist normalizer as a validation
   error. `scripts/normalize_xcframework_plist.py` read the keys it sorts
   and compares by before validating the slice set, so a plist missing
