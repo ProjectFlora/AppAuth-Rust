@@ -13,7 +13,7 @@ dependencyResolutionManagement {
         mavenCentral {
             // Disable Gradle Module Metadata to force verification of the POM file
             metadataSources {
-                api()
+                maven()
             }
         }
     }
