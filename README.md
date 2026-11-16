@@ -299,6 +299,12 @@ host-side smoke of the generated API, and builds for the iOS simulator.
   platform adapters (the same sources the Swift package target compiles),
   and an installation guide.
   See [Swift XCFramework installation](docs/swift-xcframework.md).
+  The script refuses to run while `target/apple/release-package` exists, so
+  before re-running it (to repackage the same version, or to package a new
+  one over an older build) remove that whole directory
+  (`rm -rf target/apple/release-package`); the removal also deletes any
+  previously generated archives, so move one you keep somewhere else
+  first.
   The CI `apple-xcframework` artifact is for validation and expires after
   14 days. Use the published Apple archive and `SHA256SUMS` linked in
   [Download and verify v0.5.0](#download-and-verify-v050) for distribution.

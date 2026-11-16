@@ -36,6 +36,22 @@ policies are still evolving. Each release records its known limitations.
 
 ### Changed
 
+- Require the whole Apple packaging output directory to be absent.
+  `scripts/package-apple-xcframework.sh` refused to start only when the
+  staged package directory existed, while the CI workflows remove the whole
+  `target/apple/release-package` output directory before each run; the
+  guard and the CI operating model disagreed on what a clean state is. The
+  guard now checks the whole output directory — an existing one, even an
+  empty one, stops the run with a message naming that directory and the
+  removal command — matching the CI wipe. Re-running after a failure, or
+  to repackage a version, therefore requires
+  `rm -rf target/apple/release-package`, which also removes archives of
+  earlier runs; move any archive you keep elsewhere first. The self-test
+  outputs are no longer pre-removed before they are created: with the guard
+  guaranteeing an absent output directory, there is nothing from an earlier
+  run to remove. The EXIT trap that removes them on every exit stays, so
+  the run never leaves its self-test outputs behind. The in-run self-tests
+  and the release archive are unchanged.
 - Accept SSH origin remotes in the SPM manifest check.
   `scripts/check-spm-manifest.sh` derived the repository URL for local
   runs from the origin remote and accepted only `https://github.com`
@@ -59,17 +75,14 @@ policies are still evolving. Each release records its known limitations.
   untouched. Valid plists canonicalize exactly as before, so the release
   archive is unchanged.
 - Clean up the Apple packaging self-test's scratch outputs on every exit.
-  The scratch XCFramework is now removed before it is created, which makes
-  a re-run possible after any earlier failed or interrupted run, including
-  exits a trap cannot observe (SIGKILL, power loss); an EXIT trap removes
-  it, and the determinism zip, whenever the script exits any other way, and
-  the determinism zip is pre-removed before its second `ditto`. Previously
-  the scratch was removed only when its Info.plist comparison succeeded, so
-  a failed comparison or an interruption stranded it in
+  An EXIT trap now removes the scratch XCFramework, and the determinism
+  zip, whenever the script exits any other way. Previously the scratch was
+  removed only when its Info.plist comparison succeeded, so a failed
+  comparison or an interruption stranded it in
   `target/apple/release-package`, outside the package directory the guard
-  checks; the next run then failed in `create-xcframework`, which refuses
-  an existing output path, even after the user removed the package
-  directory as the guard's message directs.
+  then checked; the next run then failed in `create-xcframework`, which
+  refuses an existing output path, even after the user removed the package
+  directory as the guard's message then directed.
 - Record no owner in the Apple release archive. The zip normalizer
   rewrites the 12-byte local-header 0x5855 (Info-ZIP "UX") subfield to
   the 8-byte shape, dropping the uid/gid word, so the archive records no
