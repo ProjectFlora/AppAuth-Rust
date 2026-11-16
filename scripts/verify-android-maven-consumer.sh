@@ -24,7 +24,7 @@ for i in $(seq 1 $MAX_RETRIES); do
     fi
 
     echo "Light check passed. Running full consumer smoke test..."
-    if scripts/check-android-maven-consumer.sh "$VERSION"; then
+    if "$repo_root/scripts/check-android-maven-consumer.sh" "$VERSION"; then
         echo "Maven Central verification succeeded!"
         exit 0
     fi
