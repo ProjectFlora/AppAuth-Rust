@@ -95,8 +95,9 @@ gh workflow run release-consumer.yml --ref main -f version=X.Y.Z
 ```
 
 This downloads each published asset, verifies it against `SHA256SUMS`, and
-runs the Apple, Android, and Windows consumers. Its `spm` job resolves the
-`vX.Y.Z` tag through Swift Package Manager by URL, which also verifies the
+runs the Apple, Android, and Windows consumers. It also resolves the Android library from Maven Central using `mavenCentral()` to verify that the POM and transitive dependencies are correctly configured.
+
+Its `spm` job resolves the `vX.Y.Z` tag through Swift Package Manager by URL, which also verifies the
 manifest's checksum against the published archive. Record the run URL in
 the release tracking issue.
 

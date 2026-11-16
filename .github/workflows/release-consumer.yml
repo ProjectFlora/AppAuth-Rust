@@ -180,6 +180,32 @@ jobs:
           disable-animations: true
           script: scripts/check-android-release-consumer.sh dist/appauth-rust-android-${{ inputs.version }}.aar
 
+  android_maven:
+    name: Validate published Android consumer (Maven Central)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable Android emulator hardware acceleration
+        run: sudo chmod a+rw /dev/kvm
+      - name: Run Android release consumer (Maven Central) on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          arch: x86_64
+          target: google_apis_playstore
+          disable-linux-hw-accel: false
+          disable-animations: true
+          script: scripts/verify-android-maven-consumer.sh ${{ inputs.version }}
+
   windows:
     name: Validate published Windows consumers
     runs-on: windows-latest
