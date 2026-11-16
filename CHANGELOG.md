@@ -6,6 +6,19 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+### Added
+
+- Publish the Android library to Maven Central as
+  `net.project-flora.appauth:appauth-rust-android`
+  ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)). A
+  publishing release run builds the library from the release tag, signs it,
+  and uploads it through the Central Portal after the GitHub Release is
+  created. The POM declares jna (as an AAR), kotlinx-coroutines-android, and
+  androidx.browser, so consumers need a single dependency line. The
+  publication ships sources and javadoc jars. Pull request CI and release
+  candidate runs check the publication contents with
+  `scripts/check-android-maven-publication.sh`.
+
 ### Documentation
 
 - Correct how the v0.5.0 notes describe the Apple release archive. The

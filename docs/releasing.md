@@ -11,7 +11,7 @@ creates the tag itself (see [Why CI creates the tag](#why-ci-creates-the-tag)).
 | --- | --- | --- |
 | 1. Prepare | Pull request to `main` | Version, changelog, and docs updated |
 | 2. Candidate run | Release workflow, `publish: false` | All packages built and consumer-validated; nothing published |
-| 3. Publish run | Release workflow from `main`, `publish: true` | Release commit, `vX.Y.Z` tag, and GitHub Release with assets and `SHA256SUMS` |
+| 3. Publish run | Release workflow from `main`, `publish: true` | Release commit, `vX.Y.Z` tag, GitHub Release with assets and `SHA256SUMS`, and the Android library on Maven Central |
 | 4. Verify | Published release consumer validation workflow | Published assets and the Swift package resolve and build |
 
 ## 1. Prepare the release
@@ -23,7 +23,8 @@ In a pull request to `main`:
   version that does not match the crate version.
 - Move the `CHANGELOG.md` `[Unreleased]` entries under the new version.
 - Update README's download section, the SPM installation version (the
-  `from:` version and Xcode dependency rule), and any version-specific notes.
+  `from:` version and Xcode dependency rule), the Maven Central
+  dependency version, and any version-specific notes.
 - Recheck Windows client support as required by the
   [support matrix](support-matrix.md). For 1.0.0, complete the
   [final verification record](support-matrix.md#final-100-verification).
@@ -73,6 +74,13 @@ Then the `publish` job:
    tag**. `main` is not updated.
 3. Creates the GitHub Release with the Apple, Android, Windows, and API docs
    assets plus `SHA256SUMS`, and generated release notes.
+
+After the GitHub Release is created, the `publish_maven` job checks out the
+`vX.Y.Z` tag, builds the Android library, checks the signed publication with
+`scripts/check-android-maven-publication.sh`, and publishes
+`net.project-flora.appauth:appauth-rust-android:X.Y.Z` to Maven Central through
+the Central Portal (`publishAndReleaseToMavenCentral`). The candidate run
+and pull request CI run the same check on an unsigned publication.
 
 Publishing is refused unless the run is dispatched from `main`, the commit is
 on `main`, and the `vX.Y.Z` tag does not already exist.
@@ -165,6 +173,12 @@ git push origin :refs/tags/vX.Y.Z
 
 - **Release published with a problem**: do not move or recreate the tag or replace its assets. Consumers may already have resolved it, and SPM caches the checksum. Fix forward with a new patch version.
 
+- **GitHub Release created, but `publish_maven` failed**: if the Central
+  Portal deployment was not released, fix the cause (for example, credentials
+  or the signing key) and use **Re-run failed jobs**. If the version already
+  appears on Maven Central, it cannot be replaced or deleted; fix forward with
+  a new patch version.
+
 - **Publish run cancelled (same-version dispatch)**: if you accidentally dispatched another release candidate while a publish was queued, the pending publish may be cancelled without notice. Check the Actions tab for a cancelled run; if so, dispatch the publish again.
 
 ## Repository settings
@@ -173,3 +187,11 @@ git push origin :refs/tags/vX.Y.Z
   allow `github-actions[bot]` (the GitHub Actions app) to create those tags.
 
 - Branch protection on `main` is unaffected: the workflow pushes only tags.
+
+- The `publish_maven` job reads these repository secrets:
+  - `MAVEN_USER` and `MAVEN_PASSWORD`: a Central Portal user token with
+    publishing rights to the verified `net.project-flora` namespace.
+  - `GPG_PRIVATE_KEY`: the ASCII-armored private signing key. Its public key
+    must be published to a key server that Maven Central checks, such as
+    `keys.openpgp.org`.
+  - `GPG_PASSPHRASE`: the passphrase of that key.

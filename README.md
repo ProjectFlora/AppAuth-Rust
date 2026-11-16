@@ -432,6 +432,20 @@ that may not match the newer Swift sources.
   verifies both entries and uploads the AAR as a workflow artifact. The
   current output is
   `native/android/build/outputs/aar/appauth-rust-android-release.aar`.
+- Starting with v0.6.0, releases are also published to Maven Central
+  ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)). With
+  `mavenCentral()` in the repositories, one dependency brings in the AAR and
+  its runtime dependencies (jna, kotlinx-coroutines-android, and
+  androidx.browser):
+
+  ```kotlin
+  dependencies {
+      implementation("net.project-flora.appauth:appauth-rust-android:<version>")
+  }
+  ```
+
+  Earlier versions are available only as GitHub Release assets, as described
+  in the next item.
 - Download `appauth-rust-android-0.5.0.aar` from the
   [published release](#download-and-verify-v050), verify its checksum, and copy
   it into the Android app's `libs` directory.
