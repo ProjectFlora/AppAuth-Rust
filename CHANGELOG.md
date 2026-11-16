@@ -36,6 +36,26 @@ policies are still evolving. Each release records its known limitations.
 
 ### Changed
 
+- Make the published SPM consumer's Swift language mode explicit
+  ([#107](https://github.com/ProjectFlora/AppAuth-Rust/issues/107)). The
+  `spm` job of `release-consumer.yml` generates a consumer package with
+  `swift-tools-version: 6.0`, so the consumer already built in the Swift 6
+  language mode while the published library pins its source target to
+  Swift 5, and the job pinned no Xcode version; neither choice was
+  documented, so a future failure of the job could not be attributed to a
+  language-mode or toolchain decision. The workflow now records the
+  `xcodebuild` and Swift versions in its step summary before building, and
+  comments in the workflow, a comment in the generated consumer manifest,
+  and a new "Swift language mode" section in
+  [docs/distribution-channels.md](docs/distribution-channels.md) record
+  the policy: the consumer deliberately builds in the Swift 6 language
+  mode and tracks the current toolchain, the library's Swift 5 pin is a
+  fact about the generated API tracked for removal in
+  [#133](https://github.com/ProjectFlora/AppAuth-Rust/issues/133), and a
+  toolchain upgrade that fails the post-publication audit is triaged with
+  the recorded versions, fixed with a fixture pull request, or routed to
+  #133 when it reflects an API shape a real Swift 6 consumer would hit.
+  The consumer package's manifest is otherwise unchanged.
 - Require the whole Apple packaging output directory to be absent.
   `scripts/package-apple-xcframework.sh` refused to start only when the
   staged package directory existed, while the CI workflows remove the whole

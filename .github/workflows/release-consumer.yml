@@ -32,11 +32,45 @@ jobs:
           grep -F "  AppAuthRust-Apple-$RELEASE_VERSION.zip" SHA256SUMS | shasum -a 256 -c -
       - run: scripts/check-apple-release-consumer.sh dist/AppAuthRust-Apple-${{ inputs.version }}.zip
 
+  # Language-mode policy (Issue #107): the generated consumer package uses
+  # swift-tools-version 6.0 and deliberately pins no language mode, so it
+  # builds in the Swift 6 language mode, the mode new consumer apps ship
+  # in. The published library, by contrast, pins its source target to
+  # Swift 5: the generated API is not Swift 6 strict-concurrency clean,
+  # which is a fact about the library, tracked for removal in
+  # Issue #133.
+  #
+  # This job also deliberately pins no Xcode version: it tracks the
+  # toolchain the macos-15 image ships, so the consumer side is validated
+  # against a current toolchain. The accepted trade-off: a new Swift
+  # release can add diagnostics that fail this job on fixture or call-site
+  # code unrelated to the release artifact under validation. The job is a
+  # post-publication audit, so such a failure is triaged with the
+  # toolchain versions recorded in the first step, and fixed with a
+  # fixture pull request, or routed to Issue #133 when it reflects an API
+  # shape a real Swift 6 consumer would hit.
+  #
+  # Every other Swift validation in this repository compiles in the Swift
+  # 5 language mode (the in-tree package's targets are pinned to it, and
+  # the swiftc-based checks use the compiler's Swift 5 default), so the
+  # two cover Swift 5 mode and Swift 6 mode consumers of the SPM channel.
+  # See docs/distribution-channels.md, "Swift language mode".
   spm:
     name: Validate published SPM consumer
     runs-on: macos-15
     timeout-minutes: 45
     steps:
+      # Record the toolchain before any build: this job pins no Xcode
+      # version, so a red run must be attributable to a toolchain version
+      # at a glance.
+      - name: Record toolchain versions
+        run: |
+          {
+            echo "### Toolchain"
+            xcodebuild -version
+            echo
+            swift --version
+          } >> "$GITHUB_STEP_SUMMARY"
       # No checkout: the consumer is a foreign package that only knows the
       # published release tag, exactly like a real SPM consumer. SPM resolves
       # the tag, downloads the binary target from the manifest URL (verifying
@@ -59,6 +93,11 @@ jobs:
           # exactly as a foreign package would.
           cat > Package.swift <<EOF
           // swift-tools-version: 6.0
+          // No swiftLanguageMode setting: this consumer deliberately builds
+          // in the Swift 6 language mode, the mode new consumer apps ship in
+          // (Issue #107). The policy is documented in the spm job of
+          // .github/workflows/release-consumer.yml and in
+          // docs/distribution-channels.md, "Swift language mode".
           import PackageDescription
 
           let package = Package(

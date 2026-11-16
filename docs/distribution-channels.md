@@ -222,6 +222,51 @@ Findings:
   upstream `.sha1`. Production consumers resolve the same dependency line
   from `mavenCentral()` and `google()`.
 
+## Swift language mode
+
+The Swift validations in this repository split the language-mode coverage
+of the SPM channel in two:
+
+- **The in-tree package** (`Package.swift`) pins the `AppAuthRust` source
+  target and the `AppAuthRustTests` test target to
+  `.swiftLanguageMode(.v5)`. This is a fact about the generated API: the
+  checked-in UniFFI bindings are not Swift 6 strict-concurrency clean
+  (Spike A above: the `rustCall` helpers fail under strict concurrency).
+  Regenerating the bindings until they are Swift 6 clean is tracked in
+  [Issue #133](https://github.com/ProjectFlora/AppAuth-Rust/issues/133),
+  and the pin is lifted when that lands.
+- **The swiftc-based checks** (`check-apple-adapters.sh`,
+  `check-apple-release-consumer.sh`) invoke `swiftc` without a
+  `-swift-version` flag, which uses the compiler's Swift 5 language-mode
+  default, so they validate the same Swift 5 surface.
+- **The published release consumer** (the `spm` job of
+  `release-consumer.yml`) is the one validation that builds from the
+  Swift 6 side. Its generated consumer package uses `swift-tools-version:
+  6.0` and pins no language mode, so it compiles in the Swift 6 language
+  mode, the mode new consumer apps ship in. It pins no Xcode version
+  either, and tracks the toolchain the runner image ships, recording the
+  versions in the step summary so a red run is attributable.
+
+Both choices in the consumer job are deliberate
+([Issue #107](https://github.com/ProjectFlora/AppAuth-Rust/issues/107)).
+A consumer of the published package pairs the v5-pinned library with its
+own language mode; the in-tree validations cover the Swift 5 mode
+pairing, and only the consumer job covers the Swift 6 mode pairing.
+Validating that pairing against a current toolchain keeps the signal
+honest for the consumers who matter most. The accepted trade-off is that
+a new Swift release can add diagnostics that fail the job on fixture or
+call-site code unrelated to the release artifact under validation. The
+job is a post-publication audit (it consumes published artifacts; see
+[Releasing](releasing.md)), so such a failure is triaged with the
+recorded toolchain and fixed with a fixture pull request, or routed to
+[Issue #133](https://github.com/ProjectFlora/AppAuth-Rust/issues/133)
+when it reflects an API shape a real Swift 6 consumer would hit.
+
+Between the in-tree validations (Swift 5 mode consumers) and the
+published release consumer (Swift 6 mode consumers), every language-mode
+pairing a Swift 6 toolchain consumer can have with the published package
+is covered.
+
 ## Comparison
 
 | Axis | Maven Central | SPM | Carthage | GitHub Releases (status quo) |
