@@ -112,8 +112,10 @@ publication-status check fails fast when the version was never published to
 Central (releases before `publish_maven` was added in #132, for example
 v0.5.0, or a release whose `publish_maven` job failed or was cancelled --
 the tag is pushed before that job runs, so the check reads the release
-run's job results to distinguish a failed publication from a propagation
-delay), then a retry loop absorbs the Central sync -- a direct HTTP check
+run's job results, and checks Maven Central itself before rejecting a
+failed publication: a visible or still-syncing artifact is let through,
+and an incomplete or in-progress outcome falls back to the retry loop),
+then a retry loop absorbs the Central sync -- a direct HTTP check
 on the canonical POM and AAR URLs, a strict `checkDebugAarMetadata`
 resolution of the POM, AAR and transitive dependencies, and the full
 consumer smoke on an emulator (Issue #137).
@@ -205,9 +207,13 @@ git push origin :refs/tags/vX.Y.Z
   job logs four distinct causes. The publication-status check failing means
   the version never reached Maven Central: a release predating #132 or a
   mistyped version has no Maven publication at all, so dispatch a published
-  version; a release whose `publish_maven` job failed or was cancelled needs
-  **Re-run failed jobs** on the release run first (if the tag-pushing job
-  also did not complete, remove the tag first). The availability gate
+  version; a release whose `publish_maven` job failed or was cancelled
+  fails the check only when the artifact is also absent from Maven Central
+  (the job can fail after the Central Portal deployment was released): if
+  the deployment was not released, **Re-run failed jobs** on the release
+  run (remove the tag first if the tag-pushing job also did not complete);
+  if it was released, re-dispatch once the sync completes. The
+  availability gate
   404ing means the Central sync is still propagating: re-dispatch once the
   portal deployment is released. A strict-resolution or emulator-smoke
   failure is a real consumer problem in the published artifact; a version

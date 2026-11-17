@@ -14,6 +14,9 @@ mock locally:
        GET /repos/<repo>/actions/workflows
        GET /repos/<repo>/actions/workflows/<id>/runs?per_page=100&page=<n>
        GET /repos/<repo>/actions/runs/<id>/jobs?per_page=100&attempt=<n>
+       HEAD <central>/net/project-flora/appauth/appauth-rust-android/<v>/
+            appauth-rust-android-<v>.{pom,aar}           (the Central check
+            before a would-be definitive failure)
 
 Run with: python3 -m unittest discover -s scripts -p 'test_*.py'
 """
@@ -33,8 +36,16 @@ TAG_SHA = "a" * 40
 COMMIT_SHA = "b" * 40
 BASE_SHA = "c" * 40
 RUN_ID = 777
+RUN_ID_2 = 888
 WORKFLOW_ID = 42
 RUN_URL = "https://github.com/%s/actions/runs/%d" % (REPO, RUN_ID)
+RUN_URL_2 = "https://github.com/%s/actions/runs/%d" % (REPO, RUN_ID_2)
+# The canonical Maven Central paths, exactly as the script builds them from
+# MAVEN_CENTRAL_BASE_URL (which the tests point at the mock).
+POM_PATH = ("/maven2/net/project-flora/appauth/appauth-rust-android/%s/"
+            "appauth-rust-android-%s.pom") % (VERSION, VERSION)
+AAR_PATH = ("/maven2/net/project-flora/appauth/appauth-rust-android/%s/"
+            "appauth-rust-android-%s.aar") % (VERSION, VERSION)
 
 # A release.yml without the publish_maven job, as at tag v0.5.0 (the release
 # predates #132, which added the job).
@@ -79,6 +90,14 @@ class ApiHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(body)
         else:
             self.end_headers()
+
+    def do_HEAD(self):
+        # The script's Maven Central visibility check; the route's status
+        # applies, with no body.
+        status, _ = self.server.routes.get(self.path, (404, None))
+        self.server.requests.append(self.path)
+        self.send_response(status)
+        self.end_headers()
 
     def log_message(self, format, *args):  # silence request logging
         pass
@@ -145,14 +164,30 @@ def runs_response(job_status=None, job_conclusion=None):
                             "html_url": RUN_URL}]})
 
 
-def jobs_response(job_status, job_conclusion):
+def jobs_response(maven_status, maven_conclusion,
+                  publish_status="completed", publish_conclusion="success"):
     return json_body(
         200,
         {"total_count": 2,
          "jobs": [{"id": 1, "name": "Publish GitHub Release",
-                   "status": "completed", "conclusion": "success"},
+                   "status": publish_status,
+                   "conclusion": publish_conclusion},
                   {"id": 2, "name": "Publish Android library to Maven Central",
-                   "status": job_status, "conclusion": job_conclusion}]})
+                   "status": maven_status, "conclusion": maven_conclusion}]})
+
+
+def runs_list_response(*entries):
+    """One /actions/workflows/{id}/runs page; entries are
+    (run_id, status, conclusion) tuples, all sharing the dispatch commit."""
+    return json_body(
+        200,
+        {"total_count": len(entries),
+         "workflow_runs": [
+             {"id": run_id, "run_attempt": 1, "head_sha": BASE_SHA,
+              "status": status, "conclusion": conclusion,
+              "html_url": "https://github.com/%s/actions/runs/%d"
+              % (REPO, run_id)}
+             for run_id, status, conclusion in entries]})
 
 
 class PublicationStatusCheckTests(unittest.TestCase):
@@ -170,7 +205,7 @@ class PublicationStatusCheckTests(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
 
-    def run_script(self, version, routes, skip=False):
+    def run_script(self, version, routes, skip=False, central_mock=True):
         self.server.routes = routes
         self.server.requests.clear()
         env = dict(os.environ)
@@ -179,6 +214,12 @@ class PublicationStatusCheckTests(unittest.TestCase):
             "GITHUB_REPOSITORY": REPO,
             "GH_TOKEN": "",  # never hit the real API from a test
         })
+        if central_mock:
+            # The script's Maven Central visibility check points at the
+            # mock too; unlisted pom/aar paths answer 404 (absent).
+            env["MAVEN_CENTRAL_BASE_URL"] = self.base + "/maven2"
+        else:
+            env.pop("MAVEN_CENTRAL_BASE_URL", None)
         if skip:
             env["SKIP_PUBLICATION_CHECK"] = "1"
         else:
@@ -226,11 +267,13 @@ class PublicationStatusCheckTests(unittest.TestCase):
             self.assertIn("WARN", r.stderr)
 
     def test_released_before_maven_publication(self):
+        # Not a central mock: the assertion below checks the canonical
+        # (real) Maven Central URL in the message.
         r = self.run_script(VERSION, {
             route("/git/refs/tags/v" + VERSION): annotated_tag_response(),
             route("/contents/.github/workflows/release.yml?ref=v" + VERSION):
                 yml_response(RELEASE_YML_WITHOUT_MAVEN),
-        })
+        }, central_mock=False)
         self.assertEqual(r.returncode, 1, r.stderr)
         self.assertIn("never published to Maven Central", r.stderr)
         self.assertIn("publish_maven", r.stderr)
@@ -274,10 +317,53 @@ class PublicationStatusCheckTests(unittest.TestCase):
         r = self.run_script(VERSION, routes)
         self.assertEqual(r.returncode, 1, r.stderr)
         self.assertIn("Maven publication did not complete", r.stderr)
+        # The deployment may have been released after the job failed, so the
+        # re-run remedy is conditional on that.
         self.assertIn("Re-run failed jobs", r.stderr)
-        # The tag-removal remedy for a run whose tag push did not complete.
-        self.assertIn("remove the tag first", r.stderr)
+        self.assertIn("deployment", r.stderr)
         self.assertIn(RUN_URL, r.stderr)
+        # The Central visibility check ran before the verdict; unlisted
+        # pom/aar paths answer 404, so the artifact is "absent".
+        self.assertIn(POM_PATH, self.server.requests)
+        self.assertIn(AAR_PATH, self.server.requests)
+
+    def test_published_maven_job_failed_visible_on_central(self):
+        # The job can fail or be cancelled *after* the Central Portal
+        # deployment was released; a visible artifact must be let through,
+        # not rejected with a republish remedy.
+        routes = self.published_routes()
+        routes[route("/git/tags/%s" % TAG_SHA)] = tag_object_response()
+        routes[route("/git/commits/%s" % COMMIT_SHA)] = commit_response()
+        routes[route("/actions/workflows")] = workflows_response()
+        routes[route("/actions/workflows/%d/runs?per_page=100&page=1"
+                     % WORKFLOW_ID)] = runs_response("completed", "failure")
+        routes[route("/actions/runs/%d/jobs?per_page=100&attempt=1" % RUN_ID)] = \
+            jobs_response("completed", "failure")
+        routes[POM_PATH] = (200, None)
+        routes[AAR_PATH] = (200, None)
+        r = self.run_script(VERSION, routes)
+        self.assertEqual(r.returncode, 0, (r.stdout, r.stderr))
+        self.assertIn("visible on Maven Central", r.stdout)
+        self.assertIn("deployment was released", r.stdout)
+
+    def test_published_maven_job_failed_partially_visible(self):
+        # The POM synced but the AAR has not: the deployment was released
+        # and the sync is propagating, so the outcome is unconfirmed, not a
+        # failure.
+        routes = self.published_routes()
+        routes[route("/git/tags/%s" % TAG_SHA)] = tag_object_response()
+        routes[route("/git/commits/%s" % COMMIT_SHA)] = commit_response()
+        routes[route("/actions/workflows")] = workflows_response()
+        routes[route("/actions/workflows/%d/runs?per_page=100&page=1"
+                     % WORKFLOW_ID)] = runs_response("completed", "failure")
+        routes[route("/actions/runs/%d/jobs?per_page=100&attempt=1" % RUN_ID)] = \
+            jobs_response("completed", "failure")
+        routes[POM_PATH] = (200, None)
+        routes[AAR_PATH] = (404, None)
+        r = self.run_script(VERSION, routes)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("unconfirmed", r.stdout)
+        self.assertIn("still propagating", r.stdout)
 
     def test_published_maven_job_running(self):
         # The publication is still in flight: not a failure, but the outcome
@@ -343,6 +429,83 @@ class PublicationStatusCheckTests(unittest.TestCase):
         self.assertIn("Confirmed", r.stdout)
         self.assertNotIn(route("/git/tags/%s" % TAG_SHA),
                          self.server.requests)
+
+    def full_outcome_routes(self):
+        """The step-3 chain routes (tag, yml, tag object, commit, workflow)."""
+        routes = self.published_routes()
+        routes[route("/git/tags/%s" % TAG_SHA)] = tag_object_response()
+        routes[route("/git/commits/%s" % COMMIT_SHA)] = commit_response()
+        routes[route("/actions/workflows")] = workflows_response()
+        return routes
+
+    def test_mixed_results_incomplete_query_blocks_definitive_failure(self):
+        # Two matching release runs (a duplicate dispatch of the same
+        # commit): the first run's jobs query fails, the second run's
+        # Maven job failed. The unreadable run may still succeed or still
+        # be publishing, so the outcome must be unconfirmed, not a
+        # definitive failure (mixed-result regression).
+        routes = self.full_outcome_routes()
+        routes[route("/actions/workflows/%d/runs?per_page=100&page=1"
+                     % WORKFLOW_ID)] = runs_list_response(
+                         (RUN_ID, "completed", "failure"),
+                         (RUN_ID_2, "completed", "failure"))
+        routes[route("/actions/runs/%d/jobs?per_page=100&attempt=1"
+                     % RUN_ID)] = (500, b"{}")
+        routes[route("/actions/runs/%d/jobs?per_page=100&attempt=1"
+                     % RUN_ID_2)] = jobs_response("completed", "failure")
+        r = self.run_script(VERSION, routes)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("unconfirmed", r.stdout)
+        self.assertIn("could not be read", r.stdout)
+
+    def test_mixed_results_success_despite_incomplete(self):
+        # A confirmed success outranks an unreadable run: the artifact was
+        # uploaded, so the check passes.
+        routes = self.full_outcome_routes()
+        routes[route("/actions/workflows/%d/runs?per_page=100&page=1"
+                     % WORKFLOW_ID)] = runs_list_response(
+                         (RUN_ID, "completed", "failure"),
+                         (RUN_ID_2, "completed", "success"))
+        routes[route("/actions/runs/%d/jobs?per_page=100&attempt=1"
+                     % RUN_ID)] = (500, b"{}")
+        routes[route("/actions/runs/%d/jobs?per_page=100&attempt=1"
+                     % RUN_ID_2)] = jobs_response("completed", "success")
+        r = self.run_script(VERSION, routes)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("Confirmed", r.stdout)
+
+    def test_maven_skipped_prereq_failed(self):
+        # The publish job pushed the tag and then failed; the dependent
+        # publish_maven job is skipped, and the run never attempted a
+        # publication. With the artifact absent from Central, this is a
+        # definitive failure with the tag-removal remedy.
+        routes = self.full_outcome_routes()
+        routes[route("/actions/workflows/%d/runs?per_page=100&page=1"
+                     % WORKFLOW_ID)] = runs_response("completed", "failure")
+        routes[route("/actions/runs/%d/jobs?per_page=100&attempt=1" % RUN_ID)] = \
+            jobs_response("completed", "skipped",
+                          "completed", "failure")
+        r = self.run_script(VERSION, routes)
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertIn("Maven publication did not complete", r.stderr)
+        self.assertIn("skipped", r.stderr)
+        self.assertIn("publish job", r.stderr)
+        self.assertIn("Remove the tag first", r.stderr)
+        self.assertIn(RUN_URL, r.stderr)
+
+    def test_maven_skipped_candidate_run(self):
+        # A candidate run (publish: false) skips both the publish and the
+        # publish_maven jobs on purpose; that is not a publication
+        # failure and must not reject the version.
+        routes = self.full_outcome_routes()
+        routes[route("/actions/workflows/%d/runs?per_page=100&page=1"
+                     % WORKFLOW_ID)] = runs_response("completed", "success")
+        routes[route("/actions/runs/%d/jobs?per_page=100&attempt=1" % RUN_ID)] = \
+            jobs_response("completed", "skipped",
+                          "completed", "skipped")
+        r = self.run_script(VERSION, routes)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("unconfirmed", r.stdout)
 
 
 if __name__ == "__main__":

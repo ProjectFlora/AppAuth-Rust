@@ -28,26 +28,40 @@
 #      run was dispatched on -- as the run's head commit, lists the
 #      Release workflow runs for it (the GitHub API does not expose a
 #      run's workflow_dispatch inputs, so the tag is the only stable
-#      attribution), and reads the runs' publish_maven results.
+#      attribution), and classifies each run's publish_maven job:
 #
-#      A job success confirms publication; a failed or cancelled job is
-#      a definitive failure; anything else -- still running, or any
-#      query error -- reports the outcome as unconfirmed and leaves the
+#      - success -> confirmed;
+#      - in progress -> unconfirmed (the retry loop decides);
+#      - failed, cancelled, or skipped because the tag-pushing publish
+#        job failed or was cancelled (the run never published) ->
+#        checked against Maven Central: a visible artifact is confirmed,
+#        a partially visible or unreachable Central is unconfirmed, and
+#        an absent artifact is a definitive failure;
+#      - skipped for another reason (a candidate run) -> ignored.
+#
+#      A run whose jobs could not be read or parsed is "incomplete", and
+#      a definitive failure is reported only when no matching run is
+#      incomplete, still running, or confirmed: an unreadable run may
+#      still succeed or still be publishing. Incomplete or missing
+#      evidence reports the outcome as unconfirmed and leaves the
 #      decision to the verify script's retry loop, which observes Maven
 #      Central directly (the pre-#137 behavior).
 #
 # Exit codes:
 #   0  published, or not definitively ruled out (publication in progress,
-#      unconfirmed, or API error), or SKIP_PUBLICATION_CHECK=1 -- proceed
-#      to the verify script, whose retry loop absorbs the Central sync delay
-#   1  definitively never published (no tag; no publish_maven job; or
-#      publish_maven failed or was cancelled) -- fail fast
+#      the artifact visible or syncing on Central, incomplete or missing
+#      run data, or API error), or SKIP_PUBLICATION_CHECK=1 -- proceed to
+#      the verify script, whose retry loop absorbs the Central sync delay
+#   1  definitively never published (no tag; no publish_maven job; or the
+#      publication did not complete and the artifact is absent from
+#      Central) -- fail fast
 #   2  usage error
 #
 # Environment:
 #   GH_TOKEN                  GitHub token (set in CI); unauthenticated otherwise
 #   GITHUB_REPOSITORY         defaults to ProjectFlora/AppAuth-Rust
 #   GITHUB_API_BASE           defaults to https://api.github.com (tests)
+#   MAVEN_CENTRAL_BASE_URL    defaults to https://repo.maven.apache.org/maven2
 #   SKIP_PUBLICATION_CHECK=1  skip the check (offline local use)
 
 set -euo pipefail
@@ -69,7 +83,9 @@ fi
 
 api_base="${GITHUB_API_BASE:-https://api.github.com}"
 repo="${GITHUB_REPOSITORY:-ProjectFlora/AppAuth-Rust}"
-pom_url="https://repo.maven.apache.org/maven2/net/project-flora/appauth/appauth-rust-android/${version}/appauth-rust-android-${version}.pom"
+central_base="${MAVEN_CENTRAL_BASE_URL:-https://repo.maven.apache.org/maven2}"
+pom_url="${central_base}/net/project-flora/appauth/appauth-rust-android/${version}/appauth-rust-android-${version}.pom"
+aar_url="${central_base}/net/project-flora/appauth/appauth-rust-android/${version}/appauth-rust-android-${version}.aar"
 
 # GET a REST endpoint, writing the body to $2 and printing the HTTP status
 # code. Returns non-zero on transport failure (network error, timeout).
@@ -79,6 +95,36 @@ curl_api() {
         args+=(-H "Authorization: Bearer ${GH_TOKEN}")
     fi
     curl "${args[@]}" "${api_base}${1}"
+}
+
+# The HTTP status of a HEAD request, or 000 on a transport failure.
+http_head() {
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" -I --max-time 30 "$1") || code="000"
+    printf '%s' "${code:-000}"
+}
+
+# Classify the artifact's visibility on Maven Central:
+#   visible  both the POM and the AAR answer 200
+#   syncing  exactly one of them does (the portal -> Central sync is
+#            propagating, so the deployment was released)
+#   absent   Central answers, but neither file is there
+#   unknown  Central could not be reached at all
+central_check() {
+    local pom aar
+    pom=$(http_head "$pom_url")
+    aar=$(http_head "$aar_url")
+    echo "    POM: HTTP ${pom}  ${pom_url}" >&2
+    echo "    AAR: HTTP ${aar}  ${aar_url}" >&2
+    if [[ "${pom}" == "000" || "${aar}" == "000" ]]; then
+        printf 'unknown\n'
+    elif [[ "${pom}" == "200" && "${aar}" == "200" ]]; then
+        printf 'visible\n'
+    elif [[ "${pom}" == "200" || "${aar}" == "200" ]]; then
+        printf 'syncing\n'
+    else
+        printf 'absent\n'
+    fi
 }
 
 tmp=$(mktemp)
@@ -174,6 +220,8 @@ echo "Checking the release run for v${version} for a completed Maven publication
 any_success=0
 any_running=0
 any_failed=0
+any_incomplete=0
+failed_reason=""
 failed_run_url=""
 
 # commit_sha of the tag: the ref object for an annotated tag points at the
@@ -263,8 +311,18 @@ PY
             fi
             [[ "${kind}" == "run" ]] || continue
             code=$(curl_api "/repos/${repo}/actions/runs/${run_id}/jobs?per_page=100&attempt=${run_attempt:-1}" "$tmp") || code=""
-            [[ "$code" == "200" ]] || continue
-            job_states=$(python3 - "$tmp" <<'PY' 2>/dev/null || true
+            if [[ "${code:-}" != "200" ]]; then
+                # The run's jobs could not be read: its publication outcome
+                # is unknown, which must not count as a failure.
+                any_incomplete=1
+                continue
+            fi
+            # Classify this run's publication outcome in one place: the
+            # publish_maven job is the only Release workflow job with
+            # "Maven" in its name, and a skipped publish_maven is only a
+            # real non-publication when the tag-pushing publish job failed
+            # (a candidate run skips both jobs on purpose).
+            job_class=$(python3 - "$tmp" <<'PY' 2>/dev/null
 import json
 import sys
 
@@ -272,31 +330,51 @@ try:
     with open(sys.argv[1]) as f:
         data = json.load(f)
 except Exception:
-    sys.exit(0)
-for job in data.get("jobs", []):
-    # The publish_maven job is the only Release workflow job with "Maven"
-    # in its name.
-    if "Maven" in job.get("name", ""):
-        print("%s %s" % (job.get("status", ""), job.get("conclusion") or ""))
+    sys.exit(3)  # unparseable body: the outcome is unknown, not failed
+
+jobs = data.get("jobs", [])
+maven = [j for j in jobs if "Maven" in (j.get("name") or "")]
+publish = [j for j in jobs if (j.get("name") or "") == "Publish GitHub Release"]
+
+def outcome(job):
+    # A completed job's conclusion is its final result; an in-flight job
+    # has no conclusion yet and is reported by its status.
+    return job.get("conclusion") or job.get("status", "")
+
+def inflight(job):
+    return not job.get("conclusion") and job.get("status") in (
+        "in_progress", "queued", "waiting")
+
+if any(outcome(j) == "success" for j in maven):
+    print("confirmed")
+elif any(inflight(j) for j in maven):
+    print("running")
+elif any(outcome(j) in ("failure", "cancelled") for j in maven):
+    print("failed")
+elif any(outcome(j) == "skipped" for j in maven):
+    if any(outcome(j) in ("failure", "cancelled") for j in publish):
+        print("prereq_failed")
+    else:
+        print("ignored")
+else:
+    # No publish_maven job in this run (for example, a run built from a
+    # release.yml predating #132): it contributes no publication evidence.
+    print("ignored")
 PY
-)
-            while read -r job_status job_conclusion; do
-                [[ -n "${job_status:-}" ]] || continue
-                # A completed job's conclusion is its outcome; an in-flight
-                # job has no conclusion yet and is reported by its status.
-                state="${job_status}"
-                if [[ -n "${job_conclusion:-}" ]]; then
-                    state="${job_conclusion}"
-                fi
-                case "${state}" in
-                    success) any_success=1 ;;
-                    in_progress | queued | waiting) any_running=1 ;;
-                    failure | cancelled)
-                        any_failed=1
-                        failed_run_url="${run_url:-}"
-                        ;;
-                esac
-            done <<< "${job_states:-}"
+) && job_rc=0 || job_rc=$?
+            if [[ ${job_rc} -ne 0 ]]; then
+                any_incomplete=1
+                continue
+            fi
+            case "${job_class}" in
+                confirmed) any_success=1 ;;
+                running) any_running=1 ;;
+                failed | prereq_failed)
+                    any_failed=1
+                    failed_reason="${job_class}"
+                    failed_run_url="${run_url:-}"
+                    ;;
+            esac
         done <<< "${page_out:-}"
         if [[ "${page_done}" == "1" ]]; then
             break
@@ -315,14 +393,48 @@ if [[ ${any_running} -eq 1 ]]; then
     echo "       The Maven publication is still running, so its outcome is unconfirmed; proceeding to the verify script, whose retry loop observes Maven Central directly."
     exit 0
 fi
-if [[ ${any_failed} -eq 1 ]]; then
-    echo "ERROR: v${version} was released, but its Maven publication did not complete." >&2
-    echo "       The Release run${failed_run_url:+ (${failed_run_url})} has its Maven publication job failed or cancelled, so the artifact never reached Maven Central." >&2
-    echo "       Complete the publication on that run: use \"Re-run failed jobs\" -- it re-runs only the failed or cancelled jobs, so an already-pushed tag is not re-pushed." >&2
-    echo "       If the tag-pushing job also did not complete, remove the tag first (git push origin :refs/tags/v${version} -- see docs/releasing.md) and re-run." >&2
-    echo "       Then dispatch the consumer validation again." >&2
+# A definitive failure requires complete evidence: if any matching run's
+# results could not be read, that run may still succeed or still be
+# publishing, so the outcome is reported as unconfirmed instead and the
+# verify script's retry loop, which observes Maven Central directly,
+# decides.
+if [[ ${any_failed} -eq 1 && ${any_incomplete} -eq 0 ]]; then
+    # A failed, cancelled, or prerequisite-blocked publication is checked
+    # against Maven Central before being rejected: publish_maven can fail
+    # or be cancelled *after* the Central Portal deployment was released,
+    # in which case the artifact is already on its way and republishing
+    # an immutable version would be the wrong remedy.
+    central_state=$(central_check)
+    if [[ "${central_state}" == "visible" ]]; then
+        echo "v${version} was published to Maven Central (the release workflow at tag v${version} has the publish_maven job)."
+        echo "       The release run's Maven publication job${failed_run_url:+ (${failed_run_url})} did not complete, but the artifact is already visible on Maven Central: the Central Portal deployment was released. Proceeding to the verify script."
+        exit 0
+    fi
+    if [[ "${central_state}" == "syncing" ]]; then
+        echo "v${version} was published to Maven Central (the release workflow at tag v${version} has the publish_maven job)."
+        echo "       The publication outcome is unconfirmed: the artifact is partially visible on Maven Central, so the Central sync is still propagating. Proceeding to the verify script, whose retry loop observes Maven Central directly."
+        exit 0
+    fi
+    if [[ "${central_state}" == "unknown" ]]; then
+        echo "v${version} was published to Maven Central (the release workflow at tag v${version} has the publish_maven job)."
+        echo "       The publication outcome is unconfirmed: Maven Central could not be reached. Proceeding to the verify script, whose retry loop observes Maven Central directly."
+        exit 0
+    fi
+    echo "ERROR: v${version} was released, but its Maven publication did not complete, and the artifact is not on Maven Central." >&2
+    if [[ "${failed_reason}" == "prereq_failed" ]]; then
+        echo "       The Release run${failed_run_url:+ (${failed_run_url})} has its Maven publication job skipped: the tag-pushing publish job failed or was cancelled, so the run never attempted a publication." >&2
+        echo "       Remove the tag first (git push origin :refs/tags/v${version} -- see docs/releasing.md), then use \"Re-run failed jobs\" on that run, and dispatch the consumer validation again." >&2
+    else
+        echo "       The Release run${failed_run_url:+ (${failed_run_url})} has its Maven publication job failed or cancelled." >&2
+        echo "       Check the run's logs for the Central Portal deployment: if it was *not* released, fix the cause (for example, credentials or the signing key) and use \"Re-run failed jobs\" -- it re-runs only the failed or cancelled jobs, so an already-pushed tag is not re-pushed." >&2
+        echo "       If the deployment *was* released, the sync completes on its own: wait, then dispatch the consumer validation again. A version already on Central cannot be republished; if it never appears, fix forward with a new patch version." >&2
+    fi
     exit 1
 fi
 echo "v${version} was published to Maven Central (the release workflow at tag v${version} has the publish_maven job)."
-echo "       The publication outcome is unconfirmed (the release run data could not be queried); proceeding to the verify script, whose retry loop observes Maven Central directly."
+if [[ ${any_failed} -eq 1 ]]; then
+    echo "       At least one release run's Maven publication job failed or was cancelled, but at least one matching run's results could not be read, so the outcome is unconfirmed; proceeding to the verify script, whose retry loop observes Maven Central directly."
+else
+    echo "       The publication outcome is unconfirmed (the release run data could not be queried, or the runs carried no Maven publication job); proceeding to the verify script, whose retry loop observes Maven Central directly."
+fi
 exit 0
