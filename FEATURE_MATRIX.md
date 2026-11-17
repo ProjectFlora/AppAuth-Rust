@@ -90,15 +90,17 @@ repackages those assets and adds token refresh and OIDC end-session to the
 Windows C ABI and .NET wrapper. The published
 [v0.5.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.5.0)
 repackages those assets and adds Swift Package Manager distribution for the
-Apple package. See
-[Download and verify v0.5.0](README.md#download-and-verify-v050) for exact asset
+Apple package. The published
+[v0.6.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.6.0)
+repackages those assets and publishes the Android library to Maven Central. See
+[Download and verify v0.6.0](README.md#download-and-verify-v060) for exact asset
 names, download links, and checksum verification using the same release's
 `SHA256SUMS`. The XCFramework contains the generated Swift API and Rust
 library; the AAR contains the generated Kotlin API and Android Rust libraries;
 the Windows package contains the DLL, import library, C header, and .NET
 wrapper. Compiled binaries stay out of the source repository. Swift Package
-Manager is available from v0.5.0, Maven Central publication is planned for
-v0.6.0, and Carthage was declined; see
+Manager is available from v0.5.0, Maven Central from v0.6.0, and Carthage was
+declined; see
 [docs/distribution-channels.md](docs/distribution-channels.md).
 
 ## References

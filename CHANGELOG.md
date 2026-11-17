@@ -6,6 +6,8 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-17
+
 ### Added
 
 - Publish the Android library to Maven Central as
@@ -150,6 +152,34 @@ policies are still evolving. Each release records its known limitations.
   the central directory walk returns the central directory offset, so the
   main path no longer rescans the archive for it. The normalized archive
   bytes are unchanged.
+
+### Distribution
+
+- Published as a regular GitHub Release while remaining a pre-1.0 version.
+  Release assets include Apple XCFramework, Android AAR, Windows DLL/C ABI
+  package, API documentation, and SHA-256 checksums.
+- First release published to Maven Central: the Android library is
+  available as `net.project-flora.appauth:appauth-rust-android:0.6.0`
+  ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)). The
+  publication is signed and uploaded through the Central Portal after the
+  GitHub Release is created, so a version that reaches Central always has a
+  GitHub Release to cross-check against. Swift Package Manager remains
+  available from 0.5.0 through release tags.
+
+### Known limitations
+
+- Live identity-provider interoperability has not been validated, including
+  token revocation.
+- macOS and Windows tests do not automate the real system-browser flow.
+- Release consumer fixtures exercise refresh and end-session error paths in
+  the Windows C++ and .NET hosts and token revocation in the Windows .NET
+  host only; the Android and Apple XCFramework fixtures only construct the
+  configuration object, and the SPM consumer runs a host-side smoke of the
+  generated API without an authorization flow.
+- SPM is supported only through release tags; depending on the `main`
+  branch is not supported.
+- Platform minimums and provider interoperability policies remain subject to
+  the 1.0.0 readiness criteria in `ROADMAP.md`.
 
 ## [0.5.0] - 2026-11-14
 
