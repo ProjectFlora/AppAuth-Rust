@@ -36,6 +36,23 @@ policies are still evolving. Each release records its known limitations.
 
 ### Changed
 
+- Build and validate the Apple release archive with Xcode 26.6
+  ([#135](https://github.com/ProjectFlora/AppAuth-Rust/issues/135)).
+  App Store Connect requires apps built with Xcode 26 or later, but the
+  release `apple` job was pinned to Xcode 16.4 on `macos-15`, and the
+  release and published-release consumer checks used that image's default
+  Xcode 16.4, so the distributed XCFramework was never validated with an
+  Xcode that App Store Connect accepts. All Apple jobs of `release.yml`
+  and `release-consumer.yml` now run on `macos-26` and select the same
+  Xcode through `XCODE_VERSION`; every job records `xcodebuild` and Swift
+  versions in its step summary. The `macos-26` image ships no iOS 18
+  simulator runtime, so the release `apple` job installs iOS 18.6 with the
+  new `scripts/install-ios-simulator-runtime.sh` and keeps running the iOS
+  authorization flow on the iOS 18 deployment minimum. The published SPM
+  consumer no longer tracks the image's default toolchain (the
+  #107 policy below); it uses the release Xcode, and a newer Swift reaches
+  it only when `XCODE_VERSION` is bumped. Regular CI's `macos-15` and
+  `xcode-27` lanes are unchanged.
 - Make the published SPM consumer's Swift language mode explicit
   ([#107](https://github.com/ProjectFlora/AppAuth-Rust/issues/107)). The
   `spm` job of `release-consumer.yml` generates a consumer package with

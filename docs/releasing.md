@@ -55,6 +55,16 @@ Package.swift** (`spm_manifest`). That job's log shows the rewritten
 `Package.swift` diff: the URL must be
 `https://github.com/ProjectFlora/AppAuth-Rust/releases/download/vX.Y.Z/AppAuthRust-Apple-X.Y.Z.zip`.
 
+The Apple jobs build and validate with the Xcode set by `XCODE_VERSION` in
+`release.yml` (a stable Xcode 26.x, since App Store Connect requires Xcode
+26 or later), and `release-consumer.yml` sets the same version. Check the
+**Build Apple release package** step summary for the recorded Rust and Xcode
+versions and the iOS simulator runtime the iOS flow ran on. To change the
+Xcode version, update the runner label and `XCODE_VERSION` in both
+workflows together, after checking the
+[runner-images README](https://github.com/actions/runner-images/tree/main/images/macos)
+for the image's installed Xcode versions and simulator runtimes.
+
 ## 3. Publish
 
 Dispatch from `main` with **publish** checked:
