@@ -200,14 +200,23 @@ class VerifyAndroidMavenConsumerTests(unittest.TestCase):
         self.assertTrue(any("connectedDebugAndroidTest" in c for c in calls), calls)
 
     def test_gate_partial_404_is_not_visible(self):
-        # The AAR is what the full check consumes; a complete publication
-        # with a 404 AAR must be treated as "not yet visible", not as a
-        # preflight attempt.
-        r, calls = self.run_scenario(
-            gate_routes(200, **{"appauth-rust-android-%s.aar" % VERSION: 404}))
-        self.assertEqual(r.returncode, 1, r.stderr)
-        self.assertIn("not yet visible on Maven Central", r.stderr)
-        self.assertEqual(calls, [])
+        # A publication missing any single file -- the AAR the full check
+        # consumes, the POM, the module metadata, a jar, or one of the
+        # signatures -- is incomplete: it must be treated as "not yet
+        # visible", never as a preflight attempt. The case is run for every
+        # publication file so a gate that HEADs the ten files but only
+        # checks some of their statuses (the pre-#131 POM/AAR behavior)
+        # cannot regress (Copilot review of #143).
+        for missing in gate_paths():
+            name = missing.rsplit("/", 1)[1]
+            with self.subTest(missing=name):
+                r, calls = self.run_scenario(
+                    gate_routes(200, **{name: 404}))
+                self.assertEqual(r.returncode, 1, r.stderr)
+                self.assertIn("not yet visible on Maven Central", r.stderr)
+                # The diagnosis names the file that is not 200.
+                self.assertIn(name, r.stderr)
+                self.assertEqual(calls, [])
 
     def test_retry_budget_is_exhausted_not_waited(self):
         # With a zero interval the loop must still perform exactly
