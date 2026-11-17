@@ -110,7 +110,10 @@ archives. Its `android_maven` job additionally consumes the Android library
 from Maven Central the way a foreign Gradle consumer would: a
 publication-status check fails fast when the version was never published to
 Central (releases before `publish_maven` was added in #132, for example
-v0.5.0), then a retry loop absorbs the Central sync -- a direct HTTP check
+v0.5.0, or a release whose `publish_maven` job failed or was cancelled --
+the tag is pushed before that job runs, so the check reads the release
+run's job results to distinguish a failed publication from a propagation
+delay), then a retry loop absorbs the Central sync -- a direct HTTP check
 on the canonical POM and AAR URLs, a strict `checkDebugAarMetadata`
 resolution of the POM, AAR and transitive dependencies, and the full
 consumer smoke on an emulator (Issue #137).
@@ -199,9 +202,11 @@ git push origin :refs/tags/vX.Y.Z
   a new patch version.
 
 - **Consumer validation (`release-consumer.yml`) failed**: the `android_maven`
-  job logs three distinct causes. The publication-status check failing means
-  the version was never published to Central (a release predating #132, or a
-  mistyped version): dispatch a published version. The availability gate
+  job logs four distinct causes. The publication-status check failing means
+  the version never reached Maven Central: a release predating #132 or a
+  mistyped version has no Maven publication at all, so dispatch a published
+  version; a release whose `publish_maven` job failed or was cancelled needs
+  **Re-run failed jobs** on the release run first. The availability gate
   404ing means the Central sync is still propagating: re-dispatch once the
   portal deployment is released. A strict-resolution or emulator-smoke
   failure is a real consumer problem in the published artifact; a version

@@ -256,7 +256,8 @@ jobs:
         # is the pre-#137 behavior.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/check-android-maven-publication-status.sh "${{ inputs.version }}"
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: scripts/check-android-maven-publication-status.sh "$RELEASE_VERSION"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -269,6 +270,8 @@ jobs:
       - name: Enable Android emulator hardware acceleration
         run: sudo chmod a+rw /dev/kvm
       - name: Run Android release consumer (Maven Central) on an emulator
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 28
@@ -276,7 +279,7 @@ jobs:
           target: google_apis_playstore
           disable-linux-hw-accel: false
           disable-animations: true
-          script: scripts/verify-android-maven-consumer.sh ${{ inputs.version }}
+          script: scripts/verify-android-maven-consumer.sh "$RELEASE_VERSION"
 
   windows:
     name: Validate published Windows consumers
