@@ -26,8 +26,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "AppAuthRustBinary",
-            url: "https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/AppAuthRust-Apple-0.4.0.zip",
-            checksum: "a298fca36ea9c06f515dc6aa69cd366dd905607d06aac8b29f22abf7df352d95"
+            url: "https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.6.0/AppAuthRust-Apple-0.6.0.zip",
+            checksum: "5f6e086de699bea2f30f14fa35a4bee8a089a82d6e9020a1ca8a57c3493daad2"
         ),
         .target(
             name: "AppAuthRust",
