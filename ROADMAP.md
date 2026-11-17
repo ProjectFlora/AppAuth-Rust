@@ -110,12 +110,11 @@ None.
   feature set or compatibility guarantees are complete. They may be published
   as regular GitHub Releases while known gaps remain; release notes must state
   the status and limitations.
-- v0.5.0 is the current implementation snapshot. It adds Swift Package
-  Manager distribution for the Apple package on top of the previously
-  published v0.4.0 assets, which include token refresh and OIDC end-session
-  in the Windows C ABI and .NET wrapper.
-  Maven Central publication of the Android AAR is planned for v0.6.0
-  ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)).
+- v0.6.0 is the current implementation snapshot. It adds Maven Central
+  publication of the Android AAR on top of the previously published v0.5.0
+  assets, which add Swift Package Manager distribution for the Apple package
+  and include token refresh and OIDC end-session in the Windows C ABI and .NET
+  wrapper.
 - Do not declare 1.0.0 ready until all of these conditions are met:
   - Re-evaluate the support matrix against the then-current Apple security
     updates, Android Security Bulletin and device distribution, and
