@@ -116,9 +116,10 @@ run's job results, and checks Maven Central itself before rejecting a
 failed publication: a visible or still-syncing artifact is let through,
 and an incomplete or in-progress outcome falls back to the retry loop),
 then a retry loop absorbs the Central sync -- a direct HTTP check
-on the canonical POM and AAR URLs, a strict `checkDebugAarMetadata`
-resolution of the POM, AAR and transitive dependencies, and the full
-consumer smoke on an emulator (Issue #137).
+on the full publication (the AAR, the POM, the module metadata, the
+sources and javadoc jars, and their signatures), a strict
+`checkDebugAarMetadata` resolution of the POM, AAR and transitive
+dependencies, and the full consumer smoke on an emulator (Issue #137).
 
 Its `spm` job resolves the `vX.Y.Z` tag through Swift Package Manager by URL, which also verifies the
 manifest's checksum against the published archive. Record the run URL in

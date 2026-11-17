@@ -20,6 +20,18 @@ policies are still evolving. Each release records its known limitations.
   publication ships sources and javadoc jars. Pull request CI and release
   candidate runs check the publication contents with
   `scripts/check-android-maven-publication.sh`.
+- Validate the published Android library from Maven Central in the release
+  consumer workflow ([#131](https://github.com/ProjectFlora/AppAuth-Rust/issues/131)).
+  The `android_maven` job of `release-consumer.yml` resolves
+  `net.project-flora.appauth:appauth-rust-android:X.Y.Z` from
+  `mavenCentral()` with a single dependency line -- the consumer fixture
+  forces verification of the POM's transitive dependencies -- and runs the
+  full consumer smoke on an emulator. A fail-fast publication-status check
+  rejects a version that was never published to Central before the emulator
+  boots, and a retry loop over the full publication (the AAR, the POM, the
+  module metadata, the sources and javadoc jars, and their signatures)
+  absorbs the portal -> Central sync delay
+  ([#137](https://github.com/ProjectFlora/AppAuth-Rust/issues/137)).
 
 ### Documentation
 

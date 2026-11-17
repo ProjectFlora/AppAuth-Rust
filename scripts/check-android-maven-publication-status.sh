@@ -84,8 +84,22 @@ fi
 api_base="${GITHUB_API_BASE:-https://api.github.com}"
 repo="${GITHUB_REPOSITORY:-ProjectFlora/AppAuth-Rust}"
 central_base="${MAVEN_CENTRAL_BASE_URL:-https://repo.maven.apache.org/maven2}"
-pom_url="${central_base}/net/project-flora/appauth/appauth-rust-android/${version}/appauth-rust-android-${version}.pom"
-aar_url="${central_base}/net/project-flora/appauth/appauth-rust-android/${version}/appauth-rust-android-${version}.aar"
+base_path="net/project-flora/appauth/appauth-rust-android/${version}"
+pom_url="${central_base}/${base_path}/appauth-rust-android-${version}.pom"
+# The full publication, the same file set scripts/verify-android-maven-consumer.sh
+# gates on (Issue #131).
+artifact_files=(
+    "appauth-rust-android-${version}.aar"
+    "appauth-rust-android-${version}.pom"
+    "appauth-rust-android-${version}.module"
+    "appauth-rust-android-${version}-sources.jar"
+    "appauth-rust-android-${version}-javadoc.jar"
+    "appauth-rust-android-${version}.aar.asc"
+    "appauth-rust-android-${version}.pom.asc"
+    "appauth-rust-android-${version}.module.asc"
+    "appauth-rust-android-${version}-sources.jar.asc"
+    "appauth-rust-android-${version}-javadoc.jar.asc"
+)
 
 # GET a REST endpoint, writing the body to $2 and printing the HTTP status
 # code. Returns non-zero on transport failure (network error, timeout).
@@ -104,23 +118,30 @@ http_head() {
     printf '%s' "${code:-000}"
 }
 
-# Classify the artifact's visibility on Maven Central:
-#   visible  both the POM and the AAR answer 200
-#   syncing  exactly one of them does (the portal -> Central sync is
+# Classify the artifact's visibility on Maven Central over the full
+# publication (the file set above):
+#   visible  every file answers 200
+#   syncing  some but not all do (the portal -> Central sync is
 #            propagating, so the deployment was released)
-#   absent   Central answers, but neither file is there
-#   unknown  Central could not be reached at all
+#   absent   Central answers, but no file is there
+#   unknown  some file could not be reached at all
 central_check() {
-    local pom aar
-    pom=$(http_head "$pom_url")
-    aar=$(http_head "$aar_url")
-    echo "    POM: HTTP ${pom}  ${pom_url}" >&2
-    echo "    AAR: HTTP ${aar}  ${aar_url}" >&2
-    if [[ "${pom}" == "000" || "${aar}" == "000" ]]; then
+    local f status complete=0 any200=0 any000=0
+    for f in "${artifact_files[@]}"; do
+        status=$(http_head "${central_base}/${base_path}/${f}")
+        echo "    ${f}: HTTP ${status}" >&2
+        if [[ "${status}" == "200" ]]; then
+            complete=$((complete + 1))
+            any200=1
+        elif [[ "${status}" == "000" ]]; then
+            any000=1
+        fi
+    done
+    if [[ ${any000} -eq 1 ]]; then
         printf 'unknown\n'
-    elif [[ "${pom}" == "200" && "${aar}" == "200" ]]; then
+    elif [[ ${complete} -eq ${#artifact_files[@]} ]]; then
         printf 'visible\n'
-    elif [[ "${pom}" == "200" || "${aar}" == "200" ]]; then
+    elif [[ ${any200} -eq 1 ]]; then
         printf 'syncing\n'
     else
         printf 'absent\n'
