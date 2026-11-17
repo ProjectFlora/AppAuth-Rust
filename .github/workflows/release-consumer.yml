@@ -245,6 +245,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Fail fast if the version was never published to Maven Central
+        # Releases made before publish_maven existed (#132, 2026-11-16) --
+        # v0.5.0 and earlier -- were GitHub Releases only: their artifact can
+        # never appear on Central, and without this gate the verify script
+        # would burn its entire retry budget on a sync that never happens
+        # (Issue #137). The check queries the release workflow at the version
+        # tag (contents API only; the workflow's contents: read permission
+        # suffices); a GitHub API failure degrades to the retry loop, which
+        # is the pre-#137 behavior.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/check-android-maven-publication-status.sh "${{ inputs.version }}"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

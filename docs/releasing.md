@@ -105,7 +105,15 @@ gh workflow run release-consumer.yml --ref main -f version=X.Y.Z
 ```
 
 This downloads each published asset, verifies it against `SHA256SUMS`, and
-runs the Apple, Android, and Windows consumers. It also resolves the Android library from Maven Central using `mavenCentral()` to verify that the POM and transitive dependencies are correctly configured.
+runs the Apple, Android, and Windows consumers against the downloaded
+archives. Its `android_maven` job additionally consumes the Android library
+from Maven Central the way a foreign Gradle consumer would: a
+publication-status check fails fast when the version was never published to
+Central (releases before `publish_maven` was added in #132, for example
+v0.5.0), then a retry loop absorbs the Central sync -- a direct HTTP check
+on the canonical POM and AAR URLs, a strict `checkDebugAarMetadata`
+resolution of the POM, AAR and transitive dependencies, and the full
+consumer smoke on an emulator (Issue #137).
 
 Its `spm` job resolves the `vX.Y.Z` tag through Swift Package Manager by URL, which also verifies the
 manifest's checksum against the published archive. Record the run URL in
@@ -189,6 +197,16 @@ git push origin :refs/tags/vX.Y.Z
   or the signing key) and use **Re-run failed jobs**. If the version already
   appears on Maven Central, it cannot be replaced or deleted; fix forward with
   a new patch version.
+
+- **Consumer validation (`release-consumer.yml`) failed**: the `android_maven`
+  job logs three distinct causes. The publication-status check failing means
+  the version was never published to Central (a release predating #132, or a
+  mistyped version): dispatch a published version. The availability gate
+  404ing means the Central sync is still propagating: re-dispatch once the
+  portal deployment is released. A strict-resolution or emulator-smoke
+  failure is a real consumer problem in the published artifact; a version
+  already on Central cannot be replaced, so fix forward with a new patch
+  version.
 
 - **Publish run cancelled (same-version dispatch)**: if you accidentally dispatched another release candidate while a publish was queued, the pending publish may be cancelled without notice. Check the Actions tab for a cancelled run; if so, dispatch the publish again.
 
