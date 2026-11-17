@@ -206,7 +206,8 @@ git push origin :refs/tags/vX.Y.Z
   the version never reached Maven Central: a release predating #132 or a
   mistyped version has no Maven publication at all, so dispatch a published
   version; a release whose `publish_maven` job failed or was cancelled needs
-  **Re-run failed jobs** on the release run first. The availability gate
+  **Re-run failed jobs** on the release run first (if the tag-pushing job
+  also did not complete, remove the tag first). The availability gate
   404ing means the Central sync is still propagating: re-dispatch once the
   portal deployment is released. A strict-resolution or emulator-smoke
   failure is a real consumer problem in the published artifact; a version

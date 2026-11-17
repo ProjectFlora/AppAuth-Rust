@@ -133,14 +133,16 @@ def workflows_response():
 
 
 def runs_response(job_status=None, job_conclusion=None):
+    # The /actions/workflows/{id}/runs response lists its runs under the
+    # "workflow_runs" key (verified against the live API).
     status = "completed" if job_conclusion is not None else job_status
     return json_body(
         200,
         {"total_count": 1,
-         "workflows_runs": [{"id": RUN_ID, "run_attempt": 1,
-                             "head_sha": BASE_SHA, "status": status,
-                             "conclusion": job_conclusion,
-                             "html_url": RUN_URL}]})
+         "workflow_runs": [{"id": RUN_ID, "run_attempt": 1,
+                            "head_sha": BASE_SHA, "status": status,
+                            "conclusion": job_conclusion,
+                            "html_url": RUN_URL}]})
 
 
 def jobs_response(job_status, job_conclusion):
@@ -271,8 +273,10 @@ class PublicationStatusCheckTests(unittest.TestCase):
             jobs_response("completed", "failure")
         r = self.run_script(VERSION, routes)
         self.assertEqual(r.returncode, 1, r.stderr)
-        self.assertIn("Maven publication failed", r.stderr)
+        self.assertIn("Maven publication did not complete", r.stderr)
         self.assertIn("Re-run failed jobs", r.stderr)
+        # The tag-removal remedy for a run whose tag push did not complete.
+        self.assertIn("remove the tag first", r.stderr)
         self.assertIn(RUN_URL, r.stderr)
 
     def test_published_maven_job_running(self):

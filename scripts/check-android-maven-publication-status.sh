@@ -246,7 +246,7 @@ try:
 except Exception:
     sys.exit(0)
 target = sys.argv[2]
-for run in data.get("workflows_runs", []):
+for run in data.get("workflow_runs", []):
     if run.get("head_sha") == target:
         print("run\t%s\t%s\t%s" % (run["id"], run.get("run_attempt", 1), run.get("html_url", "")))
 print("total\t%s" % data.get("total_count", 0))
@@ -316,9 +316,11 @@ if [[ ${any_running} -eq 1 ]]; then
     exit 0
 fi
 if [[ ${any_failed} -eq 1 ]]; then
-    echo "ERROR: v${version} was released, but its Maven publication failed." >&2
+    echo "ERROR: v${version} was released, but its Maven publication did not complete." >&2
     echo "       The Release run${failed_run_url:+ (${failed_run_url})} has its Maven publication job failed or cancelled, so the artifact never reached Maven Central." >&2
-    echo "       Use \"Re-run failed jobs\" on that run to complete the publication, then dispatch the consumer validation again." >&2
+    echo "       Complete the publication on that run: use \"Re-run failed jobs\" -- it re-runs only the failed or cancelled jobs, so an already-pushed tag is not re-pushed." >&2
+    echo "       If the tag-pushing job also did not complete, remove the tag first (git push origin :refs/tags/v${version} -- see docs/releasing.md) and re-run." >&2
+    echo "       Then dispatch the consumer validation again." >&2
     exit 1
 fi
 echo "v${version} was published to Maven Central (the release workflow at tag v${version} has the publish_maven job)."
