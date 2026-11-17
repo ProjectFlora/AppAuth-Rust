@@ -173,6 +173,15 @@ class VerifyAndroidMavenConsumerTests(unittest.TestCase):
         self.assertIn("not yet visible on Maven Central", r.stderr)
         self.assertIn("failed after 2 attempts", r.stderr)
         self.assertIn("appauth-rust-android-%s.pom 404" % VERSION, r.stderr)
+        # The missing files are separated by ", " in publication order:
+        # the first two entries of the summary, joined correctly
+        # (separator-placement regression, Copilot review of #143).
+        self.assertIn(
+            "appauth-rust-android-%s.aar 404, "
+            "appauth-rust-android-%s.pom 404" % (VERSION, VERSION),
+            r.stderr)
+        # No trailing separator before the closing parenthesis.
+        self.assertNotIn(", )", r.stderr)
         self.assertEqual(calls, [])
 
     def test_gate_200_preflight_and_smoke_succeed(self):

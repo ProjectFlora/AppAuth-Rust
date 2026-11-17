@@ -95,7 +95,9 @@ gate() {
 gate_summary() {
     local entry summary=""
     for entry in "${last_gate[@]}"; do
-        [[ "${entry#* }" == "200" ]] || summary+="${entry}${summary:+, }"
+        # The conditional separator precedes the entry it separates;
+        # appending it after would join entries and leave a trailing comma.
+        [[ "${entry#* }" == "200" ]] || summary+="${summary:+, }${entry}"
     done
     if [[ -z "$summary" ]]; then
         printf 'all %d files visible' "${#artifact_files[@]}"
