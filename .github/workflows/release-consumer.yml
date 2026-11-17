@@ -48,7 +48,10 @@ jobs:
             --dir dist
           cd dist
           grep -F "  AppAuthRust-Apple-$RELEASE_VERSION.zip" SHA256SUMS | shasum -a 256 -c -
-      - run: scripts/check-apple-release-consumer.sh dist/AppAuthRust-Apple-${{ inputs.version }}.zip
+      - name: Validate the published Apple consumer package
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: scripts/check-apple-release-consumer.sh "dist/AppAuthRust-Apple-$RELEASE_VERSION.zip"
 
   # Language-mode policy (Issue #107): the generated consumer package uses
   # swift-tools-version 6.0 and deliberately pins no language mode, so it
@@ -231,6 +234,8 @@ jobs:
           cd dist
           grep -F "  appauth-rust-android-$RELEASE_VERSION.aar" SHA256SUMS | shasum -a 256 -c -
       - name: Run Android release consumer on an emulator
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 28
@@ -238,7 +243,7 @@ jobs:
           target: google_apis_playstore
           disable-linux-hw-accel: false
           disable-animations: true
-          script: scripts/check-android-release-consumer.sh dist/appauth-rust-android-${{ inputs.version }}.aar
+          script: scripts/check-android-release-consumer.sh "dist/appauth-rust-android-$RELEASE_VERSION.aar"
 
   android_maven:
     name: Validate published Android consumer (Maven Central)
@@ -303,5 +308,8 @@ jobs:
           if ($actual -ne $expected) {
             throw "SHA-256 mismatch for $asset"
           }
-      - shell: pwsh
-        run: scripts/check-windows-release-consumer.ps1 -Package dist/appauth-rust-windows-${{ inputs.version }}.zip
+      - name: Validate the published Windows consumer package
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: scripts/check-windows-release-consumer.ps1 -Package "dist/appauth-rust-windows-$env:RELEASE_VERSION.zip"
