@@ -1,17 +1,19 @@
 """Tests for scripts/verify-android-maven-consumer.sh.
 
-The verify script's stage machine (Issue #137): an HTTP availability gate on
-the canonical Maven Central POM and AAR URLs, a strict Gradle resolution
+The verify script's stage machine (Issue #137): an HTTP availability gate
+on the full Maven Central publication -- every file the release publishes,
+the AAR, the POM, the Gradle module metadata, the sources and javadoc jars,
+and the signature of each (Issue #131) -- a strict Gradle resolution
 preflight (checkDebugAarMetadata), and the full consumer smoke. The tests
 run the script in a sandbox that replaces the Gradle wrapper with a fake
 recording its invocations, and point the availability gate at a local mock
 of Maven Central, so no network, SDK or real Gradle is needed:
 
-    test A  gate 404/404            -> fails after the budget, Gradle never runs
-    test B  gate 200/200            -> preflight + smoke, success
-    test C  gate 200/200, strict x  -> fails with the preflight diagnosis
-    test D  gate 200/200, smoke x   -> fails with the full-check diagnosis
-    test E  gate 200/404 (partial)  -> treated as not yet visible
+    test A  gate all 404            -> fails after the budget, Gradle never runs
+    test B  gate all 200            -> preflight + smoke, success
+    test C  gate all 200, strict x  -> fails with the preflight diagnosis
+    test D  gate all 200, smoke x   -> fails with the full-check diagnosis
+    test E  gate partially visible  -> treated as not yet visible
 
 Run with: python3 -m unittest discover -s scripts -p 'test_*.py'
 """
@@ -28,9 +30,32 @@ SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 VERIFY_SCRIPT = os.path.join(SCRIPTS_DIR, "verify-android-maven-consumer.sh")
 CONSUMER_SCRIPT = os.path.join(SCRIPTS_DIR, "check-android-maven-consumer.sh")
 VERSION = "1.2.3"
-# The artifact URL paths exactly as the verify script constructs them.
-POM_PATH = "/maven2/net/project-flora/appauth/appauth-rust-android/%s/appauth-rust-android-%s.pom" % (VERSION, VERSION)
-AAR_PATH = "/maven2/net/project-flora/appauth/appauth-rust-android/%s/appauth-rust-android-%s.aar" % (VERSION, VERSION)
+
+
+def gate_paths():
+    """The availability-gate URL paths, exactly as the verify script
+    constructs them from MAVEN_CENTRAL_BASE_URL: the full publication."""
+    base = ("/maven2/net/project-flora/appauth/appauth-rust-android/%s/"
+            "appauth-rust-android-%s") % (VERSION, VERSION)
+    return [base + ext for ext in (
+        ".aar", ".pom", ".module",
+        "-sources.jar", "-javadoc.jar",
+        ".aar.asc", ".pom.asc", ".module.asc",
+        "-sources.jar.asc", "-javadoc.jar.asc",
+    )]
+
+
+def gate_routes(status, **overrides):
+    """Gate routes with every file answering `status`; `overrides` maps a
+    file name (the path's final component) to a different status, for the
+    partial-visibility scenarios."""
+    paths = gate_paths()
+    routes = {path: status for path in paths}
+    for path in paths:
+        name = path.rsplit("/", 1)[1]
+        if name in overrides:
+            routes[path] = overrides[name]
+    return routes
 
 FAKE_GRADLEW = r"""#!/usr/bin/env bash
 printf '%s\n' "$*" >> "${FAKE_GRADLE_LOG:?FAKE_GRADLE_LOG unset}"
@@ -143,15 +168,24 @@ class VerifyAndroidMavenConsumerTests(unittest.TestCase):
             sandbox.close()
 
     def test_gate_404_fails_without_running_gradle(self):
-        r, calls = self.run_scenario({POM_PATH: 404, AAR_PATH: 404})
+        r, calls = self.run_scenario(gate_routes(404))
         self.assertEqual(r.returncode, 1, r.stderr)
         self.assertIn("not yet visible on Maven Central", r.stderr)
         self.assertIn("failed after 2 attempts", r.stderr)
-        self.assertIn("POM 404", r.stderr)
+        self.assertIn("appauth-rust-android-%s.pom 404" % VERSION, r.stderr)
+        # The missing files are separated by ", " in publication order:
+        # the first two entries of the summary, joined correctly
+        # (separator-placement regression, Copilot review of #143).
+        self.assertIn(
+            "appauth-rust-android-%s.aar 404, "
+            "appauth-rust-android-%s.pom 404" % (VERSION, VERSION),
+            r.stderr)
+        # No trailing separator before the closing parenthesis.
+        self.assertNotIn(", )", r.stderr)
         self.assertEqual(calls, [])
 
     def test_gate_200_preflight_and_smoke_succeed(self):
-        r, calls = self.run_scenario({POM_PATH: 200, AAR_PATH: 200})
+        r, calls = self.run_scenario(gate_routes(200))
         self.assertEqual(r.returncode, 0, (r.stdout, r.stderr))
         self.assertIn("verification succeeded", r.stdout)
         self.assertTrue(any("checkDebugAarMetadata" in c for c in calls), calls)
@@ -160,7 +194,7 @@ class VerifyAndroidMavenConsumerTests(unittest.TestCase):
         self.assertTrue(all("--refresh-dependencies" in c for c in calls), calls)
 
     def test_strict_preflight_failure(self):
-        r, calls = self.run_scenario({POM_PATH: 200, AAR_PATH: 200},
+        r, calls = self.run_scenario(gate_routes(200),
                                      strict_exit="1")
         self.assertEqual(r.returncode, 1, r.stderr)
         self.assertIn("Strict preflight failed", r.stderr)
@@ -168,28 +202,39 @@ class VerifyAndroidMavenConsumerTests(unittest.TestCase):
         self.assertFalse(any("connectedDebugAndroidTest" in c for c in calls), calls)
 
     def test_full_check_failure(self):
-        r, calls = self.run_scenario({POM_PATH: 200, AAR_PATH: 200},
+        r, calls = self.run_scenario(gate_routes(200),
                                      full_exit="1")
         self.assertEqual(r.returncode, 1, r.stderr)
         self.assertIn("Full check failed", r.stderr)
         self.assertTrue(any("connectedDebugAndroidTest" in c for c in calls), calls)
 
     def test_gate_partial_404_is_not_visible(self):
-        # The AAR is what the full check consumes; a 200 POM with a 404 AAR
-        # must be treated as "not yet visible", not as a preflight attempt.
-        r, calls = self.run_scenario({POM_PATH: 200, AAR_PATH: 404})
-        self.assertEqual(r.returncode, 1, r.stderr)
-        self.assertIn("not yet visible on Maven Central", r.stderr)
-        self.assertEqual(calls, [])
+        # A publication missing any single file -- the AAR the full check
+        # consumes, the POM, the module metadata, a jar, or one of the
+        # signatures -- is incomplete: it must be treated as "not yet
+        # visible", never as a preflight attempt. The case is run for every
+        # publication file so a gate that HEADs the ten files but only
+        # checks some of their statuses (the pre-#131 POM/AAR behavior)
+        # cannot regress (Copilot review of #143).
+        for missing in gate_paths():
+            name = missing.rsplit("/", 1)[1]
+            with self.subTest(missing=name):
+                r, calls = self.run_scenario(
+                    gate_routes(200, **{name: 404}))
+                self.assertEqual(r.returncode, 1, r.stderr)
+                self.assertIn("not yet visible on Maven Central", r.stderr)
+                # The diagnosis names the file that is not 200.
+                self.assertIn(name, r.stderr)
+                self.assertEqual(calls, [])
 
     def test_retry_budget_is_exhausted_not_waited(self):
-        # With a zero interval the loop must still perform exactly MAX_RETRIES
-        # gate attempts before failing (and not sleep a final interval).
-        r, sandbox = self.run_scenario({POM_PATH: 404, AAR_PATH: 404},
-                                       retries="3")
+        # With a zero interval the loop must still perform exactly
+        # MAX_RETRIES gate attempts -- over every publication file -- before
+        # failing (and not sleep a final interval).
+        r, sandbox = self.run_scenario(gate_routes(404), retries="3")
         self.assertEqual(r.returncode, 1)
-        self.assertEqual(self.server.requests.count(POM_PATH), 3)
-        self.assertEqual(self.server.requests.count(AAR_PATH), 3)
+        for path in gate_paths():
+            self.assertEqual(self.server.requests.count(path), 3, path)
 
 
 if __name__ == "__main__":

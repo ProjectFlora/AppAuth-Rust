@@ -15,7 +15,8 @@ mock locally:
        GET /repos/<repo>/actions/workflows/<id>/runs?per_page=100&page=<n>
        GET /repos/<repo>/actions/runs/<id>/jobs?per_page=100&attempt=<n>
        HEAD <central>/net/project-flora/appauth/appauth-rust-android/<v>/
-            appauth-rust-android-<v>.{pom,aar}           (the Central check
+            appauth-rust-android-<v>.{aar,pom,module,
+            -sources.jar,-javadoc.jar} and their .asc    (the Central check
             before a would-be definitive failure)
 
 Run with: python3 -m unittest discover -s scripts -p 'test_*.py'
@@ -41,11 +42,21 @@ WORKFLOW_ID = 42
 RUN_URL = "https://github.com/%s/actions/runs/%d" % (REPO, RUN_ID)
 RUN_URL_2 = "https://github.com/%s/actions/runs/%d" % (REPO, RUN_ID_2)
 # The canonical Maven Central paths, exactly as the script builds them from
-# MAVEN_CENTRAL_BASE_URL (which the tests point at the mock).
-POM_PATH = ("/maven2/net/project-flora/appauth/appauth-rust-android/%s/"
-            "appauth-rust-android-%s.pom") % (VERSION, VERSION)
-AAR_PATH = ("/maven2/net/project-flora/appauth/appauth-rust-android/%s/"
-            "appauth-rust-android-%s.aar") % (VERSION, VERSION)
+# MAVEN_CENTRAL_BASE_URL (which the tests point at the mock): the full
+# publication, the file set the status check classifies (Issue #131).
+_BASE = ("/maven2/net/project-flora/appauth/appauth-rust-android/%s/"
+         "appauth-rust-android-%s") % (VERSION, VERSION)
+POM_PATH = _BASE + ".pom"
+AAR_PATH = _BASE + ".aar"
+
+
+def publication_paths():
+    return [_BASE + ext for ext in (
+        ".aar", ".pom", ".module",
+        "-sources.jar", "-javadoc.jar",
+        ".aar.asc", ".pom.asc", ".module.asc",
+        "-sources.jar.asc", "-javadoc.jar.asc",
+    )]
 
 # A release.yml without the publish_maven job, as at tag v0.5.0 (the release
 # predates #132, which added the job).
@@ -339,8 +350,9 @@ class PublicationStatusCheckTests(unittest.TestCase):
                      % WORKFLOW_ID)] = runs_response("completed", "failure")
         routes[route("/actions/runs/%d/jobs?per_page=100&attempt=1" % RUN_ID)] = \
             jobs_response("completed", "failure")
-        routes[POM_PATH] = (200, None)
-        routes[AAR_PATH] = (200, None)
+        # "Visible" is the complete publication: every file answers 200.
+        for path in publication_paths():
+            routes[path] = (200, None)
         r = self.run_script(VERSION, routes)
         self.assertEqual(r.returncode, 0, (r.stdout, r.stderr))
         self.assertIn("visible on Maven Central", r.stdout)

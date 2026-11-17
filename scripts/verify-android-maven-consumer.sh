@@ -6,12 +6,17 @@
 # portal -> Central propagation that starts when publish_maven finishes:
 # typically minutes, occasionally up to an hour):
 #
-#   1. Availability gate: a direct HTTP HEAD on the canonical POM and AAR
-#      URLs. This replaces the old light check -- `gradle dependencies` is a
-#      lenient report: it renders unresolvable dependencies as FAILED nodes
-#      and exits 0, so it "passed" for an artifact that 404s on Central
-#      (Issue #137). Both URLs returning 200 is the deterministic
-#      "visible on Central" signal the later stages rely on.
+#   1. Availability gate: a direct HTTP HEAD on every file of the
+#      publication -- the AAR, the POM, the Gradle module metadata, the
+#      sources and javadoc jars, and the GPG signature of each: exactly the
+#      file set the local pre-publication check verifies (Issue #131). This
+#      replaces the old light check -- `gradle dependencies` is a lenient
+#      report: it renders unresolvable dependencies as FAILED nodes and exits
+#      0, so it "passed" for an artifact that 404s on Central (Issue #137)
+#      -- and every file answering 200 is the deterministic "complete
+#      publication on Central" signal the later stages rely on: a deployment
+#      that is only partially synced is retried, and one that is missing its
+#      signatures cannot pass the gate.
 #   2. Strict resolution preflight: checkDebugAarMetadata resolves the POM
 #      and downloads the AAR and the transitive dependencies.
 #      --refresh-dependencies re-verifies against Central rather than
@@ -42,29 +47,63 @@ MAX_RETRIES="${VERIFY_MAX_RETRIES:-10}"
 RETRY_INTERVAL="${VERIFY_RETRY_INTERVAL:-60}"
 
 central_base="${MAVEN_CENTRAL_BASE_URL:-https://repo.maven.apache.org/maven2}"
-# The group's Maven path and the artifact name (native/android/build.gradle.kts)
-pom_url="${central_base}/net/project-flora/appauth/appauth-rust-android/${VERSION}/appauth-rust-android-${VERSION}.pom"
-aar_url="${central_base}/net/project-flora/appauth/appauth-rust-android/${VERSION}/appauth-rust-android-${VERSION}.aar"
+# The group's Maven path (native/android/build.gradle.kts) and the full
+# publication, the file set scripts/check-android-maven-publication.sh
+# verifies locally before the upload (Issue #131).
+base_path="net/project-flora/appauth/appauth-rust-android/${VERSION}"
+artifact_files=(
+    "appauth-rust-android-${VERSION}.aar"
+    "appauth-rust-android-${VERSION}.pom"
+    "appauth-rust-android-${VERSION}.module"
+    "appauth-rust-android-${VERSION}-sources.jar"
+    "appauth-rust-android-${VERSION}-javadoc.jar"
+    "appauth-rust-android-${VERSION}.aar.asc"
+    "appauth-rust-android-${VERSION}.pom.asc"
+    "appauth-rust-android-${VERSION}.module.asc"
+    "appauth-rust-android-${VERSION}-sources.jar.asc"
+    "appauth-rust-android-${VERSION}-javadoc.jar.asc"
+)
 
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 fixture="$repo_root/native/consumer-smoke/android"
 
-# Stage 1: HTTP availability gate. Anything other than 200 -- 404 while the
-# sync is still propagating, 410 for a withdrawn version, 000 for a transport
-# failure -- means "not (yet) visible"; the retry loop absorbs it.
+# Stage 1: HTTP availability gate (see header). Anything other than 200 --
+# 404 while the sync is still propagating, 410 for a withdrawn version, 000
+# for a transport failure -- means the publication is not (yet) complete;
+# the retry loop absorbs it.
 http_status() {
     curl -s -o /dev/null -w "%{http_code}" -I --max-time 30 "$1" || printf '000'
 }
 
-last_pom=""
-last_aar=""
+# "<file> <status>" for the most recent gate attempt.
+last_gate=()
 
 gate() {
-    last_pom=$(http_status "$pom_url")
-    last_aar=$(http_status "$aar_url")
-    echo "    POM: HTTP ${last_pom}  ${pom_url}"
-    echo "    AAR: HTTP ${last_aar}  ${aar_url}"
-    [[ "$last_pom" == "200" && "$last_aar" == "200" ]]
+    local f status incomplete=0
+    last_gate=()
+    for f in "${artifact_files[@]}"; do
+        status=$(http_status "${central_base}/${base_path}/${f}")
+        last_gate+=("${f} ${status}")
+        echo "    ${f}: HTTP ${status}"
+        [[ "$status" == "200" ]] || incomplete=1
+    done
+    [[ "$incomplete" -eq 0 ]]
+}
+
+# The non-200 files of the most recent gate attempt, for the diagnostic
+# messages; a complete gate means the failure came from a later stage.
+gate_summary() {
+    local entry summary=""
+    for entry in "${last_gate[@]}"; do
+        # The conditional separator precedes the entry it separates;
+        # appending it after would join entries and leave a trailing comma.
+        [[ "${entry#* }" == "200" ]] || summary+="${summary:+, }${entry}"
+    done
+    if [[ -z "$summary" ]]; then
+        printf 'all %d files visible' "${#artifact_files[@]}"
+    else
+        printf '%s' "$summary"
+    fi
 }
 
 # Stage 2: strict resolution preflight (see header).
@@ -76,7 +115,7 @@ strict_check() {
 for i in $(seq 1 "$MAX_RETRIES"); do
     echo "Retry ${i}/${MAX_RETRIES}: Maven Central availability gate..."
     if gate; then
-        echo "Artifact visible on Maven Central. Running strict resolution preflight..."
+        echo "Complete publication visible on Maven Central. Running strict resolution preflight..."
         if strict_check; then
             echo "Strict preflight passed. Running full consumer smoke test..."
             if "$repo_root/scripts/check-android-maven-consumer.sh" "$VERSION"; then
@@ -88,7 +127,7 @@ for i in $(seq 1 "$MAX_RETRIES"); do
             echo "Strict preflight failed: the POM or AAR is missing or malformed (a transient Central glitch, or a bad publication)." >&2
         fi
     else
-        echo "Artifact not yet visible on Maven Central (last status: POM ${last_pom}, AAR ${last_aar})." >&2
+        echo "Artifact not yet visible on Maven Central (last gate: $(gate_summary))." >&2
         echo "If this version was just published, this is the portal -> Central sync delay; if it was published long ago, the artifact may have been withdrawn." >&2
     fi
     if [[ "$i" -lt "$MAX_RETRIES" ]]; then
@@ -97,6 +136,6 @@ for i in $(seq 1 "$MAX_RETRIES"); do
     fi
 done
 
-echo "Maven Central verification failed after ${MAX_RETRIES} attempts (last gate: POM ${last_pom}, AAR ${last_aar})." >&2
+echo "Maven Central verification failed after ${MAX_RETRIES} attempts (last gate: $(gate_summary))." >&2
 echo "If the release run's publish_maven job succeeded but the artifact never becomes visible, check the Central portal deployment for the version; once the sync completes, dispatch the workflow again." >&2
 exit 1
