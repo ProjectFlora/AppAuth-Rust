@@ -28,8 +28,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "NativeOIDCBinary",
-            url: "https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/AppAuthRust-Apple-0.4.0.zip",
-            checksum: "a298fca36ea9c06f515dc6aa69cd366dd905607d06aac8b29f22abf7df352d95"
+            url: "https://github.com/ProjectFlora/NativeOIDC/releases/download/v0.7.0/NativeOIDC-Apple-0.7.0.zip",
+            checksum: "185e099716ea5a7f74c91d7f82e2036d6ade0d33f759c079b15635d49777d127"
         ),
         .target(
             name: "NativeOIDC",
