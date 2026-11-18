@@ -49,6 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.value }}
+      previous_tag: ${{ steps.previous_release.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -95,6 +96,34 @@ jobs:
             exit 1
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
+      # Release commits branch off main, so earlier release tags are not in
+      # the new tag's history and GitHub would start the generated notes at
+      # the last tag on main (v0.4.0, Issue #151). Start them at the highest
+      # published release below this version instead, and record it so a
+      # candidate run shows the range the notes will cover.
+      - id: previous_release
+        name: Find the previous release for the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          tags=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1000 \
+            --json tagName --jq '.[].tagName')
+          previous_tag=$(printf '%s\n' "$tags" "v$RELEASE_VERSION" |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+            sort -uV |
+            awk -v current="v$RELEASE_VERSION" '$0 == current { print prev; exit } { prev = $0 }')
+          if [[ -z "$previous_tag" ]]; then
+            echo "No published release precedes v$RELEASE_VERSION to start the release notes from" >&2
+            exit 1
+          fi
+          echo "tag=$previous_tag" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release notes range"
+            echo
+            echo "Release notes start at \`$previous_tag\`:" \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$previous_tag...$GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   apple:
     name: Build Apple release package
@@ -418,6 +447,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+          PREVIOUS_TAG: ${{ needs.validate_version.outputs.previous_tag }}
         run: |
           cd dist
           shasum -a 256 \
@@ -434,7 +464,8 @@ jobs:
             SHA256SUMS \
             --verify-tag \
             --title "NativeOIDC v$RELEASE_VERSION" \
-            --generate-notes
+            --generate-notes \
+            --notes-start-tag "$PREVIOUS_TAG"
 
   publish_maven:
     if: ${{ inputs.publish }}

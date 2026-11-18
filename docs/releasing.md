@@ -57,6 +57,9 @@ Confirm that every job succeeds, including **Prepare and validate release
 Package.swift** (`spm_manifest`). That job's log shows the rewritten
 `Package.swift` diff: the URL must be
 `https://github.com/ProjectFlora/NativeOIDC/releases/download/vX.Y.Z/NativeOIDC-Apple-X.Y.Z.zip`.
+The **Validate release version** step summary names the release the
+generated notes will start from and links the comparison; it must be the
+previous release (see [Release notes range](#release-notes-range)).
 
 The Apple jobs build and validate with the Xcode set by `XCODE_VERSION` in
 `release.yml` (a stable Xcode 26.x, since App Store Connect requires Xcode
@@ -86,7 +89,8 @@ Then the `publish` job:
 2. Creates the annotated `vX.Y.Z` tag on that commit and pushes **only the
    tag**. `main` is not updated.
 3. Creates the GitHub Release with the Apple, Android, Windows, and API docs
-   assets plus `SHA256SUMS`, and generated release notes.
+   assets plus `SHA256SUMS`, and release notes generated from the previous
+   release (see [Release notes range](#release-notes-range)).
 
 After the GitHub Release is created, the `publish_maven` job checks out the
 `vX.Y.Z` tag, builds the Android library, checks the signed publication with
@@ -216,6 +220,25 @@ renaming the repository does not invalidate the binary target on `main`.
 SPM consumers resolve released
 versions by tag and are unaffected; depending on the `main` branch through
 SPM is not supported.
+
+### Release notes range
+
+Because each release commit is reachable only from its tag, earlier release
+tags are not in the new tag's history. Left to choose the starting tag
+itself, GitHub picks the last tag in that history, which is `v0.4.0`, the
+last release tagged on `main`, so every release would list everything
+since `v0.4.0`. The workflow therefore passes the starting tag explicitly
+(`--notes-start-tag`): the highest published, non-draft,
+non-prerelease GitHub Release whose `vX.Y.Z` tag sorts below the new
+version by SemVer. A patch for an older line (for example `v0.6.1` after
+`v0.7.0`) therefore starts at `v0.6.0`, and a tag left without a GitHub
+Release by a failed run is skipped. If no earlier release is found, the
+run fails rather than generating notes from the wrong range. GitHub
+compares the two tags through their merge base, so the notes list the pull
+requests merged to `main` between the two dispatched commits.
+Releases v0.6.0 and v0.7.0 were published with notes starting at `v0.4.0`
+and were corrected afterwards
+([#151](https://github.com/ProjectFlora/NativeOIDC/issues/151)).
 
 ### What the packaging self-test checks
 
