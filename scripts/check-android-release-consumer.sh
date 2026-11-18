@@ -20,7 +20,8 @@ trap 'rm -f "$library" "$classes_jar"' EXIT
 # The AAR carries the license notices as java resources in classes.jar...
 unzip -p "$archive" classes.jar > "$classes_jar"
 for notice in "${notices[@]}"; do
-    unzip -Z1 "$classes_jar" | grep -Fx "$notice"
+    unzip -Z1 "$classes_jar" | grep -Fx "$notice" ||
+        { echo "Android release AAR is missing $notice in classes.jar" >&2; exit 1; }
 done
 
 cp "$archive" "$library"
@@ -29,5 +30,6 @@ cp "$archive" "$library"
 # ...and an app built against it keeps them under their own path.
 apk="$fixture/app/build/outputs/apk/debug/app-debug.apk"
 for notice in "${notices[@]}"; do
-    unzip -Z1 "$apk" | grep -Fx "$notice"
+    unzip -Z1 "$apk" | grep -Fx "$notice" ||
+        { echo "Consumer APK is missing $notice" >&2; exit 1; }
 done
