@@ -17,6 +17,11 @@ set -euo pipefail
 # but must never lead it (a leading URL would point at a release that does
 # not exist yet).
 #
+# Releases up to 0.6.0 were published while the repository was named
+# ProjectFlora/AppAuth-Rust (Issue #146). Their assets keep that URL, which
+# GitHub redirects after the rename, so the check also accepts it for those
+# releases whatever the current repository name is.
+#
 # Usage: scripts/check-spm-manifest.sh
 
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
@@ -94,12 +99,30 @@ if not re.fullmatch(r"[0-9a-f]{64}", checksum):
     sys.exit(f"Package.swift binary target checksum is not a SHA-256: {checksum}")
 
 # The URL encodes the release the binary target points at: it must be the
-# canonical asset name for that release of this repository.
-url_match = re.fullmatch(
-    rf"{re.escape(repo_url)}/releases/download/v(\d+\.\d+\.\d+)"
-    rf"/AppAuthRust-Apple-(\d+\.\d+\.\d+)\.zip",
-    url,
-)
+# canonical asset name for that release of this repository, or the URL a
+# release published under the former repository name was given.
+LEGACY_REPO_URL = "https://github.com/ProjectFlora/AppAuth-Rust"
+LEGACY_LAST_VERSION = "0.6.0"
+
+
+def match_release_url(base):
+    return re.fullmatch(
+        rf"{re.escape(base)}/releases/download/v(\d+\.\d+\.\d+)"
+        rf"/AppAuthRust-Apple-(\d+\.\d+\.\d+)\.zip",
+        url,
+    )
+
+
+url_match = match_release_url(repo_url)
+if not url_match:
+    url_match = match_release_url(LEGACY_REPO_URL)
+    if url_match and semver(url_match.group(1)) > semver(LEGACY_LAST_VERSION):
+        sys.exit(
+            f"Package.swift binary target URL uses the former repository name "
+            f"for release {url_match.group(1)}, but only releases up to "
+            f"{LEGACY_LAST_VERSION} were published under it: {url!r} (expected "
+            f"{repo_url!r}/releases/download/v<version>/...)"
+        )
 if not url_match:
     sys.exit(
         f"Package.swift binary target URL is not a canonical release asset: "
