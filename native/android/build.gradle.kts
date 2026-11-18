@@ -64,6 +64,15 @@ val generateLicenseNotices by tasks.registering(Exec::class) {
         repositoryRoot.resolve("about.hbs"),
         repositoryRoot.resolve("scripts/generate-third-party-licenses.sh"),
     )
+    // The standard library notices come from the active toolchain, so a
+    // different Rust version must regenerate them.
+    inputs.property(
+        "rustToolchain",
+        providers.exec {
+            workingDir(repositoryRoot)
+            commandLine("rustc", "--version", "--verbose")
+        }.standardOutput.asText,
+    )
     outputs.dir(generatedLicenses)
     doLast {
         repositoryRoot.resolve("LICENSE").copyTo(noticeDir.get().resolve("LICENSE"), overwrite = true)
