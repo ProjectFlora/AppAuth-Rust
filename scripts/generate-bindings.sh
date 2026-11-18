@@ -17,6 +17,11 @@ case "$(uname -s)" in
 esac
 
 cargo build --locked --lib
+# The swift/ and kotlin/ subdirectories hold only generated bindings. Clear
+# them so files generated for an earlier module name (such as
+# uniffi/appauth_rust/ before the NativeOIDC rename) never survive alongside
+# the new ones: Gradle compiles the whole kotlin/ tree.
+rm -rf "$output_dir/swift" "$output_dir/kotlin"
 cargo run --locked --features uniffi-cli --bin uniffi-bindgen -- \
     generate --library "$library" --language swift --out-dir "$output_dir/swift"
 cargo run --locked --features uniffi-cli --bin uniffi-bindgen -- \
