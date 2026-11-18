@@ -13,15 +13,15 @@ other Apple platforms are not included.
 ## Download and verify
 
 Download `NativeOIDC-Apple-<version>.zip` and `SHA256SUMS` from the same
-[GitHub Release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.6.0). From the directory containing both files, verify the archive:
+[GitHub Release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.7.0). From the directory containing both files, verify the archive:
 
 ```sh
-VERSION=0.6.0
+VERSION=0.7.0
 grep -F "NativeOIDC-Apple-$VERSION.zip" SHA256SUMS | shasum -a 256 -c
 unzip "NativeOIDC-Apple-$VERSION.zip"
 ```
 
-Replace `0.6.0` with the release version you downloaded. The archive extracts
+Replace `0.7.0` with the release version you downloaded. The archive extracts
 to `NativeOIDC-Apple/`.
 
 ## Add the package to Xcode

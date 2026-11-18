@@ -310,7 +310,7 @@ is covered.
 The adopted channels are implemented in separate issues that reference this
 document:
 
-- **Publish the Android AAR to Maven Central** ([#81](https://github.com/ProjectFlora/NativeOIDC/issues/81)) — shipped in v0.6.0. Central Portal account and
+- **Publish the Android AAR to Maven Central** ([#81](https://github.com/ProjectFlora/NativeOIDC/issues/81)) — first published in v0.7.0 (the v0.6.0 upload failed signature validation, [#131](https://github.com/ProjectFlora/NativeOIDC/issues/131)). Central Portal account and
   `net.project-flora` namespace registration (lead-time item), GPG key and
   signing setup, POM generation for the library module with the three
   transitive dependencies (jna as `aar` type, per Spike B), publication step

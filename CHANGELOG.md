@@ -1,11 +1,12 @@
 # Changelog
 
 Notable changes to NativeOIDC (named AppAuth-Rust up to v0.6.0) are
-documented here. The 0.x series is
-pre-1.0: releases may be published while interoperability testing and support
-policies are still evolving. Each release records its known limitations.
+documented here. The 0.x series is pre-1.0: releases may be published while
+interoperability testing and support policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
+
+## [0.7.0] - 2026-11-18
 
 ### Changed
 
@@ -25,6 +26,12 @@ policies are still evolving. Each release records its known limitations.
   published. See
   [Migrating from AppAuth-Rust](README.md#migrating-from-appauth-rust) for the
   full mapping.
+- `scripts/check-spm-manifest.sh` accepts the original asset URLs of releases
+  up to 0.6.0, published under the former repository name, and expects
+  `AppAuthRust-Apple-*.zip` archives up to 0.6.0 and `NativeOIDC-Apple-*.zip`
+  archives from 0.7.0. Binding generation and Android library staging clear
+  their generated-only output directories first, so outputs from a build
+  under the former name are not packaged.
 
 ### Documentation
 
@@ -32,10 +39,45 @@ policies are still evolving. Each release records its known limitations.
   OpenID Foundation or the AppAuth projects, in the README, the documentation
   index, the Apple and Windows release-asset READMEs, and the Maven POM, and
   describe AppAuth-iOS and AppAuth-Android as reference implementations
-  ([#145](https://github.com/ProjectFlora/AppAuth-Rust/issues/145)). Record
+  ([#145](https://github.com/ProjectFlora/NativeOIDC/issues/145)). Record
   the decision to rename the project to NativeOIDC in v0.7.0.
 - Add `authors`, `description`, `license`, and `repository` to `Cargo.toml`,
   and set `publish = false` while crates.io publication is deferred.
+- Correct the v0.6.0 notes: its Maven Central upload failed Maven Central's
+  signature validation because the signing key's public key was not on a key
+  server Maven Central checks, so v0.6.0 was never published there
+  ([#131](https://github.com/ProjectFlora/NativeOIDC/issues/131)). It will not
+  be republished under the former coordinates.
+
+### Distribution
+
+- Published as a regular GitHub Release while remaining a pre-1.0 version.
+  Release assets include Apple XCFramework, Android AAR, Windows DLL/C ABI
+  package, API documentation, and SHA-256 checksums, under the NativeOIDC
+  names.
+- First release published to Maven Central: the Android library is
+  available as `net.project-flora.nativeoidc:native-oidc-android:0.7.0`
+  ([#81](https://github.com/ProjectFlora/NativeOIDC/issues/81),
+  [#131](https://github.com/ProjectFlora/NativeOIDC/issues/131)). Swift
+  Package Manager remains available through release tags, now from
+  `https://github.com/ProjectFlora/NativeOIDC`.
+
+### Known limitations
+
+- Live identity-provider interoperability has not been validated, including
+  token revocation.
+- macOS and Windows tests do not automate the real system-browser flow.
+- Release consumer fixtures exercise refresh and end-session error paths in
+  the Windows C++ and .NET hosts and token revocation in the Windows .NET
+  host only; the Android and Apple XCFramework fixtures only construct the
+  configuration object, and the SPM consumer runs a host-side smoke of the
+  generated API without an authorization flow.
+- SPM is supported only through release tags; depending on the `main`
+  branch is not supported.
+- `release-consumer.yml` validates releases from v0.7.0 only; releases up to
+  v0.6.0 used the former names.
+- Platform minimums and provider interoperability policies remain subject to
+  the 1.0.0 readiness criteria in `ROADMAP.md`.
 
 ## [0.6.0] - 2026-11-17
 

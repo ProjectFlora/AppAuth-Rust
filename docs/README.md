@@ -44,10 +44,10 @@ includes the Windows Rust module. Full user-guide packaging remains #89.
 Repository documentation describes the source revision being read. Use the
 matching tag when installing a published release: current main's OS minimums,
 API additions, and packaging fixes may postdate that release. See the
-[support matrix](support-matrix.md) and [release downloads](../README.md#download-and-verify-v060).
+[support matrix](support-matrix.md) and [release downloads](../README.md#download-and-verify-v070).
 Swift Package Manager is available from v0.5.0
 ([#82](https://github.com/ProjectFlora/NativeOIDC/issues/82)). Maven Central
-is available from v0.6.0
+is available from v0.7.0
 ([#81](https://github.com/ProjectFlora/NativeOIDC/issues/81)); earlier
 versions use the documented GitHub Release installation for Android.
 
