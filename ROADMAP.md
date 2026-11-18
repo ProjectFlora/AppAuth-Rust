@@ -113,6 +113,20 @@ This roadmap tracks work remaining for the initial scope in
   first Maven Central publication succeeds, so that no artifact is published
   under the old coordinates. State the non-affiliation in the README, the
   documentation index, the release-asset READMEs, and the POM.
+- **Native API languages:** Decided 2026-11-18
+  ([#144](https://github.com/ProjectFlora/NativeOIDC/issues/144)). The public
+  API targets Swift on Apple platforms and Kotlin on Android only; the
+  library provides no Objective-C or Java API. Objective-C and Java
+  applications should place a small Swift or Kotlin wrapper (binding class)
+  in the app instead. The central operations are Swift `async` and Kotlin
+  `suspend`, with cancellation and error types built around those idioms; a
+  usable Objective-C or Java surface would require redesigning the calls,
+  cancellation, and errors as a second hand-maintained API rather than a
+  thin adapter, and it would double the per-language validation,
+  documentation, and language-guide work. Adding Objective-C or Java entry
+  points later would not break compatibility, while removing ones shipped at
+  1.0.0 would; keep the initial scope narrow and revisit the decision if
+  demand appears.
 
 ## Open decisions
 

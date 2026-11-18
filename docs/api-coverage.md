@@ -11,6 +11,9 @@ UniFFI names below are the Rust source names from [ffi.rs](../src/ffi.rs).
 Swift and Kotlin bindings use generated language spellings. Windows C++ uses
 the [ABI reference](windows-api.md); .NET uses `NativeOidcWindows` methods.
 “Host” means application work is required; “not exposed” is a binding limit.
+Swift and Kotlin are the only supported public API languages for Apple and
+Android; Objective-C and Java are out of scope — see [supported application
+languages](user-guide.md#supported-application-languages).
 
 | Operation | Rust core | Swift / Kotlin (UniFFI) | Windows C++ | Windows .NET |
 | --- | --- | --- | --- | --- |

@@ -6,6 +6,17 @@ interoperability testing and support policies are still evolving. Each release r
 
 ## [Unreleased]
 
+### Documentation
+
+- State that the public API targets Swift and Kotlin only, that Objective-C
+  and Java applications should use an app-side wrapper (for example a Swift
+  `@objc` class with completion handlers, or a Kotlin function returning a
+  `CompletableFuture` or accepting a callback), in the README, the feature
+  matrix, the shared user guide, the documentation index, and the API
+  coverage matrix. Record the decision and rationale in
+  [ROADMAP.md](ROADMAP.md)
+  ([#144](https://github.com/ProjectFlora/NativeOIDC/issues/144)).
+
 ## [0.7.0] - 2026-11-18
 
 ### Changed
