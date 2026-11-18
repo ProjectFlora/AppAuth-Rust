@@ -280,6 +280,36 @@ Use the exact downloaded asset name when verifying another package. GitHub
 Release assets are the persistent distribution channel; the CI validation
 artifacts expire after 14 days.
 
+## Third-party licenses
+
+The NativeOIDC libraries are licensed under the Apache License, Version 2.0,
+and statically include Rust crates under their own licenses (MIT, ISC,
+BSD-3-Clause, Unicode-3.0, CDLA-Permissive-2.0, and MPL-2.0 for UniFFI),
+plus the Rust standard library. From v0.7.1, every release package carries
+this project's `LICENSE` and `THIRD_PARTY_LICENSES.txt`, the notices for
+those dependencies with a crates.io source link for each crate:
+
+| Package | Location |
+| --- | --- |
+| `NativeOIDC-Apple-<version>.zip` | `NativeOIDC-Apple/LICENSE`, `NativeOIDC-Apple/THIRD_PARTY_LICENSES.txt` |
+| `native-oidc-android-<version>.aar` (GitHub Release and Maven Central) | `META-INF/native-oidc/LICENSE` and `META-INF/native-oidc/THIRD_PARTY_LICENSES.txt` in `classes.jar`; apps keep them at that path in the APK |
+| `native-oidc-windows-<version>.zip` | `LICENSE`, `THIRD_PARTY_LICENSES.txt` at the zip root |
+
+An app that ships NativeOIDC distributes these dependencies too, so include
+the notices with the app, for example on its open-source licenses screen.
+
+v0.1.0 through v0.7.0 were published without these notices. Their GitHub
+Releases now also carry `THIRD_PARTY_LICENSES-<version>.txt`, generated
+afterwards from each release's `Cargo.lock`; each release's `SHA256SUMS` is
+unchanged and does not cover it. The v0.7.0 AAR on Maven Central cannot be
+replaced, so use v0.7.1 or later.
+
+A dependency change must keep `cargo deny check licenses` passing: CI fails
+when a crate linked into the libraries is not under a license that
+[`deny.toml`](deny.toml) allows. See
+[docs/releasing.md](docs/releasing.md#license-notices) for how the notices
+are generated.
+
 ## Release consumer validation
 
 Each release candidate is installed into minimal consumer fixtures before it

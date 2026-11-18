@@ -54,6 +54,11 @@ jobs:
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
+      # A release ships only dependencies under licenses deny.toml allows.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2
+      - run: cargo deny check licenses
       - id: version
         name: Match SemVer release version to Cargo package version
         env:
@@ -112,6 +117,10 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
       - uses: Swatinem/rust-cache@v2
+      # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
       - name: Record toolchain versions
         run: |
           {
@@ -150,6 +159,10 @@ jobs:
           packages: platform-tools
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
       - uses: dtolnay/rust-toolchain@stable
+      # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
       - name: Configure Android NDK
         env:
           ANDROID_API_LEVEL: '28'
@@ -222,22 +235,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked --lib --target x86_64-pc-windows-msvc
       - run: cargo test --locked --lib --target x86_64-pc-windows-msvc
+      # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
+      - run: scripts/generate-third-party-licenses.sh
+        shell: bash
       - name: Build and package Windows library
+        shell: pwsh
         env:
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
-        run: |
-          cargo build --locked --release --lib --target x86_64-pc-windows-msvc
-          $package = "dist/native-oidc-windows-$env:RELEASE_VERSION"
-          New-Item -ItemType Directory -Force "$package/include" | Out-Null
-          New-Item -ItemType Directory -Force "$package/dotnet" | Out-Null
-          $target = "target/x86_64-pc-windows-msvc/release"
-          Copy-Item "$target/native_oidc.dll" $package
-          Copy-Item "$target/native_oidc.dll.lib" $package
-          Copy-Item "native/windows/include/native_oidc_windows.h" "$package/include"
-          Copy-Item "native/windows/dotnet/NativeOidcWindows.cs" "$package/dotnet"
-          Copy-Item "native/windows/dotnet/NativeOidcWindows.csproj" "$package/dotnet"
-          Copy-Item "native/windows/README.md" $package
-          Compress-Archive -Path "$package/*" -DestinationPath "$package.zip"
+        run: scripts/package-windows.ps1 -Package "dist/native-oidc-windows-$env:RELEASE_VERSION"
       - uses: actions/upload-artifact@v7
         with:
           name: release-windows
@@ -446,6 +454,10 @@ jobs:
           packages: platform-tools
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
       - uses: dtolnay/rust-toolchain@stable
+      # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
       - name: Configure Android NDK
         env:
           ANDROID_API_LEVEL: '28'

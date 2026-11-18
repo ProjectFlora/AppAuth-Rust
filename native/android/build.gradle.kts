@@ -42,6 +42,32 @@ val buildAndroidRustLibraries by tasks.registering(Exec::class) {
     outputs.dir(androidRustLibraries)
 }
 
+// License notices for the release AAR, in classes.jar under a path of their
+// own so they do not collide with other libraries' META-INF/LICENSE in apps.
+// Only release builds ship them, so debug builds do not need cargo-about.
+val generatedLicenses = layout.buildDirectory.dir("generated/licenses")
+val generateLicenseNotices by tasks.registering(Exec::class) {
+    val noticeDir = generatedLicenses.map { it.dir("META-INF/native-oidc").asFile }
+    workingDir(repositoryRoot)
+    commandLine(
+        "bash",
+        repositoryRoot.resolve("scripts/generate-third-party-licenses.sh").absolutePath,
+        noticeDir.get().resolve("THIRD_PARTY_LICENSES.txt").absolutePath,
+    )
+    inputs.files(
+        repositoryRoot.resolve("Cargo.toml"),
+        repositoryRoot.resolve("Cargo.lock"),
+        repositoryRoot.resolve("LICENSE"),
+        repositoryRoot.resolve("about.toml"),
+        repositoryRoot.resolve("about.hbs"),
+        repositoryRoot.resolve("scripts/generate-third-party-licenses.sh"),
+    )
+    outputs.dir(generatedLicenses)
+    doLast {
+        repositoryRoot.resolve("LICENSE").copyTo(noticeDir.get().resolve("LICENSE"), overwrite = true)
+    }
+}
+
 android {
     namespace = "net.projectflora.nativeoidc"
     compileSdk = 35
@@ -62,6 +88,8 @@ android {
 
     sourceSets.getByName("main").java.srcDir(generatedBindings.map { it.dir("kotlin") })
     sourceSets.getByName("main").jniLibs.srcDir(androidRustLibraries)
+    // The task (not its directory) as the source, so every task reading it depends on it.
+    sourceSets.getByName("release").resources.srcDir(generateLicenseNotices)
 
     testOptions {
         unitTests.isReturnDefaultValues = true

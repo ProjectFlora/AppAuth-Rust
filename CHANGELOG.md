@@ -6,6 +6,21 @@ interoperability testing and support policies are still evolving. Each release r
 
 ## [Unreleased]
 
+### Fixed
+
+- Ship license notices in every release package. The Apple and Windows
+  zips and the Android AAR (on GitHub Releases and Maven Central) now
+  contain `LICENSE` and `THIRD_PARTY_LICENSES.txt`, the notices for the
+  Rust crates and the Rust standard library linked into the libraries,
+  generated with cargo-about from `Cargo.lock`; the Windows zip previously
+  had no `LICENSE` either. In the AAR they are in `classes.jar` under
+  `META-INF/native-oidc/`. CI checks the dependency licenses with
+  cargo-deny (`deny.toml`), and the consumer checks require the notice
+  files. v0.1.0 through v0.7.0 shipped without the notices: their GitHub
+  Releases now carry `THIRD_PARTY_LICENSES-<version>.txt`, and Maven
+  Central users of v0.7.0 should move to this release
+  ([#161](https://github.com/ProjectFlora/NativeOIDC/issues/161)).
+
 ### Documentation
 
 - State that the public API targets Swift and Kotlin only, that Objective-C

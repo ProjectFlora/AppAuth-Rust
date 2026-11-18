@@ -48,6 +48,13 @@ for file in "${source_files[@]}"; do
     fi
 done
 
+for file in LICENSE THIRD_PARTY_LICENSES.txt; do
+    if [[ ! -s "$package_root/$file" ]]; then
+        echo "Apple release archive is missing $file" >&2
+        exit 1
+    fi
+done
+
 case "$(uname -m)" in
     arm64) macos_target=arm64-apple-macosx15.0 ;;
     x86_64) macos_target=x86_64-apple-macosx15.0 ;;
