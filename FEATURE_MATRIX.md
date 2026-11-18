@@ -2,8 +2,9 @@
 
 This draft compares the documented features of
 [AppAuth-iOS](https://github.com/openid/AppAuth-iOS) and
-[AppAuth-Android](https://github.com/openid/AppAuth-Android) with the proposed
-Rust scope. “Agreed” reflects decisions already made; “Proposed” still needs
+[AppAuth-Android](https://github.com/openid/AppAuth-Android), used here as
+reference implementations, with the proposed Rust scope. AppAuth-Rust is not
+affiliated with the AppAuth projects or the OpenID Foundation. “Agreed” reflects decisions already made; “Proposed” still needs
 confirmation.
 
 | Feature | AppAuth-iOS | AppAuth-Android | Rust scope |
@@ -26,7 +27,7 @@ confirmation.
 | Rust-to-native bindings | N/A | N/A | Initial — agreed; UniFFI generates Swift/Kotlin bindings; a C ABI serves Windows C++ and .NET hosts |
 | HTTP transport | Customizable URL session provider | Custom connection builder | Initial — agreed; async abstraction, caller-runtime reqwest default, native override available |
 | Device Authorization Grant | Separate AppAuthTV implementation | Not part of the documented core flow | Deferred with tvOS |
-| Static client secret in a native app | API can accept a client secret | Supported, but upstream warns against static secrets | Out of scope — native clients are public clients |
+| Static client secret in a native app | API can accept a client secret | Supported, but AppAuth-Android warns against static secrets | Out of scope — native clients are public clients |
 | Resource Owner Password / Implicit flows | Not part of the documented recommended flow | Not part of the documented recommended flow | Out of scope — use Authorization Code + PKCE |
 | UserInfo and application API calls | Caller makes API calls with tokens | Caller makes API calls with tokens | Out of scope — return tokens; callers use them with their APIs |
 | Windows browser and redirect integration | Not applicable | Not applicable | Initial — agreed for v1: external browser and loopback redirect; support Microsoft-supported Windows client versions and review at each release |
@@ -34,7 +35,7 @@ confirmation.
 ## Important parity difference
 
 The Rust client is intended to provide stronger ID Token validation than the
-upstream SDKs. AppAuth-iOS documents that it parses claims but does not verify
+reference SDKs. AppAuth-iOS documents that it parses claims but does not verify
 the JWT signature. AppAuth-Android validates selected claims, but its
 implementation also relies on TLS to the token endpoint instead of verifying
 the JWT signature. Rust validation must therefore define trusted key discovery,

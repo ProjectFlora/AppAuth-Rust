@@ -106,7 +106,7 @@ mavenPublishing {
 
     pom {
         name.set("AppAuth-Rust Android")
-        description.set("Android adapter and UniFFI Kotlin bindings for AppAuth-Rust, a Rust OAuth 2.0 and OpenID Connect client for native apps.")
+        description.set("Android adapter and UniFFI Kotlin bindings for AppAuth-Rust, a Rust OAuth 2.0 and OpenID Connect client for native apps. AppAuth-Rust is an independent project by ProjectFlora. It is not affiliated with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID Foundation.")
         url.set("https://github.com/ProjectFlora/AppAuth-Rust")
         licenses {
             license {

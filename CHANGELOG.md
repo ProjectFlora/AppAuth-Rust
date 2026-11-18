@@ -6,6 +6,17 @@ policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
 
+### Documentation
+
+- State that AppAuth-Rust is an independent project, not affiliated with the
+  OpenID Foundation or the AppAuth projects, in the README, the documentation
+  index, the Apple and Windows release-asset READMEs, and the Maven POM, and
+  describe AppAuth-iOS and AppAuth-Android as reference implementations
+  ([#145](https://github.com/ProjectFlora/AppAuth-Rust/issues/145)). Record
+  the decision to rename the project to NativeOIDC in v0.7.0.
+- Add `authors`, `description`, `license`, and `repository` to `Cargo.toml`,
+  and set `publish = false` while crates.io publication is deferred.
+
 ## [0.6.0] - 2026-11-17
 
 ### Added

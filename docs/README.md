@@ -1,5 +1,10 @@
 # Documentation
 
+AppAuth-Rust is an independent project by ProjectFlora. It is not affiliated
+with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth
+projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID
+Foundation.
+
 Start with the [shared user guide](user-guide.md) for the authentication-state
 lifecycle, storage, cancellation, errors, and logout policy. The
 [public API coverage matrix](api-coverage.md) identifies the operations exposed

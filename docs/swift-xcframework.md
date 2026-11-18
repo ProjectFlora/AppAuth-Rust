@@ -1,5 +1,10 @@
 # Swift XCFramework installation
 
+AppAuth-Rust is an independent project by ProjectFlora. It is not affiliated
+with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth
+projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID
+Foundation.
+
 The Apple release asset contains a static `AppAuthRust.xcframework` for iOS
 device, iOS simulator, and macOS, plus the generated Swift bindings. It
 supports iOS/iPadOS 18 and later and macOS 15 and later. Mac Catalyst and

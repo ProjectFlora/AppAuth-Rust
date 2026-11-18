@@ -1,8 +1,13 @@
 [package]
 name = "appauth-rust"
 version = "0.6.0"
+authors = ["ProjectFlora"]
 edition = "2021"
 rust-version = "1.99.1"
+description = "OAuth 2.0 and OpenID Connect client core for native apps, with Swift, Kotlin, and Windows bindings"
+repository = "https://github.com/ProjectFlora/AppAuth-Rust"
+license = "Apache-2.0"
+publish = false
 
 [lib]
 crate-type = ["lib", "cdylib", "staticlib"]
