@@ -26,6 +26,13 @@ val generateUniFfiBindings by tasks.registering(Exec::class) {
     outputs.dir(generatedBindings)
 }
 
+// The Rust libraries and the standard library notices both come from the
+// active toolchain, so a different Rust version must rebuild both together.
+val rustToolchain = providers.exec {
+    workingDir(repositoryRoot)
+    commandLine("rustc", "--version", "--verbose")
+}.standardOutput.asText
+
 val buildAndroidRustLibraries by tasks.registering(Exec::class) {
     workingDir(repositoryRoot)
     commandLine(
@@ -39,6 +46,7 @@ val buildAndroidRustLibraries by tasks.registering(Exec::class) {
         repositoryRoot.resolve("scripts/check-android-targets.sh"),
         fileTree(repositoryRoot.resolve("src")),
     )
+    inputs.property("rustToolchain", rustToolchain)
     outputs.dir(androidRustLibraries)
 }
 
@@ -64,29 +72,11 @@ val generateLicenseNotices by tasks.registering(Exec::class) {
         repositoryRoot.resolve("about.hbs"),
         repositoryRoot.resolve("scripts/generate-third-party-licenses.sh"),
     )
-    // The standard library notices come from the active toolchain, so a
-    // different Rust version must regenerate them.
-    inputs.property(
-        "rustToolchain",
-        providers.exec {
-            workingDir(repositoryRoot)
-            commandLine("rustc", "--version", "--verbose")
-        }.standardOutput.asText,
-    )
+    inputs.property("rustToolchain", rustToolchain)
     outputs.dir(generatedLicenses)
     doLast {
         repositoryRoot.resolve("LICENSE").copyTo(noticeDir.get().resolve("LICENSE"), overwrite = true)
     }
-}
-
-buildAndroidRustLibraries.configure {
-    inputs.property(
-        "rustToolchain",
-        providers.exec {
-            workingDir(repositoryRoot)
-            commandLine("rustc", "--version", "--verbose")
-        }.standardOutput.asText,
-    )
 }
 
 android {
