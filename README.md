@@ -235,6 +235,10 @@ state stays compatible; only the names below change. Releases v0.1.0 through
 v0.6.0 keep their original names and asset file names. The Android library
 was never published to Maven Central under the former coordinates and will
 not be. GitHub redirects the former repository URL, but update it anyway.
+SPM consumers that pin a release up to v0.6.0 on the former URL are
+unaffected: the redirect also covers the release asset that those manifests
+download their XCFramework from, verified end-to-end in
+[#154](https://github.com/ProjectFlora/NativeOIDC/issues/154).
 
 | Item | Up to v0.6.0 (AppAuth-Rust) | From v0.7.0 (NativeOIDC) |
 | --- | --- | --- |
