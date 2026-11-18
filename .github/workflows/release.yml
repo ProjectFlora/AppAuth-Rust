@@ -13,7 +13,7 @@ on:
       version:
         description: Release version (MAJOR.MINOR.PATCH)
         required: true
-        default: 0.6.0
+        default: 0.7.0
         type: string
       publish:
         description: Create the release commit, tag and GitHub Release, and publish to Maven Central
