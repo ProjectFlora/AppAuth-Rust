@@ -1,4 +1,4 @@
-package net.projectflora.appauth
+package net.projectflora.nativeoidc
 
 import android.content.Intent
 import android.net.Uri
@@ -66,7 +66,7 @@ class AndroidAuthorizationCallbackActivityTest {
     fun matchingMalformedAndStaleActivityCallbacksFailCoreValidation() =
         runBlocking {
             val configuration =
-                uniffi.appauth_rust.FfiServiceConfiguration(
+                uniffi.native_oidc.FfiServiceConfiguration(
                     "https://issuer.example/authorize",
                     "https://issuer.example/token",
                 )
@@ -80,9 +80,9 @@ class AndroidAuthorizationCallbackActivityTest {
                     )
                 for (query in invalidQueries) {
                     val session =
-                        uniffi.appauth_rust.beginAuthorization(
+                        uniffi.native_oidc.beginAuthorization(
                             configuration,
-                            uniffi.appauth_rust.FfiAuthorizationOptions(
+                            uniffi.native_oidc.FfiAuthorizationOptions(
                                 "client",
                                 "com.example.app:/oauth/callback",
                                 emptyList(),
@@ -96,7 +96,7 @@ class AndroidAuthorizationCallbackActivityTest {
                         val callback = "com.example.app:/oauth/callback?$query"
                         deliverViaActivity(callback)
                         val delivered = withTimeout(5_000) { redirect.await() }
-                        assertThrows(uniffi.appauth_rust.FfiException.InvalidResponse::class.java) {
+                        assertThrows(uniffi.native_oidc.FfiException.InvalidResponse::class.java) {
                             session.parseRedirect(delivered)
                         }
                     } finally {

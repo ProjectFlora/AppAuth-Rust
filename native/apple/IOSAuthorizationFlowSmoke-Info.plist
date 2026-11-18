@@ -5,11 +5,11 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>AppAuthRustIOSFlowSmoke</string>
+	<string>NativeOIDCIOSFlowSmoke</string>
 	<key>CFBundleIdentifier</key>
-	<string>net.project-flora.appauth.ios-flow-smoke</string>
+	<string>net.project-flora.nativeoidc.ios-flow-smoke</string>
 	<key>CFBundleName</key>
-	<string>AppAuthRustIOSFlowSmoke</string>
+	<string>NativeOIDCIOSFlowSmoke</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -28,7 +28,7 @@
 					<key>UISceneConfigurationName</key>
 					<string>Default Configuration</string>
 					<key>UISceneDelegateClassName</key>
-					<string>AppAuthRustIOSFlowSmoke.IOSAuthorizationFlowSmokeSceneDelegate</string>
+					<string>NativeOIDCIOSFlowSmoke.IOSAuthorizationFlowSmokeSceneDelegate</string>
 				</dict>
 			</array>
 		</dict>
@@ -47,7 +47,7 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>appauth-smoke</string>
+				<string>nativeoidc-smoke</string>
 			</array>
 		</dict>
 	</array>

@@ -18,19 +18,19 @@ trap 'rm -rf "$local_repo"' EXIT
 "$repo_root/native/android/gradlew" -p "$repo_root/native/android" \
     publishToMavenLocal -PreleaseVersion="$version" -Dmaven.repo.local="$local_repo"
 
-dir="$local_repo/net/project-flora/appauth/appauth-rust-android/$version"
-base="$dir/appauth-rust-android-$version"
+dir="$local_repo/net/project-flora/nativeoidc/native-oidc-android/$version"
+base="$dir/native-oidc-android-$version"
 for file in "$base.aar" "$base.pom" "$base.module" "$base-sources.jar" "$base-javadoc.jar"; do
     test -s "$file" || { echo "missing $file" >&2; ls -l "$dir" >&2; exit 1; }
 done
 
-unzip -Z1 "$base.aar" | grep -Fx jni/arm64-v8a/libappauth_rust.so
-unzip -Z1 "$base.aar" | grep -Fx jni/x86_64/libappauth_rust.so
-unzip -Z1 "$base-sources.jar" | grep -E '(^|/)uniffi/appauth_rust/appauth_rust\.kt$'
-unzip -Z1 "$base-sources.jar" | grep -E '(^|/)net/projectflora/appauth/AndroidAuthorizationAdapter\.kt$'
+unzip -Z1 "$base.aar" | grep -Fx jni/arm64-v8a/libnative_oidc.so
+unzip -Z1 "$base.aar" | grep -Fx jni/x86_64/libnative_oidc.so
+unzip -Z1 "$base-sources.jar" | grep -E '(^|/)uniffi/native_oidc/native_oidc\.kt$'
+unzip -Z1 "$base-sources.jar" | grep -E '(^|/)net/projectflora/nativeoidc/AndroidAuthorizationAdapter\.kt$'
 
 pom="$base.pom"
-grep -F '<groupId>net.project-flora.appauth</groupId>' "$pom"
+grep -F '<groupId>net.project-flora.nativeoidc</groupId>' "$pom"
 grep -F "<version>$version</version>" "$pom"
 grep -F '<packaging>aar</packaging>' "$pom"
 for element in name description url licenses developers scm; do

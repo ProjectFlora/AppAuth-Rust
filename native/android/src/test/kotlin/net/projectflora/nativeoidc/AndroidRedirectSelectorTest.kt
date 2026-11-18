@@ -1,4 +1,4 @@
-package net.projectflora.appauth
+package net.projectflora.nativeoidc
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -139,7 +139,7 @@ class AndroidRedirectSelectorTest {
                 try {
                     old.await()
                     throw AssertionError("cancelled callback returned a value")
-                } catch (_: uniffi.appauth_rust.FfiException.Cancelled) {
+                } catch (_: uniffi.native_oidc.FfiException.Cancelled) {
                 }
             } finally {
                 AndroidAuthorizationCallbackRegistry.unregister(old)

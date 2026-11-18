@@ -38,7 +38,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
             or not state
             or not challenge
             or redirect is None
-            or redirect.scheme != "appauth-smoke"
+            or redirect.scheme != "nativeoidc-smoke"
             or redirect.netloc != "oauth"
             or redirect.path != "/callback"
         ):

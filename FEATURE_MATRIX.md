@@ -3,7 +3,7 @@
 This draft compares the documented features of
 [AppAuth-iOS](https://github.com/openid/AppAuth-iOS) and
 [AppAuth-Android](https://github.com/openid/AppAuth-Android), used here as
-reference implementations, with the proposed Rust scope. AppAuth-Rust is not
+reference implementations, with the proposed Rust scope. NativeOIDC is not
 affiliated with the AppAuth projects or the OpenID Foundation. “Agreed” reflects decisions already made; “Proposed” still needs
 confirmation.
 
@@ -78,21 +78,21 @@ Swift/Kotlin binding approach.
 
 Generation is pinned to UniFFI 0.32.2 and uses proc macros to define the
 native-facing Rust API. The published
-[v0.1.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.1.0)
+[v0.1.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.1.0)
 contains the Apple XCFramework, Android AAR, Rust API reference, and
 `SHA256SUMS`, without a Windows package. The published
-[v0.2.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.2.0)
+[v0.2.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.2.0)
 includes those assets and adds the Windows DLL/C ABI package. The published
-[v0.3.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.3.0)
+[v0.3.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.3.0)
 repackages those assets and adds token revocation to the Rust, UniFFI, and
 Windows C ABI public-client APIs. The published
-[v0.4.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.4.0)
+[v0.4.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.4.0)
 repackages those assets and adds token refresh and OIDC end-session to the
 Windows C ABI and .NET wrapper. The published
-[v0.5.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.5.0)
+[v0.5.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.5.0)
 repackages those assets and adds Swift Package Manager distribution for the
 Apple package. The published
-[v0.6.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.6.0)
+[v0.6.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.6.0)
 repackages those assets and publishes the Android library to Maven Central. See
 [Download and verify v0.6.0](README.md#download-and-verify-v060) for exact asset
 names, download links, and checksum verification using the same release's

@@ -1,11 +1,11 @@
-import AppAuthRust
+import NativeOIDC
 import XCTest
 
 /// Host-side smoke for the Swift package: exercises the generated API through
 /// the FFI module provided by the binary target without any network activity.
 /// Deeper adapter and callback behavior is covered by the scripts in
 /// `scripts/check-apple-*.sh` and the release consumer checks.
-final class AppAuthRustTests: XCTestCase {
+final class NativeOIDCTests: XCTestCase {
     /// Token state JSON in the shape produced by `FfiAuthenticationState.toJson()`.
     private let stateJson = #"{"token_response":{"access_token":"old","token_type":"Bearer","refresh_token":"refresh"}}"#
 

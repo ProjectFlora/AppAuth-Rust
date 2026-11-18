@@ -21,27 +21,27 @@ NORMALIZER = os.path.join(SCRIPTS_DIR, "normalize_xcframework_plist.py")
 # The slice set the release xcframework must contain.
 SLICES = {
     "ios-arm64": {
-        "BinaryPath": "libappauth_rust.a",
+        "BinaryPath": "libnative_oidc.a",
         "HeadersPath": "Headers",
         "LibraryIdentifier": "ios-arm64",
-        "LibraryPath": "libappauth_rust.a",
+        "LibraryPath": "libnative_oidc.a",
         "SupportedArchitectures": ["arm64"],
         "SupportedPlatform": "ios",
     },
     "ios-arm64-simulator": {
-        "BinaryPath": "libappauth_rust.a",
+        "BinaryPath": "libnative_oidc.a",
         "HeadersPath": "Headers",
         "LibraryIdentifier": "ios-arm64-simulator",
-        "LibraryPath": "libappauth_rust.a",
+        "LibraryPath": "libnative_oidc.a",
         "SupportedArchitectures": ["arm64"],
         "SupportedPlatform": "ios",
         "SupportedPlatformVariant": "simulator",
     },
     "macos-arm64_x86_64": {
-        "BinaryPath": "libappauth_rust_macos.a",
+        "BinaryPath": "libnative_oidc_macos.a",
         "HeadersPath": "Headers",
         "LibraryIdentifier": "macos-arm64_x86_64",
-        "LibraryPath": "libappauth_rust_macos.a",
+        "LibraryPath": "libnative_oidc_macos.a",
         "SupportedArchitectures": ["x86_64", "arm64"],  # deliberately unsorted
         "SupportedPlatform": "macos",
     },

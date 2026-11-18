@@ -4,14 +4,14 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use appauth_rust::{
+use async_trait::async_trait;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use http::{HeaderMap, Method, StatusCode};
+use native_oidc::{
     revoke_token, AuthError, AuthenticationState, AuthorizationRequest, CancellationHandle,
     ClientRegistrationRequest, EndSessionRequest, HttpRequest, HttpResponse, HttpTransport,
     RevocationTokenType, ServiceConfiguration,
 };
-use async_trait::async_trait;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use http::{HeaderMap, Method, StatusCode};
 use ring::{
     rand::SystemRandom,
     signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING},
@@ -53,7 +53,7 @@ impl HttpTransport for ScriptedTransport {
         &self,
         request: HttpRequest,
         _cancellation: CancellationHandle,
-    ) -> appauth_rust::Result<HttpResponse> {
+    ) -> native_oidc::Result<HttpResponse> {
         self.requests.lock().unwrap().push(RecordedRequest {
             method: request.method,
             url: request.url,
@@ -367,7 +367,7 @@ impl HttpTransport for BlockingTransport {
         &self,
         _request: HttpRequest,
         cancellation: CancellationHandle,
-    ) -> appauth_rust::Result<HttpResponse> {
+    ) -> native_oidc::Result<HttpResponse> {
         if let Some(started) = self.started.lock().unwrap().take() {
             started.send(()).unwrap();
         }

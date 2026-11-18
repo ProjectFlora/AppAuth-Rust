@@ -68,7 +68,7 @@ UX3_EXTRA = struct.pack("<HHBBIBI", 0x7875, 11, 1, 4, STAGING_UID,
                         4, STAGING_GID)
 COMMENT = b"determinism-fixture"
 
-README = b"AppAuth-Rust packaging fixture\n"
+README = b"NativeOIDC packaging fixture\n"
 SIDECAR = b"\x00\x05\x16\x07" + b"apple-double"
 
 
@@ -500,11 +500,11 @@ class RealDittoTestCase(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp(prefix="normalize-zip-ditto-")
         self.addCleanup(shutil.rmtree, self.tmpdir, ignore_errors=True)
         self.env = dict(os.environ, TZ="UTC")
-        self.root = os.path.join(self.tmpdir, "AppAuthRust-Apple")
-        headers = os.path.join(self.root, "AppAuthRust.framework", "Headers")
+        self.root = os.path.join(self.tmpdir, "NativeOIDC-Apple")
+        headers = os.path.join(self.root, "NativeOIDC.framework", "Headers")
         os.makedirs(headers)
         files = {
-            os.path.join(headers, "appauth_rust.h"): b"/* header */\n",
+            os.path.join(headers, "native_oidc.h"): b"/* header */\n",
             os.path.join(self.root, "empty"): b"",
             os.path.join(self.root, "big.bin"): os.urandom(200000),
             os.path.join(self.root, "xattr.txt"): b"xattr\n",
@@ -513,7 +513,7 @@ class RealDittoTestCase(unittest.TestCase):
         for path, data in files.items():
             with open(path, "wb") as handle:
                 handle.write(data)
-        os.symlink("AppAuthRust.framework/Headers",
+        os.symlink("NativeOIDC.framework/Headers",
                    os.path.join(self.root, "link"))
         subprocess.run([XATTR, "-cr", self.root], check=True)
         # A small attribute and a large incompressible one, so the large

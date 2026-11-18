@@ -1,6 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
-using ProjectFlora.AppAuthRust;
+using ProjectFlora.NativeOidc;
 
 if (RuntimeInformation.ProcessArchitecture != Architecture.X64)
 {
@@ -10,7 +10,7 @@ Console.WriteLine($"Windows consumer process: {RuntimeInformation.ProcessArchite
 
 try
 {
-    await AppAuthWindows.AuthorizeAsync("{");
+    await NativeOidcWindows.AuthorizeAsync("{");
     return 1;
 }
 catch (InvalidOperationException)
@@ -19,7 +19,7 @@ catch (InvalidOperationException)
 
 try
 {
-    await AppAuthWindows.RevokeAsync("{");
+    await NativeOidcWindows.RevokeAsync("{");
     return 1;
 }
 catch (InvalidOperationException)
@@ -28,7 +28,7 @@ catch (InvalidOperationException)
 
 try
 {
-    await AppAuthWindows.RefreshAsync("{");
+    await NativeOidcWindows.RefreshAsync("{");
     return 1;
 }
 catch (InvalidOperationException)
@@ -37,7 +37,7 @@ catch (InvalidOperationException)
 
 try
 {
-    await AppAuthWindows.EndSessionAsync("{");
+    await NativeOidcWindows.EndSessionAsync("{");
     return 1;
 }
 catch (InvalidOperationException)
@@ -55,7 +55,7 @@ var reservedRefresh = """
 """;
 try
 {
-    await AppAuthWindows.RefreshAsync(reservedRefresh);
+    await NativeOidcWindows.RefreshAsync(reservedRefresh);
     return 1;
 }
 catch (InvalidOperationException error)
@@ -68,7 +68,7 @@ var duplicateRefresh = reservedRefresh.Replace(
     "{\"name\":\"audience\",\"value\":\"first\"},{\"name\":\"audience\",\"value\":\"second\"}");
 try
 {
-    await AppAuthWindows.RefreshAsync(duplicateRefresh);
+    await NativeOidcWindows.RefreshAsync(duplicateRefresh);
     return 1;
 }
 catch (InvalidOperationException error)

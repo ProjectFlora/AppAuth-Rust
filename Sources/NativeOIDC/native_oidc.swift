@@ -7,8 +7,8 @@ import Foundation
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into
 // this module. This is a bit of light hackery to work with both.
-#if canImport(appauth_rustFFI)
-import appauth_rustFFI
+#if canImport(native_oidcFFI)
+import native_oidcFFI
 #endif
 
 fileprivate extension RustBuffer {
@@ -25,13 +25,13 @@ fileprivate extension RustBuffer {
     }
 
     static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
-        try! rustCall { ffi_appauth_rust_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
+        try! rustCall { ffi_native_oidc_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
     }
 
     // Frees the buffer in place.
     // The buffer must not be used after this is called.
     func deallocate() {
-        try! rustCall { ffi_appauth_rust_rustbuffer_free(self, $0) }
+        try! rustCall { ffi_native_oidc_rustbuffer_free(self, $0) }
     }
 }
 
@@ -327,7 +327,7 @@ private func makeRustCall<T, E: Swift.Error>(
     _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T,
     errorHandler: ((RustBuffer) throws -> E)?
 ) throws -> T {
-    uniffiEnsureAppauthRustInitialized()
+    uniffiEnsureNativeOidcInitialized()
     var callStatus = RustCallStatus.init()
     let returnedVal = callback(&callStatus)
     try uniffiCheckCallStatus(callStatus: callStatus, errorHandler: errorHandler)
@@ -662,7 +662,7 @@ open class FfiAuthenticationState: FfiAuthenticationStateProtocol, @unchecked Se
     @_documentation(visibility: private)
 #endif
     public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_appauth_rust_fn_clone_ffiauthenticationstate(self.handle, $0) }
+        return try! rustCall { uniffi_native_oidc_fn_clone_ffiauthenticationstate(self.handle, $0) }
     }
     // No primary constructor declared for this class.
 
@@ -672,7 +672,7 @@ open class FfiAuthenticationState: FfiAuthenticationStateProtocol, @unchecked Se
             return
         }
 
-        try! rustCall { uniffi_appauth_rust_fn_free_ffiauthenticationstate(handle, $0) }
+        try! rustCall { uniffi_native_oidc_fn_free_ffiauthenticationstate(handle, $0) }
     }
 
     
@@ -682,7 +682,7 @@ open class FfiAuthenticationState: FfiAuthenticationStateProtocol, @unchecked Se
 public static func fromJson(serialized: String)throws  -> FfiAuthenticationState  {
     return try  FfiConverterTypeFfiAuthenticationState_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_constructor_ffiauthenticationstate_from_json(
+    uniffi_native_oidc_fn_constructor_ffiauthenticationstate_from_json(
         FfiConverterString.lower(serialized),uniffiCallStatus
     )
 })
@@ -697,13 +697,13 @@ open func expiresAt()async  -> UInt64?  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_method_ffiauthenticationstate_expires_at(
+                uniffi_native_oidc_fn_method_ffiauthenticationstate_expires_at(
                         self.uniffiCloneHandle()
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_rust_buffer,
-            completeFunc: ffi_appauth_rust_rust_future_complete_rust_buffer,
-            freeFunc: ffi_appauth_rust_rust_future_free_rust_buffer,
+            pollFunc: ffi_native_oidc_rust_future_poll_rust_buffer,
+            completeFunc: ffi_native_oidc_rust_future_complete_rust_buffer,
+            freeFunc: ffi_native_oidc_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionUInt64.lift,
             errorHandler: nil
             
@@ -717,13 +717,13 @@ open func isExpiredAt(unixTimeSeconds: UInt64)async  -> Bool?  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_method_ffiauthenticationstate_is_expired_at(
+                uniffi_native_oidc_fn_method_ffiauthenticationstate_is_expired_at(
                         self.uniffiCloneHandle(),FfiConverterUInt64.lower(unixTimeSeconds)
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_rust_buffer,
-            completeFunc: ffi_appauth_rust_rust_future_complete_rust_buffer,
-            freeFunc: ffi_appauth_rust_rust_future_free_rust_buffer,
+            pollFunc: ffi_native_oidc_rust_future_poll_rust_buffer,
+            completeFunc: ffi_native_oidc_rust_future_complete_rust_buffer,
+            freeFunc: ffi_native_oidc_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionBool.lift,
             errorHandler: nil
             
@@ -737,13 +737,13 @@ open func refresh(configuration: FfiServiceConfiguration, clientId: String, addi
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_method_ffiauthenticationstate_refresh(
+                uniffi_native_oidc_fn_method_ffiauthenticationstate_refresh(
                         self.uniffiCloneHandle(),FfiConverterTypeFfiServiceConfiguration_lower(configuration),FfiConverterString.lower(clientId),FfiConverterSequenceTypeFfiParameter.lower(additionalParameters),FfiConverterTypeNativeHttpTransport_lower(transport),FfiConverterTypeFfiCancellationHandle_lower(cancellation)
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_void,
-            completeFunc: ffi_appauth_rust_rust_future_complete_void,
-            freeFunc: ffi_appauth_rust_rust_future_free_void,
+            pollFunc: ffi_native_oidc_rust_future_poll_void,
+            completeFunc: ffi_native_oidc_rust_future_complete_void,
+            freeFunc: ffi_native_oidc_rust_future_free_void,
             liftFunc: { $0 },
             errorHandler: FfiConverterTypeFfiError_lift
         )
@@ -756,13 +756,13 @@ open func toJson()async throws  -> String  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_method_ffiauthenticationstate_to_json(
+                uniffi_native_oidc_fn_method_ffiauthenticationstate_to_json(
                         self.uniffiCloneHandle()
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_rust_buffer,
-            completeFunc: ffi_appauth_rust_rust_future_complete_rust_buffer,
-            freeFunc: ffi_appauth_rust_rust_future_free_rust_buffer,
+            pollFunc: ffi_native_oidc_rust_future_poll_rust_buffer,
+            completeFunc: ffi_native_oidc_rust_future_complete_rust_buffer,
+            freeFunc: ffi_native_oidc_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeFfiError_lift
         )
@@ -775,13 +775,13 @@ open func tokenResponse()async  -> FfiTokenResponse  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_method_ffiauthenticationstate_token_response(
+                uniffi_native_oidc_fn_method_ffiauthenticationstate_token_response(
                         self.uniffiCloneHandle()
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_rust_buffer,
-            completeFunc: ffi_appauth_rust_rust_future_complete_rust_buffer,
-            freeFunc: ffi_appauth_rust_rust_future_free_rust_buffer,
+            pollFunc: ffi_native_oidc_rust_future_poll_rust_buffer,
+            completeFunc: ffi_native_oidc_rust_future_complete_rust_buffer,
+            freeFunc: ffi_native_oidc_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFfiTokenResponse_lift,
             errorHandler: nil
             
@@ -899,7 +899,7 @@ open class FfiAuthorizationResponse: FfiAuthorizationResponseProtocol, @unchecke
     @_documentation(visibility: private)
 #endif
     public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_appauth_rust_fn_clone_ffiauthorizationresponse(self.handle, $0) }
+        return try! rustCall { uniffi_native_oidc_fn_clone_ffiauthorizationresponse(self.handle, $0) }
     }
     // No primary constructor declared for this class.
 
@@ -909,7 +909,7 @@ open class FfiAuthorizationResponse: FfiAuthorizationResponseProtocol, @unchecke
             return
         }
 
-        try! rustCall { uniffi_appauth_rust_fn_free_ffiauthorizationresponse(handle, $0) }
+        try! rustCall { uniffi_native_oidc_fn_free_ffiauthorizationresponse(handle, $0) }
     }
 
     
@@ -921,7 +921,7 @@ open class FfiAuthorizationResponse: FfiAuthorizationResponseProtocol, @unchecke
 open func additionalParameters() -> [FfiParameter]  {
     return try!  FfiConverterSequenceTypeFfiParameter.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiauthorizationresponse_additional_parameters(
+    uniffi_native_oidc_fn_method_ffiauthorizationresponse_additional_parameters(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -933,7 +933,7 @@ open func additionalParameters() -> [FfiParameter]  {
 open func code() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiauthorizationresponse_code(
+    uniffi_native_oidc_fn_method_ffiauthorizationresponse_code(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -945,7 +945,7 @@ open func code() -> String  {
 open func state() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiauthorizationresponse_state(
+    uniffi_native_oidc_fn_method_ffiauthorizationresponse_state(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1067,7 +1067,7 @@ open class FfiAuthorizationSession: FfiAuthorizationSessionProtocol, @unchecked 
     @_documentation(visibility: private)
 #endif
     public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_appauth_rust_fn_clone_ffiauthorizationsession(self.handle, $0) }
+        return try! rustCall { uniffi_native_oidc_fn_clone_ffiauthorizationsession(self.handle, $0) }
     }
     // No primary constructor declared for this class.
 
@@ -1077,7 +1077,7 @@ open class FfiAuthorizationSession: FfiAuthorizationSessionProtocol, @unchecked 
             return
         }
 
-        try! rustCall { uniffi_appauth_rust_fn_free_ffiauthorizationsession(handle, $0) }
+        try! rustCall { uniffi_native_oidc_fn_free_ffiauthorizationsession(handle, $0) }
     }
 
     
@@ -1089,7 +1089,7 @@ open class FfiAuthorizationSession: FfiAuthorizationSessionProtocol, @unchecked 
 open func authorizationUrl() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiauthorizationsession_authorization_url(
+    uniffi_native_oidc_fn_method_ffiauthorizationsession_authorization_url(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1102,13 +1102,13 @@ open func exchangeCode(response: FfiAuthorizationResponse, cancellation: FfiCanc
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_method_ffiauthorizationsession_exchange_code(
+                uniffi_native_oidc_fn_method_ffiauthorizationsession_exchange_code(
                         self.uniffiCloneHandle(),FfiConverterTypeFfiAuthorizationResponse_lower(response),FfiConverterTypeFfiCancellationHandle_lower(cancellation)
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_u64,
-            completeFunc: ffi_appauth_rust_rust_future_complete_u64,
-            freeFunc: ffi_appauth_rust_rust_future_free_u64,
+            pollFunc: ffi_native_oidc_rust_future_poll_u64,
+            completeFunc: ffi_native_oidc_rust_future_complete_u64,
+            freeFunc: ffi_native_oidc_rust_future_free_u64,
             liftFunc: FfiConverterTypeFfiAuthenticationState_lift,
             errorHandler: FfiConverterTypeFfiError_lift
         )
@@ -1120,7 +1120,7 @@ open func exchangeCode(response: FfiAuthorizationResponse, cancellation: FfiCanc
 open func nonce() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiauthorizationsession_nonce(
+    uniffi_native_oidc_fn_method_ffiauthorizationsession_nonce(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1132,7 +1132,7 @@ open func nonce() -> String?  {
 open func parseRedirect(redirectUri: String)throws  -> FfiAuthorizationResponse  {
     return try  FfiConverterTypeFfiAuthorizationResponse_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiauthorizationsession_parse_redirect(
+    uniffi_native_oidc_fn_method_ffiauthorizationsession_parse_redirect(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(redirectUri),uniffiCallStatus
     )
@@ -1250,7 +1250,7 @@ open class FfiCancellationHandle: FfiCancellationHandleProtocol, @unchecked Send
     @_documentation(visibility: private)
 #endif
     public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_appauth_rust_fn_clone_fficancellationhandle(self.handle, $0) }
+        return try! rustCall { uniffi_native_oidc_fn_clone_fficancellationhandle(self.handle, $0) }
     }
     /**
      * Creates a cancellation handle that is not cancelled.
@@ -1259,7 +1259,7 @@ public convenience init() {
     let handle =
         try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_constructor_fficancellationhandle_new(uniffiCallStatus
+    uniffi_native_oidc_fn_constructor_fficancellationhandle_new(uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -1271,7 +1271,7 @@ public convenience init() {
             return
         }
 
-        try! rustCall { uniffi_appauth_rust_fn_free_fficancellationhandle(handle, $0) }
+        try! rustCall { uniffi_native_oidc_fn_free_fficancellationhandle(handle, $0) }
     }
 
     
@@ -1282,7 +1282,7 @@ public convenience init() {
      */
 open func cancel()  {try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_fficancellationhandle_cancel(
+    uniffi_native_oidc_fn_method_fficancellationhandle_cancel(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
@@ -1295,13 +1295,13 @@ open func cancelled()async   {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_method_fficancellationhandle_cancelled(
+                uniffi_native_oidc_fn_method_fficancellationhandle_cancelled(
                         self.uniffiCloneHandle()
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_void,
-            completeFunc: ffi_appauth_rust_rust_future_complete_void,
-            freeFunc: ffi_appauth_rust_rust_future_free_void,
+            pollFunc: ffi_native_oidc_rust_future_poll_void,
+            completeFunc: ffi_native_oidc_rust_future_complete_void,
+            freeFunc: ffi_native_oidc_rust_future_free_void,
             liftFunc: { $0 },
             errorHandler: nil
             
@@ -1314,7 +1314,7 @@ open func cancelled()async   {
 open func isCancelled() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_fficancellationhandle_is_cancelled(
+    uniffi_native_oidc_fn_method_fficancellationhandle_is_cancelled(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1426,7 +1426,7 @@ open class FfiEndSessionSession: FfiEndSessionSessionProtocol, @unchecked Sendab
     @_documentation(visibility: private)
 #endif
     public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_appauth_rust_fn_clone_ffiendsessionsession(self.handle, $0) }
+        return try! rustCall { uniffi_native_oidc_fn_clone_ffiendsessionsession(self.handle, $0) }
     }
     // No primary constructor declared for this class.
 
@@ -1436,7 +1436,7 @@ open class FfiEndSessionSession: FfiEndSessionSessionProtocol, @unchecked Sendab
             return
         }
 
-        try! rustCall { uniffi_appauth_rust_fn_free_ffiendsessionsession(handle, $0) }
+        try! rustCall { uniffi_native_oidc_fn_free_ffiendsessionsession(handle, $0) }
     }
 
     
@@ -1448,7 +1448,7 @@ open class FfiEndSessionSession: FfiEndSessionSessionProtocol, @unchecked Sendab
 open func endSessionUrl() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiendsessionsession_end_session_url(
+    uniffi_native_oidc_fn_method_ffiendsessionsession_end_session_url(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1460,7 +1460,7 @@ open func endSessionUrl() -> String  {
 open func parseRedirect(redirectUri: String)throws  -> FfiEndSessionResponse  {
     return try  FfiConverterTypeFfiEndSessionResponse_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiendsessionsession_parse_redirect(
+    uniffi_native_oidc_fn_method_ffiendsessionsession_parse_redirect(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(redirectUri),uniffiCallStatus
     )
@@ -1608,7 +1608,7 @@ open class FfiServiceConfiguration: FfiServiceConfigurationProtocol, @unchecked 
     @_documentation(visibility: private)
 #endif
     public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_appauth_rust_fn_clone_ffiserviceconfiguration(self.handle, $0) }
+        return try! rustCall { uniffi_native_oidc_fn_clone_ffiserviceconfiguration(self.handle, $0) }
     }
     /**
      * Creates a configuration from explicit authorization and token endpoints.
@@ -1617,7 +1617,7 @@ public convenience init(authorizationEndpoint: String, tokenEndpoint: String)thr
     let handle =
         try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_constructor_ffiserviceconfiguration_new(
+    uniffi_native_oidc_fn_constructor_ffiserviceconfiguration_new(
         FfiConverterString.lower(authorizationEndpoint),
         FfiConverterString.lower(tokenEndpoint),uniffiCallStatus
     )
@@ -1631,7 +1631,7 @@ public convenience init(authorizationEndpoint: String, tokenEndpoint: String)thr
             return
         }
 
-        try! rustCall { uniffi_appauth_rust_fn_free_ffiserviceconfiguration(handle, $0) }
+        try! rustCall { uniffi_native_oidc_fn_free_ffiserviceconfiguration(handle, $0) }
     }
 
     
@@ -1642,12 +1642,12 @@ public static func discover(issuer: String, transport: NativeHttpTransport, canc
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_constructor_ffiserviceconfiguration_discover(FfiConverterString.lower(issuer),FfiConverterTypeNativeHttpTransport_lower(transport),FfiConverterTypeFfiCancellationHandle_lower(cancellation)
+                uniffi_native_oidc_fn_constructor_ffiserviceconfiguration_discover(FfiConverterString.lower(issuer),FfiConverterTypeNativeHttpTransport_lower(transport),FfiConverterTypeFfiCancellationHandle_lower(cancellation)
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_u64,
-            completeFunc: ffi_appauth_rust_rust_future_complete_u64,
-            freeFunc: ffi_appauth_rust_rust_future_free_u64,
+            pollFunc: ffi_native_oidc_rust_future_poll_u64,
+            completeFunc: ffi_native_oidc_rust_future_complete_u64,
+            freeFunc: ffi_native_oidc_rust_future_free_u64,
             liftFunc: FfiConverterTypeFfiServiceConfiguration_lift,
             errorHandler: FfiConverterTypeFfiError_lift
         )
@@ -1661,7 +1661,7 @@ public static func discover(issuer: String, transport: NativeHttpTransport, canc
 open func authorizationEndpoint() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiserviceconfiguration_authorization_endpoint(
+    uniffi_native_oidc_fn_method_ffiserviceconfiguration_authorization_endpoint(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1673,7 +1673,7 @@ open func authorizationEndpoint() -> String  {
 open func issuer() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiserviceconfiguration_issuer(
+    uniffi_native_oidc_fn_method_ffiserviceconfiguration_issuer(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1685,7 +1685,7 @@ open func issuer() -> String?  {
 open func jwksUri() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiserviceconfiguration_jwks_uri(
+    uniffi_native_oidc_fn_method_ffiserviceconfiguration_jwks_uri(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1697,7 +1697,7 @@ open func jwksUri() -> String?  {
 open func revocationEndpoint() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiserviceconfiguration_revocation_endpoint(
+    uniffi_native_oidc_fn_method_ffiserviceconfiguration_revocation_endpoint(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1709,7 +1709,7 @@ open func revocationEndpoint() -> String?  {
 open func tokenEndpoint() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiserviceconfiguration_token_endpoint(
+    uniffi_native_oidc_fn_method_ffiserviceconfiguration_token_endpoint(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1721,7 +1721,7 @@ open func tokenEndpoint() -> String  {
 open func withEndSessionEndpoint(endpoint: String)throws  -> FfiServiceConfiguration  {
     return try  FfiConverterTypeFfiServiceConfiguration_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiserviceconfiguration_with_end_session_endpoint(
+    uniffi_native_oidc_fn_method_ffiserviceconfiguration_with_end_session_endpoint(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(endpoint),uniffiCallStatus
     )
@@ -1734,7 +1734,7 @@ open func withEndSessionEndpoint(endpoint: String)throws  -> FfiServiceConfigura
 open func withOidcValidationEndpoints(issuer: String, jwksUri: String)throws  -> FfiServiceConfiguration  {
     return try  FfiConverterTypeFfiServiceConfiguration_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiserviceconfiguration_with_oidc_validation_endpoints(
+    uniffi_native_oidc_fn_method_ffiserviceconfiguration_with_oidc_validation_endpoints(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(issuer),
         FfiConverterString.lower(jwksUri),uniffiCallStatus
@@ -1748,7 +1748,7 @@ open func withOidcValidationEndpoints(issuer: String, jwksUri: String)throws  ->
 open func withRegistrationEndpoint(endpoint: String)throws  -> FfiServiceConfiguration  {
     return try  FfiConverterTypeFfiServiceConfiguration_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiserviceconfiguration_with_registration_endpoint(
+    uniffi_native_oidc_fn_method_ffiserviceconfiguration_with_registration_endpoint(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(endpoint),uniffiCallStatus
     )
@@ -1761,7 +1761,7 @@ open func withRegistrationEndpoint(endpoint: String)throws  -> FfiServiceConfigu
 open func withRevocationEndpoint(endpoint: String)throws  -> FfiServiceConfiguration  {
     return try  FfiConverterTypeFfiServiceConfiguration_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_method_ffiserviceconfiguration_with_revocation_endpoint(
+    uniffi_native_oidc_fn_method_ffiserviceconfiguration_with_revocation_endpoint(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(endpoint),uniffiCallStatus
     )
@@ -1875,7 +1875,7 @@ open class NativeHttpTransportImpl: NativeHttpTransport, @unchecked Sendable {
     @_documentation(visibility: private)
 #endif
     public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_appauth_rust_fn_clone_nativehttptransport(self.handle, $0) }
+        return try! rustCall { uniffi_native_oidc_fn_clone_nativehttptransport(self.handle, $0) }
     }
     // No primary constructor declared for this class.
 
@@ -1885,7 +1885,7 @@ open class NativeHttpTransportImpl: NativeHttpTransport, @unchecked Sendable {
             return
         }
 
-        try! rustCall { uniffi_appauth_rust_fn_free_nativehttptransport(handle, $0) }
+        try! rustCall { uniffi_native_oidc_fn_free_nativehttptransport(handle, $0) }
     }
 
     
@@ -1898,13 +1898,13 @@ open func execute(request: FfiHttpRequest, cancellation: FfiCancellationHandle)a
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_method_nativehttptransport_execute(
+                uniffi_native_oidc_fn_method_nativehttptransport_execute(
                         self.uniffiCloneHandle(),FfiConverterTypeFfiHttpRequest_lower(request),FfiConverterTypeFfiCancellationHandle_lower(cancellation)
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_rust_buffer,
-            completeFunc: ffi_appauth_rust_rust_future_complete_rust_buffer,
-            freeFunc: ffi_appauth_rust_rust_future_free_rust_buffer,
+            pollFunc: ffi_native_oidc_rust_future_poll_rust_buffer,
+            completeFunc: ffi_native_oidc_rust_future_complete_rust_buffer,
+            freeFunc: ffi_native_oidc_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFfiHttpResponse_lift,
             errorHandler: FfiConverterTypeFfiError_lift
         )
@@ -1999,7 +1999,7 @@ fileprivate struct UniffiCallbackInterfaceNativeHttpTransport {
 }
 
 private func uniffiCallbackInitNativeHttpTransport() {
-    uniffi_appauth_rust_fn_init_callback_vtable_nativehttptransport(UniffiCallbackInterfaceNativeHttpTransport.vtablePtr)
+    uniffi_native_oidc_fn_init_callback_vtable_nativehttptransport(UniffiCallbackInterfaceNativeHttpTransport.vtablePtr)
 }
 
 #if swift(>=5.8)
@@ -3338,7 +3338,7 @@ fileprivate func uniffiRustCallAsync<F, T>(
 ) async throws -> T {
     // Make sure to call the ensure init function since future creation doesn't have a
     // RustCallStatus param, so doesn't use makeRustCall()
-    uniffiEnsureAppauthRustInitialized()
+    uniffiEnsureNativeOidcInitialized()
     let rustFuture = rustFutureFunc()
     defer {
         freeFunc(rustFuture)
@@ -3458,7 +3458,7 @@ private func uniffiForeignFutureDroppedCallback(handle: UInt64) {
 }
 
 // For testing
-public func uniffiForeignFutureHandleCountAppauthRust() -> Int {
+public func uniffiForeignFutureHandleCountNativeOidc() -> Int {
     UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
 }
 /**
@@ -3467,7 +3467,7 @@ public func uniffiForeignFutureHandleCountAppauthRust() -> Int {
 public func beginAuthorization(configuration: FfiServiceConfiguration, options: FfiAuthorizationOptions, transport: NativeHttpTransport)throws  -> FfiAuthorizationSession  {
     return try  FfiConverterTypeFfiAuthorizationSession_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_func_begin_authorization(
+    uniffi_native_oidc_fn_func_begin_authorization(
         FfiConverterTypeFfiServiceConfiguration_lower(configuration),
         FfiConverterTypeFfiAuthorizationOptions_lower(options),
         FfiConverterTypeNativeHttpTransport_lower(transport),uniffiCallStatus
@@ -3480,7 +3480,7 @@ public func beginAuthorization(configuration: FfiServiceConfiguration, options: 
 public func beginEndSession(configuration: FfiServiceConfiguration, options: FfiEndSessionOptions)throws  -> FfiEndSessionSession  {
     return try  FfiConverterTypeFfiEndSessionSession_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
-    uniffi_appauth_rust_fn_func_begin_end_session(
+    uniffi_native_oidc_fn_func_begin_end_session(
         FfiConverterTypeFfiServiceConfiguration_lower(configuration),
         FfiConverterTypeFfiEndSessionOptions_lower(options),uniffiCallStatus
     )
@@ -3493,12 +3493,12 @@ public func registerPublicClient(configuration: FfiServiceConfiguration, options
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_func_register_public_client(FfiConverterTypeFfiServiceConfiguration_lower(configuration),FfiConverterTypeFfiRegistrationOptions_lower(options),FfiConverterTypeNativeHttpTransport_lower(transport),FfiConverterTypeFfiCancellationHandle_lower(cancellation)
+                uniffi_native_oidc_fn_func_register_public_client(FfiConverterTypeFfiServiceConfiguration_lower(configuration),FfiConverterTypeFfiRegistrationOptions_lower(options),FfiConverterTypeNativeHttpTransport_lower(transport),FfiConverterTypeFfiCancellationHandle_lower(cancellation)
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_rust_buffer,
-            completeFunc: ffi_appauth_rust_rust_future_complete_rust_buffer,
-            freeFunc: ffi_appauth_rust_rust_future_free_rust_buffer,
+            pollFunc: ffi_native_oidc_rust_future_poll_rust_buffer,
+            completeFunc: ffi_native_oidc_rust_future_complete_rust_buffer,
+            freeFunc: ffi_native_oidc_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFfiClientRegistrationResponse_lift,
             errorHandler: FfiConverterTypeFfiError_lift
         )
@@ -3513,12 +3513,12 @@ public func revoke(configuration: FfiServiceConfiguration, clientId: String, tok
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_appauth_rust_fn_func_revoke(FfiConverterTypeFfiServiceConfiguration_lower(configuration),FfiConverterString.lower(clientId),FfiConverterString.lower(token),FfiConverterOptionString.lower(tokenTypeHint),FfiConverterTypeNativeHttpTransport_lower(transport),FfiConverterTypeFfiCancellationHandle_lower(cancellation)
+                uniffi_native_oidc_fn_func_revoke(FfiConverterTypeFfiServiceConfiguration_lower(configuration),FfiConverterString.lower(clientId),FfiConverterString.lower(token),FfiConverterOptionString.lower(tokenTypeHint),FfiConverterTypeNativeHttpTransport_lower(transport),FfiConverterTypeFfiCancellationHandle_lower(cancellation)
                 )
             },
-            pollFunc: ffi_appauth_rust_rust_future_poll_void,
-            completeFunc: ffi_appauth_rust_rust_future_complete_void,
-            freeFunc: ffi_appauth_rust_rust_future_free_void,
+            pollFunc: ffi_native_oidc_rust_future_poll_void,
+            completeFunc: ffi_native_oidc_rust_future_complete_void,
+            freeFunc: ffi_native_oidc_rust_future_free_void,
             liftFunc: { $0 },
             errorHandler: FfiConverterTypeFfiError_lift
         )
@@ -3535,113 +3535,113 @@ private let initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
     let bindings_contract_version = 30
     // Get the scaffolding contract version by calling the into the dylib
-    let scaffolding_contract_version = ffi_appauth_rust_uniffi_contract_version()
+    let scaffolding_contract_version = ffi_native_oidc_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_appauth_rust_checksum_func_begin_authorization() != 18394) {
+    if (uniffi_native_oidc_checksum_func_begin_authorization() != 16332) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_func_begin_end_session() != 3906) {
+    if (uniffi_native_oidc_checksum_func_begin_end_session() != 14464) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_func_register_public_client() != 6614) {
+    if (uniffi_native_oidc_checksum_func_register_public_client() != 56829) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_func_revoke() != 52796) {
+    if (uniffi_native_oidc_checksum_func_revoke() != 41285) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthenticationstate_expires_at() != 46499) {
+    if (uniffi_native_oidc_checksum_method_ffiauthenticationstate_expires_at() != 7090) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthenticationstate_is_expired_at() != 49518) {
+    if (uniffi_native_oidc_checksum_method_ffiauthenticationstate_is_expired_at() != 45140) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthenticationstate_refresh() != 34397) {
+    if (uniffi_native_oidc_checksum_method_ffiauthenticationstate_refresh() != 52489) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthenticationstate_to_json() != 22069) {
+    if (uniffi_native_oidc_checksum_method_ffiauthenticationstate_to_json() != 47982) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthenticationstate_token_response() != 15256) {
+    if (uniffi_native_oidc_checksum_method_ffiauthenticationstate_token_response() != 38148) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthorizationresponse_additional_parameters() != 16880) {
+    if (uniffi_native_oidc_checksum_method_ffiauthorizationresponse_additional_parameters() != 41319) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthorizationresponse_code() != 30759) {
+    if (uniffi_native_oidc_checksum_method_ffiauthorizationresponse_code() != 33721) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthorizationresponse_state() != 3780) {
+    if (uniffi_native_oidc_checksum_method_ffiauthorizationresponse_state() != 7067) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthorizationsession_authorization_url() != 8632) {
+    if (uniffi_native_oidc_checksum_method_ffiauthorizationsession_authorization_url() != 52796) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthorizationsession_exchange_code() != 60305) {
+    if (uniffi_native_oidc_checksum_method_ffiauthorizationsession_exchange_code() != 30076) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthorizationsession_nonce() != 8280) {
+    if (uniffi_native_oidc_checksum_method_ffiauthorizationsession_nonce() != 24544) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiauthorizationsession_parse_redirect() != 31984) {
+    if (uniffi_native_oidc_checksum_method_ffiauthorizationsession_parse_redirect() != 15573) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_fficancellationhandle_cancel() != 45670) {
+    if (uniffi_native_oidc_checksum_method_fficancellationhandle_cancel() != 22529) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_fficancellationhandle_cancelled() != 54801) {
+    if (uniffi_native_oidc_checksum_method_fficancellationhandle_cancelled() != 57158) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_fficancellationhandle_is_cancelled() != 27343) {
+    if (uniffi_native_oidc_checksum_method_fficancellationhandle_is_cancelled() != 22035) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiendsessionsession_end_session_url() != 34395) {
+    if (uniffi_native_oidc_checksum_method_ffiendsessionsession_end_session_url() != 12913) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiendsessionsession_parse_redirect() != 38211) {
+    if (uniffi_native_oidc_checksum_method_ffiendsessionsession_parse_redirect() != 46301) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiserviceconfiguration_authorization_endpoint() != 54427) {
+    if (uniffi_native_oidc_checksum_method_ffiserviceconfiguration_authorization_endpoint() != 24513) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiserviceconfiguration_issuer() != 2824) {
+    if (uniffi_native_oidc_checksum_method_ffiserviceconfiguration_issuer() != 18687) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiserviceconfiguration_jwks_uri() != 9473) {
+    if (uniffi_native_oidc_checksum_method_ffiserviceconfiguration_jwks_uri() != 20240) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiserviceconfiguration_revocation_endpoint() != 29371) {
+    if (uniffi_native_oidc_checksum_method_ffiserviceconfiguration_revocation_endpoint() != 4657) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiserviceconfiguration_token_endpoint() != 56399) {
+    if (uniffi_native_oidc_checksum_method_ffiserviceconfiguration_token_endpoint() != 36720) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiserviceconfiguration_with_end_session_endpoint() != 60022) {
+    if (uniffi_native_oidc_checksum_method_ffiserviceconfiguration_with_end_session_endpoint() != 15654) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiserviceconfiguration_with_oidc_validation_endpoints() != 21257) {
+    if (uniffi_native_oidc_checksum_method_ffiserviceconfiguration_with_oidc_validation_endpoints() != 13902) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiserviceconfiguration_with_registration_endpoint() != 33761) {
+    if (uniffi_native_oidc_checksum_method_ffiserviceconfiguration_with_registration_endpoint() != 19553) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_ffiserviceconfiguration_with_revocation_endpoint() != 20658) {
+    if (uniffi_native_oidc_checksum_method_ffiserviceconfiguration_with_revocation_endpoint() != 25506) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_method_nativehttptransport_execute() != 867) {
+    if (uniffi_native_oidc_checksum_method_nativehttptransport_execute() != 29726) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_constructor_ffiauthenticationstate_from_json() != 49073) {
+    if (uniffi_native_oidc_checksum_constructor_ffiauthenticationstate_from_json() != 13321) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_constructor_fficancellationhandle_new() != 3943) {
+    if (uniffi_native_oidc_checksum_constructor_fficancellationhandle_new() != 31914) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_constructor_ffiserviceconfiguration_discover() != 40593) {
+    if (uniffi_native_oidc_checksum_constructor_ffiserviceconfiguration_discover() != 42903) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_appauth_rust_checksum_constructor_ffiserviceconfiguration_new() != 3672) {
+    if (uniffi_native_oidc_checksum_constructor_ffiserviceconfiguration_new() != 21394) {
         return InitializationResult.apiChecksumMismatch
     }
 
@@ -3651,7 +3651,7 @@ private let initializationResult: InitializationResult = {
 
 // Make the ensure init function public so that other modules which have external type references to
 // our types can call it.
-public func uniffiEnsureAppauthRustInitialized() {
+public func uniffiEnsureNativeOidcInitialized() {
     switch initializationResult {
     case .ok:
         break

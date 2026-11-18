@@ -1,45 +1,45 @@
 # Swift XCFramework installation
 
-AppAuth-Rust is an independent project by ProjectFlora. It is not affiliated
+NativeOIDC is an independent project by ProjectFlora. It is not affiliated
 with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth
 projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID
 Foundation.
 
-The Apple release asset contains a static `AppAuthRust.xcframework` for iOS
+The Apple release asset contains a static `NativeOIDC.xcframework` for iOS
 device, iOS simulator, and macOS, plus the generated Swift bindings. It
 supports iOS/iPadOS 18 and later and macOS 15 and later. Mac Catalyst and
 other Apple platforms are not included.
 
 ## Download and verify
 
-Download `AppAuthRust-Apple-<version>.zip` and `SHA256SUMS` from the same
-[GitHub Release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.6.0). From the directory containing both files, verify the archive:
+Download `NativeOIDC-Apple-<version>.zip` and `SHA256SUMS` from the same
+[GitHub Release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.6.0). From the directory containing both files, verify the archive:
 
 ```sh
 VERSION=0.6.0
-grep -F "AppAuthRust-Apple-$VERSION.zip" SHA256SUMS | shasum -a 256 -c
-unzip "AppAuthRust-Apple-$VERSION.zip"
+grep -F "NativeOIDC-Apple-$VERSION.zip" SHA256SUMS | shasum -a 256 -c
+unzip "NativeOIDC-Apple-$VERSION.zip"
 ```
 
 Replace `0.6.0` with the release version you downloaded. The archive extracts
-to `AppAuthRust-Apple/`.
+to `NativeOIDC-Apple/`.
 
 ## Add the package to Xcode
 
 If you install with Swift Package Manager (v0.5.0 and later), skip this
-section: the `AppAuthRust` package product already links the XCFramework and
+section: the `NativeOIDC` package product already links the XCFramework and
 compiles these Swift sources. See
-[Apple Swift Package Manager](https://github.com/ProjectFlora/AppAuth-Rust#apple-swift-package-manager-spm)
+[Apple Swift Package Manager](https://github.com/ProjectFlora/NativeOIDC#apple-swift-package-manager-spm)
 for setup.
 
 For each iOS/iPadOS or macOS app target:
 
-1. Add `AppAuthRust-Apple/AppAuthRust.xcframework` to the Xcode project and
+1. Add `NativeOIDC-Apple/NativeOIDC.xcframework` to the Xcode project and
    select the app target. In **Frameworks, Libraries, and Embedded Content**,
    set it to **Do Not Embed**; it contains static libraries.
-2. Add every Swift source in `AppAuthRust-Apple/Swift/` to the project and
+2. Add every Swift source in `NativeOIDC-Apple/Swift/` to the project and
    make sure the app target is selected under **Target Membership**:
-   `appauth_rust.swift` (the generated bindings),
+   `native_oidc.swift` (the generated bindings),
    `IOSAuthorizationAdapter.swift`, `MacOSAuthorizationAdapter.swift`, and
    `URLSessionNativeHttpTransport.swift`. Each adapter compiles only on its
    own platform, so the same set works for iOS/iPadOS and macOS targets. The
@@ -64,5 +64,5 @@ libraries.
 
 Authorization uses the external browser, not a WebView. The host app remains
 responsible for securely persisting and encrypting authentication state. See
-the [Apple adapter notes](https://github.com/ProjectFlora/AppAuth-Rust#apple-adapters)
+the [Apple adapter notes](https://github.com/ProjectFlora/NativeOIDC#apple-adapters)
 for callback behavior, cancellation, and native HTTP transport requirements.

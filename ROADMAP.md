@@ -85,7 +85,7 @@ This roadmap tracks work remaining for the initial scope in
   in [docs/live-idp-interoperability.md](docs/live-idp-interoperability.md);
   ordinary pull-request CI remains limited to local mock providers.
 - **Long-term package distribution:** Re-evaluated 2026-11-13
-  ([#44](https://github.com/ProjectFlora/AppAuth-Rust/issues/44)). Adopt
+  ([#44](https://github.com/ProjectFlora/NativeOIDC/issues/44)). Adopt
   Maven Central for the Android AAR and Swift Package Manager for the Apple
   package, each running alongside the existing GitHub Release assets. Decline
   Carthage for now: its maintenance has slowed and SPM covers the same
@@ -93,7 +93,7 @@ This roadmap tracks work remaining for the initial scope in
   spike evidence, comparison matrix, and follow-up issues are recorded in
   [docs/distribution-channels.md](docs/distribution-channels.md).
 - **Crates.io publication:** Deferred 2026-11-13
-  ([#64](https://github.com/ProjectFlora/AppAuth-Rust/issues/64)). Do not
+  ([#64](https://github.com/ProjectFlora/NativeOIDC/issues/64)). Do not
   publish the Rust core to crates.io for the initial release: the primary
   consumers are the native bindings, publishing requires package metadata,
   docs.rs, and `cargo publish` validation work, and the version policy relative
@@ -101,12 +101,12 @@ This roadmap tracks work remaining for the initial scope in
   1.0.0 or when a concrete pure-Rust consumer need emerges. Until then the
   crate sets `publish = false`.
 - **Project name:** Decided 2026-11-18
-  ([#145](https://github.com/ProjectFlora/AppAuth-Rust/issues/145)). Rename
+  ([#145](https://github.com/ProjectFlora/NativeOIDC/issues/145)). Rename
   the project to NativeOIDC in v0.7.0
-  ([#146](https://github.com/ProjectFlora/AppAuth-Rust/issues/146)). The
-  current name contains the name of the OpenID Foundation's AppAuth projects
-  and may be read as an official Rust port; this project is not affiliated
-  with them. Do not use "AppAuth" or "OpenID" (a trademark of the OpenID
+  ([#146](https://github.com/ProjectFlora/NativeOIDC/issues/146)). The
+  former name, AppAuth-Rust, contains the name of the OpenID Foundation's
+  AppAuth projects and may be read as an official Rust port; this project is
+  not affiliated with them. Do not use "AppAuth" or "OpenID" (a trademark of the OpenID
   Foundation) in the name; use "OIDC" as the common abbreviation of the
   specification. Leave "Rust" out, because consumers use the Swift, Kotlin,
   C++, and .NET APIs and Rust is an implementation detail. Rename before the
@@ -142,12 +142,12 @@ None.
     ensure CI is green for all declared targets and packages.
   - Validate installation and use of each release artifact, publish complete
     API/user documentation, and record the final support matrix.
-    [Issue #60](https://github.com/ProjectFlora/AppAuth-Rust/issues/60) tracks
+    [Issue #60](https://github.com/ProjectFlora/NativeOIDC/issues/60) tracks
     the [matrix and verification procedure](docs/support-matrix.md).
     Release-candidate asset inspection is tracked in
-    [#77](https://github.com/ProjectFlora/AppAuth-Rust/issues/77), and the
+    [#77](https://github.com/ProjectFlora/NativeOIDC/issues/77), and the
     pre-tag lifecycle recheck and final OS record in
-    [#78](https://github.com/ProjectFlora/AppAuth-Rust/issues/78).
+    [#78](https://github.com/ProjectFlora/NativeOIDC/issues/78).
     Both remain 1.0.0 readiness gates after #60 is complete. Record actual
     CI runtimes and explicitly resolve or accept execution gaps in #77.
 
@@ -200,7 +200,7 @@ packaged in the Android release AAR. Live identity-provider interoperability
 remains explicitly unverified.
 
 Security edge-case audit results and scope boundaries are recorded in
-[the audit ledger](docs/security-edge-case-audit.md) ([#62](https://github.com/ProjectFlora/AppAuth-Rust/issues/62), accepted 2026-11-12).
+[the audit ledger](docs/security-edge-case-audit.md) ([#62](https://github.com/ProjectFlora/NativeOIDC/issues/62), accepted 2026-11-12).
 
 ## Initial validation checkpoints
 

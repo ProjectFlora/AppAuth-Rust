@@ -1,4 +1,4 @@
-package net.projectflora.appauth
+package net.projectflora.nativeoidc
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -6,12 +6,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import uniffi.appauth_rust.FfiCancellationHandle
-import uniffi.appauth_rust.FfiException
-import uniffi.appauth_rust.FfiHttpHeader
-import uniffi.appauth_rust.FfiHttpRequest
-import uniffi.appauth_rust.FfiHttpResponse
-import uniffi.appauth_rust.NativeHttpTransport
+import uniffi.native_oidc.FfiCancellationHandle
+import uniffi.native_oidc.FfiException
+import uniffi.native_oidc.FfiHttpHeader
+import uniffi.native_oidc.FfiHttpRequest
+import uniffi.native_oidc.FfiHttpResponse
+import uniffi.native_oidc.NativeHttpTransport
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.MalformedURLException

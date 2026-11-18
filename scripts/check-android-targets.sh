@@ -73,7 +73,11 @@ for target in aarch64-linux-android x86_64-linux-android; do
             x86_64-linux-android) abi=x86_64 ;;
         esac
         abi_dir="$output_dir/$abi"
+        # Each ABI directory holds only the staged Rust library. Recreate it
+        # so a library staged under an earlier name (libappauth_rust.so
+        # before the NativeOIDC rename) is not packaged next to the new one.
+        rm -rf "$abi_dir"
         mkdir -p "$abi_dir"
-        cp "target/$target/release/libappauth_rust.so" "$abi_dir/libappauth_rust.so"
+        cp "target/$target/release/libnative_oidc.so" "$abi_dir/libnative_oidc.so"
     fi
 done

@@ -35,8 +35,8 @@ VERSION = "1.2.3"
 def gate_paths():
     """The availability-gate URL paths, exactly as the verify script
     constructs them from MAVEN_CENTRAL_BASE_URL: the full publication."""
-    base = ("/maven2/net/project-flora/appauth/appauth-rust-android/%s/"
-            "appauth-rust-android-%s") % (VERSION, VERSION)
+    base = ("/maven2/net/project-flora/nativeoidc/native-oidc-android/%s/"
+            "native-oidc-android-%s") % (VERSION, VERSION)
     return [base + ext for ext in (
         ".aar", ".pom", ".module",
         "-sources.jar", "-javadoc.jar",
@@ -172,13 +172,13 @@ class VerifyAndroidMavenConsumerTests(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stderr)
         self.assertIn("not yet visible on Maven Central", r.stderr)
         self.assertIn("failed after 2 attempts", r.stderr)
-        self.assertIn("appauth-rust-android-%s.pom 404" % VERSION, r.stderr)
+        self.assertIn("native-oidc-android-%s.pom 404" % VERSION, r.stderr)
         # The missing files are separated by ", " in publication order:
         # the first two entries of the summary, joined correctly
         # (separator-placement regression, Copilot review of #143).
         self.assertIn(
-            "appauth-rust-android-%s.aar 404, "
-            "appauth-rust-android-%s.pom 404" % (VERSION, VERSION),
+            "native-oidc-android-%s.aar 404, "
+            "native-oidc-android-%s.pom 404" % (VERSION, VERSION),
             r.stderr)
         # No trailing separator before the closing parenthesis.
         self.assertNotIn(", )", r.stderr)

@@ -1,10 +1,10 @@
-package net.projectflora.appauth.consumer
+package net.projectflora.nativeoidc.consumer
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
-import uniffi.appauth_rust.FfiServiceConfiguration
+import uniffi.native_oidc.FfiServiceConfiguration
 
 @RunWith(AndroidJUnit4::class)
 class ReleaseConsumerTest {

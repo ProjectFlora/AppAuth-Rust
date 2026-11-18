@@ -84,7 +84,7 @@ jobs:
             fi
           fi
           package_version=$(cargo metadata --locked --no-deps --format-version 1 |
-            jq -r '.packages[] | select(.name == "appauth-rust") | .version')
+            jq -r '.packages[] | select(.name == "native-oidc") | .version')
           if [[ "$version" != "$package_version" ]]; then
             echo "Release version $version does not match Cargo package version $package_version" >&2
             exit 1
@@ -132,7 +132,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: release-apple
-          path: target/apple/release-package/AppAuthRust-Apple-${{ needs.validate_version.outputs.version }}.zip
+          path: target/apple/release-package/NativeOIDC-Apple-${{ needs.validate_version.outputs.version }}.zip
           if-no-files-found: error
 
   android:
@@ -174,11 +174,11 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
         run: |
-          aar=native/android/build/outputs/aar/appauth-rust-android-release.aar
-          unzip -Z1 "$aar" | grep -Fx jni/arm64-v8a/libappauth_rust.so
-          unzip -Z1 "$aar" | grep -Fx jni/x86_64/libappauth_rust.so
+          aar=native/android/build/outputs/aar/native-oidc-android-release.aar
+          unzip -Z1 "$aar" | grep -Fx jni/arm64-v8a/libnative_oidc.so
+          unzip -Z1 "$aar" | grep -Fx jni/x86_64/libnative_oidc.so
           mkdir -p dist
-          cp "$aar" "dist/appauth-rust-android-$RELEASE_VERSION.aar"
+          cp "$aar" "dist/native-oidc-android-$RELEASE_VERSION.aar"
       - name: Verify Maven Central publication contents
         env:
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
@@ -186,7 +186,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: release-android
-          path: dist/appauth-rust-android-${{ needs.validate_version.outputs.version }}.aar
+          path: dist/native-oidc-android-${{ needs.validate_version.outputs.version }}.aar
           if-no-files-found: error
 
   api_docs:
@@ -205,11 +205,11 @@ jobs:
         run: |
           mkdir -p dist
           cd target/doc
-          zip -rq "$GITHUB_WORKSPACE/dist/AppAuthRust-API-Docs-$RELEASE_VERSION.zip" .
+          zip -rq "$GITHUB_WORKSPACE/dist/NativeOIDC-API-Docs-$RELEASE_VERSION.zip" .
       - uses: actions/upload-artifact@v7
         with:
           name: release-api-docs
-          path: dist/AppAuthRust-API-Docs-${{ needs.validate_version.outputs.version }}.zip
+          path: dist/NativeOIDC-API-Docs-${{ needs.validate_version.outputs.version }}.zip
           if-no-files-found: error
 
   windows:
@@ -227,21 +227,21 @@ jobs:
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
         run: |
           cargo build --locked --release --lib --target x86_64-pc-windows-msvc
-          $package = "dist/appauth-rust-windows-$env:RELEASE_VERSION"
+          $package = "dist/native-oidc-windows-$env:RELEASE_VERSION"
           New-Item -ItemType Directory -Force "$package/include" | Out-Null
           New-Item -ItemType Directory -Force "$package/dotnet" | Out-Null
           $target = "target/x86_64-pc-windows-msvc/release"
-          Copy-Item "$target/appauth_rust.dll" $package
-          Copy-Item "$target/appauth_rust.dll.lib" $package
-          Copy-Item "native/windows/include/appauth_windows.h" "$package/include"
-          Copy-Item "native/windows/dotnet/AppAuthWindows.cs" "$package/dotnet"
-          Copy-Item "native/windows/dotnet/AppAuthWindows.csproj" "$package/dotnet"
+          Copy-Item "$target/native_oidc.dll" $package
+          Copy-Item "$target/native_oidc.dll.lib" $package
+          Copy-Item "native/windows/include/native_oidc_windows.h" "$package/include"
+          Copy-Item "native/windows/dotnet/NativeOidcWindows.cs" "$package/dotnet"
+          Copy-Item "native/windows/dotnet/NativeOidcWindows.csproj" "$package/dotnet"
           Copy-Item "native/windows/README.md" $package
           Compress-Archive -Path "$package/*" -DestinationPath "$package.zip"
       - uses: actions/upload-artifact@v7
         with:
           name: release-windows
-          path: dist/appauth-rust-windows-${{ needs.validate_version.outputs.version }}.zip
+          path: dist/native-oidc-windows-${{ needs.validate_version.outputs.version }}.zip
           if-no-files-found: error
 
   apple_consumer:
@@ -265,7 +265,7 @@ jobs:
         with:
           name: release-apple
           path: dist
-      - run: scripts/check-apple-release-consumer.sh dist/AppAuthRust-Apple-${{ needs.validate_version.outputs.version }}.zip
+      - run: scripts/check-apple-release-consumer.sh dist/NativeOIDC-Apple-${{ needs.validate_version.outputs.version }}.zip
 
   android_consumer:
     name: Validate Android release consumer
@@ -296,7 +296,7 @@ jobs:
           target: google_apis_playstore
           disable-linux-hw-accel: false
           disable-animations: true
-          script: scripts/check-android-release-consumer.sh dist/appauth-rust-android-${{ needs.validate_version.outputs.version }}.aar
+          script: scripts/check-android-release-consumer.sh dist/native-oidc-android-${{ needs.validate_version.outputs.version }}.aar
 
   windows_consumer:
     name: Validate Windows release consumers
@@ -309,7 +309,7 @@ jobs:
           name: release-windows
           path: dist
       - shell: pwsh
-        run: scripts/check-windows-release-consumer.ps1 -Package dist/appauth-rust-windows-${{ needs.validate_version.outputs.version }}.zip
+        run: scripts/check-windows-release-consumer.ps1 -Package dist/native-oidc-windows-${{ needs.validate_version.outputs.version }}.zip
 
   spm_manifest:
     name: Prepare and validate release Package.swift
@@ -336,20 +336,20 @@ jobs:
           path: dist
       - name: Point Package.swift at the release archive
         run: |
-          archive="dist/AppAuthRust-Apple-$RELEASE_VERSION.zip"
+          archive="dist/NativeOIDC-Apple-$RELEASE_VERSION.zip"
           checksum=$(swift package compute-checksum "$archive")
           python3 scripts/update-package-swift.py \
             --repository "$GITHUB_REPOSITORY" "$RELEASE_VERSION" "$checksum"
           # The release commit may change nothing but Package.swift.
           git diff --exit-code --stat -- . ':(exclude)Package.swift'
-          grep -F "url: \"https://github.com/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION/AppAuthRust-Apple-$RELEASE_VERSION.zip\"," Package.swift
+          grep -F "url: \"https://github.com/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION/NativeOIDC-Apple-$RELEASE_VERSION.zip\"," Package.swift
           grep -F "checksum: \"$checksum\"" Package.swift
           git diff -- Package.swift
       # Build and test the manifest against the archive. The check copies the
       # package to a temporary directory, where the binary target's
       # url/checksum is swapped for the local path; the repository tree is
       # left untouched.
-      - run: scripts/check-spm-package.sh "dist/AppAuthRust-Apple-$RELEASE_VERSION.zip"
+      - run: scripts/check-spm-package.sh "dist/NativeOIDC-Apple-$RELEASE_VERSION.zip"
       - uses: actions/upload-artifact@v7
         with:
           name: release-package-swift
@@ -399,7 +399,7 @@ jobs:
             echo "The release commit must change only Package.swift" >&2
             exit 1
           fi
-          git tag -a "v$RELEASE_VERSION" -m "AppAuth-Rust v$RELEASE_VERSION"
+          git tag -a "v$RELEASE_VERSION" -m "NativeOIDC v$RELEASE_VERSION"
           # Push only the tag; main's Package.swift is never updated by a release.
           git push origin "refs/tags/v$RELEASE_VERSION"
       - name: Generate checksums and publish assets
@@ -409,19 +409,19 @@ jobs:
         run: |
           cd dist
           shasum -a 256 \
-            "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
-            "appauth-rust-android-$RELEASE_VERSION.aar" \
-            "appauth-rust-windows-$RELEASE_VERSION.zip" \
-            "AppAuthRust-API-Docs-$RELEASE_VERSION.zip" \
+            "NativeOIDC-Apple-$RELEASE_VERSION.zip" \
+            "native-oidc-android-$RELEASE_VERSION.aar" \
+            "native-oidc-windows-$RELEASE_VERSION.zip" \
+            "NativeOIDC-API-Docs-$RELEASE_VERSION.zip" \
             > SHA256SUMS
           gh release create "v$RELEASE_VERSION" \
-            "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
-            "appauth-rust-android-$RELEASE_VERSION.aar" \
-            "appauth-rust-windows-$RELEASE_VERSION.zip" \
-            "AppAuthRust-API-Docs-$RELEASE_VERSION.zip" \
+            "NativeOIDC-Apple-$RELEASE_VERSION.zip" \
+            "native-oidc-android-$RELEASE_VERSION.aar" \
+            "native-oidc-windows-$RELEASE_VERSION.zip" \
+            "NativeOIDC-API-Docs-$RELEASE_VERSION.zip" \
             SHA256SUMS \
             --verify-tag \
-            --title "AppAuth-Rust v$RELEASE_VERSION" \
+            --title "NativeOIDC v$RELEASE_VERSION" \
             --generate-notes
 
   publish_maven:

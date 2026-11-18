@@ -4,11 +4,11 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
-bundle_id=net.project-flora.appauth.ios-flow-smoke
+bundle_id=net.project-flora.nativeoidc.ios-flow-smoke
 app_bundle="$repo_root/target/apple/ios-authorization-flow-smoke.app"
-executable=AppAuthRustIOSFlowSmoke
+executable=NativeOIDCIOSFlowSmoke
 generated="$repo_root/target/uniffi/swift"
-xcframework="$repo_root/target/apple/release-package/AppAuthRust-Apple/AppAuthRust.xcframework"
+xcframework="$repo_root/target/apple/release-package/NativeOIDC-Apple/NativeOIDC.xcframework"
 simulator_slice="$xcframework/ios-arm64-simulator"
 simulator_sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
 provider_port_file="$repo_root/target/apple/ios-mock-provider.port"
@@ -21,8 +21,8 @@ if [[ "$(uname -m)" != arm64 ]]; then
     exit 1
 fi
 
-if [[ ! -f "$simulator_slice/libappauth_rust.a" ]]; then
-    echo "iOS simulator library is missing: $simulator_slice/libappauth_rust.a" >&2
+if [[ ! -f "$simulator_slice/libnative_oidc.a" ]]; then
+    echo "iOS simulator library is missing: $simulator_slice/libnative_oidc.a" >&2
     exit 1
 fi
 
@@ -36,16 +36,16 @@ xcrun --sdk iphonesimulator swiftc \
     -sdk "$simulator_sdk" \
     -Xcc "-fmodule-map-file=$simulator_slice/Headers/module.modulemap" \
     -L "$simulator_slice" \
-    -lappauth_rust \
+    -lnative_oidc \
     -framework AuthenticationServices \
     -framework Network \
     -framework Security \
     -framework UIKit \
     -o "$app_bundle/$executable" \
-    "$generated/appauth_rust.swift" \
-    Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
+    "$generated/native_oidc.swift" \
+    Sources/NativeOIDC/IOSAuthorizationAdapter.swift \
     native/apple/IOSAuthorizationFlowSmoke.swift \
-    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift
+    Sources/NativeOIDC/URLSessionNativeHttpTransport.swift
 
 codesign --force --sign - --timestamp=none "$app_bundle"
 

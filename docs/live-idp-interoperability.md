@@ -27,7 +27,7 @@ library completes its documented validation. Record the provider tenant or
 realm only by a non-sensitive label; never record a token, credential, client
 secret, or test user's identifying information.
 
-Any future result must include the date, AppAuth-Rust revision or release
+Any future result must include the date, NativeOIDC revision or release
 candidate, OS and browser version, redirect type, ID Token signing algorithm,
 and a status of **passed**, **limited**, **failed**, or **not verified**. A
 limited or failed result must link to an issue that explains the constraint or
@@ -61,8 +61,8 @@ interoperability validation:
 ### Local Keycloak baseline
 
 The repository includes a local Keycloak configuration at
-`tests/live-idp/keycloak`. It imports the `appauth-rust-live` realm and its
-`appauth-rust-desktop` public client. That client permits loopback redirects
+`tests/live-idp/keycloak`. It imports the `native-oidc-live` realm and its
+`native-oidc-desktop` public client. That client permits loopback redirects
 on `127.0.0.1` and requires S256 PKCE. This service is HTTP-only and is for
 client-registration and redirect-configuration development only. It must not
 be used to mark discovery, ID Token, or JWKS validation as passed: OIDC
@@ -79,7 +79,7 @@ discovery and JWKS endpoints require HTTPS.
    ```
 
 3. Open `http://127.0.0.1:8080`, create a non-production test user in the
-   `appauth-rust-live` realm, and give it a local-only password.
+   `native-oidc-live` realm, and give it a local-only password.
 4. Verify the non-sensitive client and redirect configuration. Run the
    acceptance cases only against a Keycloak deployment with a publicly trusted
    HTTPS endpoint, then record the result in the matrix below.

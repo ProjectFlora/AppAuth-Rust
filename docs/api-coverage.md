@@ -9,7 +9,7 @@ Update the inventory when a public operation, record, error or adapter changes.
 
 UniFFI names below are the Rust source names from [ffi.rs](../src/ffi.rs).
 Swift and Kotlin bindings use generated language spellings. Windows C++ uses
-the [ABI reference](windows-api.md); .NET uses `AppAuthWindows` methods.
+the [ABI reference](windows-api.md); .NET uses `NativeOidcWindows` methods.
 “Host” means application work is required; “not exposed” is a binding limit.
 
 | Operation | Rust core | Swift / Kotlin (UniFFI) | Windows C++ | Windows .NET |
@@ -18,7 +18,7 @@ the [ABI reference](windows-api.md); .NET uses `AppAuthWindows` methods.
 | Explicit endpoints / OIDC | `ServiceConfiguration::new`, `with_oidc_validation_endpoints` | Same methods on `FfiServiceConfiguration` | Operation JSON endpoint fields | Same JSON |
 | Optional endpoints | `with_end_session_endpoint`, `with_revocation_endpoint`, `with_registration_endpoint` | Same methods on `FfiServiceConfiguration` | End-session/revocation endpoint fields; registration not exposed | Same JSON; registration not exposed |
 | Configuration inspection | Seven endpoint/issuer getters | Five getters: authorization/token/revocation endpoint, issuer, JWKS | Not exposed | Not exposed |
-| Prepare authorization | `AuthorizationRequest::new`, `begin` | `begin_authorization`, `FfiAuthorizationOptions` | Integrated in `appauth_windows_authorize` | `AuthorizeAsync` |
+| Prepare authorization | `AuthorizationRequest::new`, `begin` | `begin_authorization`, `FfiAuthorizationOptions` | Integrated in `native_oidc_windows_authorize` | `AuthorizeAsync` |
 | Additional request parameters | `with_additional_parameter`, `with_additional_token_parameter` | Options' `additional_parameters`, `additional_token_parameters` | Same authorize JSON arrays | Same JSON |
 | Authorization URL / nonce | `AuthorizationSession::authorization_url`, `nonce` | Same methods on `FfiAuthorizationSession` | Managed internally, not exposed separately | Same |
 | Browser and callback lifecycle | Host | `IOSAuthorizationAdapter`, `MacOSAuthorizationAdapter`, `AndroidAuthorizationAdapter` | Integrated authorize browser/loopback | Via `AuthorizeAsync` |
@@ -29,14 +29,14 @@ the [ABI reference](windows-api.md); .NET uses `AppAuthWindows` methods.
 | Token / expiry / expiry check | `AuthenticationState::{token_response,expires_at,is_expired_at}` | Same methods on `FfiAuthenticationState` | Host reads JSON / compares timestamp | Host reads JSON / compares timestamp |
 | Serialize / restore | Serde on `AuthenticationState` | `to_json`, `from_json` | Returned JSON / refresh `state` object | Same JSON |
 | Secure persistence | Host | Host | Host | Host |
-| Refresh / extra parameters | `refresh`, `refresh_with_additional_parameters` | `FfiAuthenticationState::refresh` with parameters | `appauth_windows_refresh`, JSON parameters | `RefreshAsync` |
-| Prepare end-session | `EndSessionRequest::{new,with_id_token_hint,with_post_logout_redirect_uri,begin}` | `begin_end_session`, `FfiEndSessionOptions` | `appauth_windows_end_session` | `EndSessionAsync` |
+| Refresh / extra parameters | `refresh`, `refresh_with_additional_parameters` | `FfiAuthenticationState::refresh` with parameters | `native_oidc_windows_refresh`, JSON parameters | `RefreshAsync` |
+| Prepare end-session | `EndSessionRequest::{new,with_id_token_hint,with_post_logout_redirect_uri,begin}` | `begin_end_session`, `FfiEndSessionOptions` | `native_oidc_windows_end_session` | `EndSessionAsync` |
 | Logout URL / callback | `EndSessionSession::{end_session_url,parse_redirect}` | Same methods on `FfiEndSessionSession` | Integrated browser/loopback | Integrated browser/loopback |
 | Logout browser lifecycle | Host | Host; authorization adapters have no logout method | Integrated | Integrated |
 | Logout response | `EndSessionResponse::{state,additional_parameters}` | `FfiEndSessionResponse` record | Result JSON | Result JSON |
-| Token revocation | `revoke_token`, `RevocationTokenType` | `revoke`, string type hint | `appauth_windows_revoke` | `RevokeAsync` |
+| Token revocation | `revoke_token`, `RevocationTokenType` | `revoke`, string type hint | `native_oidc_windows_revoke` | `RevokeAsync` |
 | Public-client registration | `ClientRegistrationRequest::{new,with_client_name,with_initial_access_token,register}`, response `client_id` | `register_public_client`, `FfiRegistrationOptions`, response `client_id` | Not exposed | Not exposed |
-| Cancellation signal | `CancellationHandle::{new,cancel,is_cancelled,cancelled}` | Same methods on `FfiCancellationHandle`; adapter `cancel` | `appauth_windows_cancellation_{new,cancel,free}` | `CancellationToken` |
+| Cancellation signal | `CancellationHandle::{new,cancel,is_cancelled,cancelled}` | Same methods on `FfiCancellationHandle`; adapter `cancel` | `native_oidc_windows_cancellation_{new,cancel,free}` | `CancellationToken` |
 | HTTP transport | `HttpTransport::execute`, `ReqwestTransport::new` | `NativeHttpTransport::execute`; supplied native implementations | Internal | Internal |
 | Error handling | `AuthError`, `Result` | `FfiError` and adapter errors | Result status/value/free | Exceptions from wrapper |
 | Local sign-out | Host | Host | Host | Host |
@@ -69,8 +69,8 @@ and UniFFI facade. These records and enums form their input/output contracts:
   closure, Android redirect configuration, adapter exceptions and callback activity. See
   [Apple source](../native/apple/IOSAuthorizationAdapter.swift),
   [macOS source](../native/apple/MacOSAuthorizationAdapter.swift),
-  [Android source](../native/android/src/main/kotlin/net/projectflora/appauth/AndroidAuthorizationAdapter.kt)
-  and [internal redirect selection implementation](../native/android/src/main/kotlin/net/projectflora/appauth/AndroidRedirectSelector.kt)
+  [Android source](../native/android/src/main/kotlin/net/projectflora/nativeoidc/AndroidAuthorizationAdapter.kt)
+  and [internal redirect selection implementation](../native/android/src/main/kotlin/net/projectflora/nativeoidc/AndroidRedirectSelector.kt)
   (the selector is not public API).
 - All Windows handles, aliases, status constants, ten exported functions and
   four wrapper methods are listed in the [Windows reference](windows-api.md).

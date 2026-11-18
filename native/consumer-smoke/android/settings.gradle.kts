@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "appauth-rust-release-consumer"
+rootProject.name = "native-oidc-release-consumer"
 include(":app")

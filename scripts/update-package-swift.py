@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Point Package.swift's AppAuthRustBinary target at a published release archive.
+"""Point Package.swift's NativeOIDCBinary target at a published release archive.
 
 The release workflow runs this after building and validating the Apple
 archive, then commits the result as the release commit that the version tag
@@ -13,7 +13,7 @@ import re
 import sys
 
 BINARY_TARGET = re.compile(
-    r'(\.binaryTarget\(\s*name:\s*"AppAuthRustBinary",\s*url:\s*")[^"]+'
+    r'(\.binaryTarget\(\s*name:\s*"NativeOIDCBinary",\s*url:\s*")[^"]+'
     r'("\s*,\s*checksum:\s*")[0-9a-f]+(")'
 )
 
@@ -39,7 +39,7 @@ def main() -> int:
 
     url = (
         f"https://github.com/{args.repository}/releases/download/"
-        f"v{args.version}/AppAuthRust-Apple-{args.version}.zip"
+        f"v{args.version}/NativeOIDC-Apple-{args.version}.zip"
     )
     content = args.manifest.read_text(encoding="utf-8")
     updated, count = BINARY_TARGET.subn(
@@ -47,7 +47,7 @@ def main() -> int:
     )
     if count != 1:
         sys.exit(
-            f"expected one AppAuthRustBinary target in {args.manifest}, found {count}"
+            f"expected one NativeOIDCBinary target in {args.manifest}, found {count}"
         )
 
     args.manifest.write_text(updated, encoding="utf-8")

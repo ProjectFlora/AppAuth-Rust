@@ -1,11 +1,11 @@
 {
-  "realm": "appauth-rust-live",
+  "realm": "native-oidc-live",
   "enabled": true,
-  "displayName": "AppAuth-Rust Live Validation",
+  "displayName": "NativeOIDC Live Validation",
   "clients": [
     {
-      "clientId": "appauth-rust-desktop",
-      "name": "AppAuth-Rust desktop validation",
+      "clientId": "native-oidc-desktop",
+      "name": "NativeOIDC desktop validation",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": true,
