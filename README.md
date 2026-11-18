@@ -160,6 +160,19 @@ before the 1.0.0 tag; the pre-1.0 release policy in
 
 ## Native bindings
 
+- The public API for Apple and Android targets Swift and Kotlin only. UniFFI
+  generates those two languages, and the platform adapters expose their
+  central operations as Swift `async` and Kotlin `suspend` with cancellation
+  and error handling built around those idioms. Objective-C and Java
+  applications have no library-provided entry point: place a small Swift or
+  Kotlin wrapper (binding class) in the app, for example a Swift `@objc`
+  class with completion handlers, or a Kotlin function returning a
+  `CompletableFuture` or accepting a callback. Windows hosts use the C ABI
+  (C++ and .NET) and are unaffected. The decision and rationale are recorded
+  in [ROADMAP.md](ROADMAP.md)
+  ([#144](https://github.com/ProjectFlora/NativeOIDC/issues/144)); the
+  [shared user guide](docs/user-guide.md#supported-application-languages)
+  describes the wrapper approach.
 - The UniFFI 0.32.2 API is exposed through `native_oidc::ffi`. Generate Swift
   and Kotlin source with `scripts/generate-bindings.sh`; generated sources go
   under `target/uniffi` by default and should not be hand-edited.
@@ -312,6 +325,9 @@ host-side smoke of the generated API, and builds for the iOS simulator.
 
 ## Apple adapters
 
+- The adapters are a Swift API. Objective-C applications should wrap them
+  with a small `@objc` class in the app; see the
+  [shared user guide](docs/user-guide.md#supported-application-languages).
 - `Sources/NativeOIDC/IOSAuthorizationAdapter.swift` runs authorization in
   `ASWebAuthenticationSession`; HTTPS callbacks use Apple's verified callback
   matcher, and custom URI schemes are supported as a fallback. The host app
@@ -412,6 +428,9 @@ that may not match the newer Swift sources.
 
 ## Android adapter
 
+- The adapter is a Kotlin API. Java applications should wrap it with a small
+  Kotlin class or function in the app; see the
+  [shared user guide](docs/user-guide.md#supported-application-languages).
 - `native/android` launches authorization in a Custom Tab. It uses the HTTPS
   App Link redirect only when Android reports the host as verified and the
   configured callback activity resolves for that URI; otherwise it selects

@@ -23,7 +23,7 @@ confirmation.
 | OAuth 2.0 Token Revocation | Supported | Supported | Initial — explicit Rust, Swift/Kotlin, and Windows C ABI |
 | Dynamic client registration | Supported | Supported | Initial — agreed for public clients; do not embed client secrets |
 | Browser selection/custom user agent | Custom external user agents | Browser matching and custom-tab selection | Later — platform-specific |
-| Native application API | Native Objective-C/Swift APIs | Native Java/Kotlin APIs | Initial — agreed; thin Swift/Kotlin adapters and a Windows C ABI around the Rust core |
+| Native application API | Native Objective-C/Swift APIs | Native Java/Kotlin APIs | Initial — agreed; thin Swift/Kotlin adapters and a Windows C ABI around the Rust core. Public API languages are Swift and Kotlin only; Objective-C and Java are out of scope ([#144](https://github.com/ProjectFlora/NativeOIDC/issues/144)) |
 | Rust-to-native bindings | N/A | N/A | Initial — agreed; UniFFI generates Swift/Kotlin bindings; a C ABI serves Windows C++ and .NET hosts |
 | HTTP transport | Customizable URL session provider | Custom connection builder | Initial — agreed; async abstraction, caller-runtime reqwest default, native override available |
 | Device Authorization Grant | Separate AppAuthTV implementation | Not part of the documented core flow | Deferred with tvOS |
