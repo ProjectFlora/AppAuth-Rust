@@ -25,6 +25,9 @@ In a pull request to `main`:
 - Update README's download section, the SPM installation version (the
   `from:` version and Xcode dependency rule), the Maven Central
   dependency version, and any version-specific notes.
+- If dependencies changed, check that `THIRD_PARTY_LICENSES.txt` still
+  reads correctly (CI uploads it as the `third-party-licenses` artifact;
+  see [License notices](#license-notices)).
 - Recheck Windows client support as required by the
   [support matrix](support-matrix.md). For 1.0.0, complete the
   [final verification record](support-matrix.md#final-100-verification).
@@ -124,6 +127,66 @@ dependencies, and the full consumer smoke on an emulator (Issue #137).
 Its `spm` job resolves the `vX.Y.Z` tag through Swift Package Manager by URL, which also verifies the
 manifest's checksum against the published archive. Record the run URL in
 the release tracking issue.
+
+## License notices
+
+Every release package ships `LICENSE`, `THIRD_PARTY_LICENSES.txt` and
+`RUST_STANDARD_LIBRARY_COPYRIGHT.html` (see the README's
+[Third-party licenses](../README.md#third-party-licenses) section for the
+locations). The notices are generated, never edited by hand:
+
+- `scripts/generate-third-party-licenses.sh` runs cargo-about with
+  `about.toml` (which crates and targets: the crates linked into the
+  release libraries for every release target, without dev and build
+  dependencies) and `about.hbs` (the text, including the Rust standard
+  library and UniFFI-generated bindings sections). It runs offline and
+  requires the pinned cargo-about version.
+- The Rust standard library is not in `Cargo.lock`, so the script takes its
+  notices from the active Rust toolchain: it appends the toolchain version
+  and the license files of compiler-builtins and libm (the parts not under
+  `MIT OR Apache-2.0`, with copyright notices of their own) from the
+  rust-src component, which it installs, and copies the toolchain's
+  `share/doc/rust/COPYRIGHT-library.html` as
+  `RUST_STANDARD_LIBRARY_COPYRIGHT.html`. The output therefore depends on
+  `Cargo.lock` and the toolchain, and each package generates it with the
+  toolchain that builds it. The release workflow pins every package job to
+  the same Rust version (`dtolnay/rust-toolchain@1.100.0`), so all packages
+  ship the same notices; change them together.
+- The Apple packaging script, the Android release build
+  (`generateLicenseNotices`) and `scripts/package-windows.ps1` (after the
+  workflow step that runs the script) put the files into the packages.
+  The consumer checks and `scripts/check-android-maven-publication.sh`
+  fail when a package lacks them; the Android consumer check also requires
+  them in the consumer app's APK.
+- `cargo deny check licenses` (`deny.toml`) runs in CI and in the release
+  workflow's version validation. It allows MPL-2.0 only for the UniFFI
+  crates and CDLA-Permissive-2.0 only for `webpki-roots`.
+
+Maintenance:
+
+- **A dependency under a new license**: check that the license is
+  compatible with Apache-2.0 and what it requires of binary distribution,
+  then add it to `deny.toml` (as a per-crate exception when it should stay
+  limited to that crate) and to `accepted` in `about.toml`.
+- **A `ring` update**: `about.toml` pins the checksums of ring's license
+  files, so generation fails until they are reviewed and the checksums
+  updated.
+- **A Rust toolchain update**: check that the toolchain still has the two
+  license files the script appends, and whether another part of the
+  standard library gained a license other than `MIT OR Apache-2.0` (its
+  `library/` sources in rust-src).
+- **A cargo-about or cargo-deny update**: change the version in
+  `scripts/generate-third-party-licenses.sh` (cargo-about) and in every
+  `taiki-e/install-action` step of `ci.yml` and `release.yml` together.
+
+`release-consumer.yml` runs the same consumer checks, so it requires the
+notices too and can validate only v0.7.1 and later. v0.1.0 through v0.7.0
+shipped without them; their notices were generated afterwards from each
+tag's `Cargo.lock` and the Rust version of each release run, and attached
+to the GitHub Releases as `THIRD_PARTY_LICENSES-<version>.txt` and
+`RUST_STANDARD_LIBRARY_COPYRIGHT-<version>.html`, leaving `SHA256SUMS`
+unchanged
+([#161](https://github.com/ProjectFlora/NativeOIDC/issues/161)).
 
 ## Why CI creates the tag
 
@@ -239,8 +302,10 @@ git push origin :refs/tags/vX.Y.Z
   doing so ends the redirect and breaks those consumers.
 
 - `release-consumer.yml` expects the release asset names and Maven
-  coordinates of v0.7.0 and later. Releases up to v0.6.0 used the former
-  names and cannot be revalidated with the current workflow.
+  coordinates of v0.7.0 and later, and the license notices of v0.7.1 and
+  later (see [License notices](#license-notices)). Releases up to v0.6.0
+  used the former names, and v0.7.0 lacks the notices, so none of them can
+  be revalidated with the current workflow.
 
 - The `publish` job needs `contents: write`. If tag rulesets protect `v*`,
   allow `github-actions[bot]` (the GitHub Actions app) to create those tags.

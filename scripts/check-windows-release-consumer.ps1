@@ -17,6 +17,12 @@ try {
     if ($null -eq $packageRoot -or -not (Test-Path (Join-Path $packageRoot.FullName "include/native_oidc_windows.h"))) {
         throw "Windows release archive has no package root with include/native_oidc_windows.h."
     }
+    foreach ($file in "LICENSE", "THIRD_PARTY_LICENSES.txt", "RUST_STANDARD_LIBRARY_COPYRIGHT.html") {
+        $path = Join-Path $packageRoot.FullName $file
+        if (-not (Test-Path $path) -or (Get-Item $path).Length -eq 0) {
+            throw "Windows release archive is missing $file."
+        }
+    }
 
     $cppBuild = Join-Path $workDir "cpp-build"
     cmake -S (Join-Path $fixture "cpp") -B $cppBuild -A x64 "-DNATIVE_OIDC_PACKAGE=$($packageRoot.FullName)"

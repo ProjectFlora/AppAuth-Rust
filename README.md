@@ -280,6 +280,41 @@ Use the exact downloaded asset name when verifying another package. GitHub
 Release assets are the persistent distribution channel; the CI validation
 artifacts expire after 14 days.
 
+## Third-party licenses
+
+The NativeOIDC libraries are licensed under the Apache License, Version 2.0,
+and statically include Rust crates under their own licenses (MIT, ISC,
+BSD-3-Clause, Unicode-3.0, CDLA-Permissive-2.0, and MPL-2.0 for UniFFI),
+plus the Rust standard library. From v0.7.1, every release package carries
+this project's `LICENSE` and two notice files:
+`THIRD_PARTY_LICENSES.txt`, the notices for those crates with a crates.io
+source link for each, followed by the notices of the standard library's
+compiler-builtins and libm from the Rust toolchain that built the package;
+and `RUST_STANDARD_LIBRARY_COPYRIGHT.html`, that toolchain's own notice
+file for the standard library:
+
+| Package | Location |
+| --- | --- |
+| `NativeOIDC-Apple-<version>.zip` | In `NativeOIDC-Apple/` |
+| `native-oidc-android-<version>.aar` (GitHub Release and Maven Central) | In `META-INF/native-oidc/` in `classes.jar`; apps keep them at that path in the APK |
+| `native-oidc-windows-<version>.zip` | At the zip root |
+
+An app that ships NativeOIDC distributes these dependencies too, so include
+the notices with the app, for example on its open-source licenses screen.
+
+v0.1.0 through v0.7.0 were published without these notices. Their GitHub
+Releases now also carry `THIRD_PARTY_LICENSES-<version>.txt` and
+`RUST_STANDARD_LIBRARY_COPYRIGHT-<version>.html`, generated afterwards from
+each release's `Cargo.lock` and the Rust version that built it; each
+release's `SHA256SUMS` is unchanged and does not cover them. The v0.7.0 AAR on Maven Central cannot be
+replaced, so use v0.7.1 or later.
+
+A dependency change must keep `cargo deny check licenses` passing: CI fails
+when a crate linked into the libraries is not under a license that
+[`deny.toml`](deny.toml) allows. See
+[docs/releasing.md](docs/releasing.md#license-notices) for how the notices
+are generated.
+
 ## Release consumer validation
 
 Each release candidate is installed into minimal consumer fixtures before it
