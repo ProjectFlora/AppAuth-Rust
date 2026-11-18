@@ -14,4 +14,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "appauth-rust-android"
+rootProject.name = "native-oidc-android"

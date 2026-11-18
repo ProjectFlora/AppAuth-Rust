@@ -11,10 +11,10 @@ set -euo pipefail
 # (SIGKILL, crash, power loss) cannot leave a modified Package.swift or a
 # backup file behind in the working tree (Issue #102).
 #
-# Usage: scripts/check-spm-package.sh <AppAuthRust-Apple-<version>.zip>
+# Usage: scripts/check-spm-package.sh <NativeOIDC-Apple-<version>.zip>
 
 if [[ $# -ne 1 ]]; then
-    echo "Usage: $0 <AppAuthRust-Apple-<version>.zip>" >&2
+    echo "Usage: $0 <NativeOIDC-Apple-<version>.zip>" >&2
     exit 2
 fi
 
@@ -58,7 +58,7 @@ import sys
 
 archive, manifest = sys.argv[1], sys.argv[2]
 text = pathlib.Path(manifest).read_text()
-needle = 'name: "AppAuthRustBinary",'
+needle = 'name: "NativeOIDCBinary",'
 if needle not in text:
     sys.exit(f"refusing to rewrite unrecognized manifest: {manifest}")
 binary_block = text.split(needle, 1)[1].split(")", 1)[0]
@@ -86,7 +86,7 @@ swift test
 
 echo "Building Swift package for the iOS simulator destination"
 xcodebuild \
-    -scheme AppAuthRust \
+    -scheme NativeOIDC \
     -destination 'generic/platform=iOS Simulator' \
     -derivedDataPath .derived \
     build

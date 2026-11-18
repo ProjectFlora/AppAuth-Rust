@@ -1,6 +1,6 @@
 # Releasing
 
-This is the maintainer procedure for publishing a version of AppAuth-Rust.
+This is the maintainer procedure for publishing a version of NativeOIDC.
 Every release is produced by the [Release workflow](../.github/workflows/release.yml),
 which is dispatched manually. Do not push version tags by hand: the workflow
 creates the tag itself (see [Why CI creates the tag](#why-ci-creates-the-tag)).
@@ -19,7 +19,7 @@ creates the tag itself (see [Why CI creates the tag](#why-ci-creates-the-tag)).
 In a pull request to `main`:
 
 - Set `version` in `Cargo.toml` to the release version and update
-  `Cargo.lock` (`cargo update -p appauth-rust`). The workflow rejects any
+  `Cargo.lock` (`cargo update -p native-oidc`). The workflow rejects any
   version that does not match the crate version.
 - Move the `CHANGELOG.md` `[Unreleased]` entries under the new version.
 - Update README's download section, the SPM installation version (the
@@ -29,7 +29,7 @@ In a pull request to `main`:
   [support matrix](support-matrix.md). For 1.0.0, complete the
   [final verification record](support-matrix.md#final-100-verification).
 
-Do not edit the `AppAuthRustBinary` URL or checksum in `Package.swift`; the
+Do not edit the `NativeOIDCBinary` URL or checksum in `Package.swift`; the
 release workflow writes them into the release commit at the version tag.
 `main`'s copy is not updated by a release (see
 [Why CI creates the tag](#why-ci-creates-the-tag)).
@@ -53,7 +53,7 @@ the version, and leave **publish** unchecked.
 Confirm that every job succeeds, including **Prepare and validate release
 Package.swift** (`spm_manifest`). That job's log shows the rewritten
 `Package.swift` diff: the URL must be
-`https://github.com/ProjectFlora/AppAuth-Rust/releases/download/vX.Y.Z/AppAuthRust-Apple-X.Y.Z.zip`.
+`https://github.com/ProjectFlora/NativeOIDC/releases/download/vX.Y.Z/NativeOIDC-Apple-X.Y.Z.zip`.
 
 The Apple jobs build and validate with the Xcode set by `XCODE_VERSION` in
 `release.yml` (a stable Xcode 26.x, since App Store Connect requires Xcode
@@ -88,7 +88,7 @@ Then the `publish` job:
 After the GitHub Release is created, the `publish_maven` job checks out the
 `vX.Y.Z` tag, builds the Android library, checks the signed publication with
 `scripts/check-android-maven-publication.sh`, and publishes
-`net.project-flora.appauth:appauth-rust-android:X.Y.Z` to Maven Central through
+`net.project-flora.nativeoidc:native-oidc-android:X.Y.Z` to Maven Central through
 the Central Portal (`publishAndReleaseToMavenCentral`). The candidate run
 and pull request CI run the same check on an unsigned publication.
 
@@ -148,7 +148,7 @@ with every release unless someone updates it.
 manifest that leads the Cargo version. Releases up to 0.6.0 were published
 while the repository was named `ProjectFlora/AppAuth-Rust`; the check also
 accepts their original asset URLs, which GitHub redirects after the rename
-([#146](https://github.com/ProjectFlora/AppAuth-Rust/issues/146)), so
+([#146](https://github.com/ProjectFlora/NativeOIDC/issues/146)), so
 renaming the repository does not invalidate the binary target on `main`.
 SPM consumers resolve released
 versions by tag and are unaffected; depending on the `main` branch through
@@ -229,6 +229,18 @@ git push origin :refs/tags/vX.Y.Z
 - **Publish run cancelled (same-version dispatch)**: if you accidentally dispatched another release candidate while a publish was queued, the pending publish may be cancelled without notice. Check the Actions tab for a cancelled run; if so, dispatch the publish again.
 
 ## Repository settings
+
+- The repository was renamed from `ProjectFlora/AppAuth-Rust` to
+  `ProjectFlora/NativeOIDC` for v0.7.0
+  ([#146](https://github.com/ProjectFlora/NativeOIDC/issues/146)). GitHub
+  redirects the former URL for git, the web, and release asset downloads,
+  and Swift packages pinned to v0.1.0 through v0.6.0 resolve through that
+  redirect. **Never create a new repository named `ProjectFlora/AppAuth-Rust`**:
+  doing so ends the redirect and breaks those consumers.
+
+- `release-consumer.yml` expects the release asset names and Maven
+  coordinates of v0.7.0 and later. Releases up to v0.6.0 used the former
+  names and cannot be revalidated with the current workflow.
 
 - The `publish` job needs `contents: write`. If tag rulesets protect `v*`,
   allow `github-actions[bot]` (the GitHub Actions app) to create those tags.

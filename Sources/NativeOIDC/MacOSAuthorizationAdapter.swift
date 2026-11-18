@@ -153,7 +153,7 @@
 
     private let callbackPath: String
     private let listener: NWListener
-    private let queue = DispatchQueue(label: "appauth-rust.loopback-listener")
+    private let queue = DispatchQueue(label: "native-oidc.loopback-listener")
     private var readyContinuation: CheckedContinuation<UInt16, any Error>?
     private var callbackContinuation: CheckedContinuation<String, any Error>?
     private var callbackResult: Result<String, any Error>?

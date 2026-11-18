@@ -43,15 +43,15 @@ jobs:
         run: |
           mkdir dist
           gh release download "v$RELEASE_VERSION" \
-            --pattern "AppAuthRust-Apple-$RELEASE_VERSION.zip" \
+            --pattern "NativeOIDC-Apple-$RELEASE_VERSION.zip" \
             --pattern SHA256SUMS \
             --dir dist
           cd dist
-          grep -F "  AppAuthRust-Apple-$RELEASE_VERSION.zip" SHA256SUMS | shasum -a 256 -c -
+          grep -F "  NativeOIDC-Apple-$RELEASE_VERSION.zip" SHA256SUMS | shasum -a 256 -c -
       - name: Validate the published Apple consumer package
         env:
           RELEASE_VERSION: ${{ inputs.version }}
-        run: scripts/check-apple-release-consumer.sh "dist/AppAuthRust-Apple-$RELEASE_VERSION.zip"
+        run: scripts/check-apple-release-consumer.sh "dist/NativeOIDC-Apple-$RELEASE_VERSION.zip"
 
   # Language-mode policy (Issue #107): the generated consumer package uses
   # swift-tools-version 6.0 and deliberately pins no language mode, so it
@@ -103,8 +103,8 @@ jobs:
       #
       # The consumer lives outside $GITHUB_WORKSPACE: SPM derives a root
       # package's identity from its directory name, and the workspace
-      # directory (`AppAuth-Rust`) would give the consumer the same identity
-      # (`appauth-rust`) as the dependency, so the dependency's products
+      # directory (`NativeOIDC`) would give the consumer the same identity
+      # (`native-oidc`) as the dependency, so the dependency's products
       # would not be found.
       - name: Create the SPM consumer package
         env:
@@ -140,14 +140,14 @@ jobs:
                   .executableTarget(
                       name: "Consumer",
                       dependencies: [
-                          .product(name: "AppAuthRust", package: "AppAuth-Rust"),
+                          .product(name: "NativeOIDC", package: "NativeOIDC"),
                       ]
                   ),
               ]
           )
           EOF
           cat > Sources/Consumer/Consumer.swift <<'EOF'
-          import AppAuthRust
+          import NativeOIDC
 
           enum ConsumerError: Error {
               case roundTripMismatch
@@ -228,11 +228,11 @@ jobs:
         run: |
           mkdir dist
           gh release download "v$RELEASE_VERSION" \
-            --pattern "appauth-rust-android-$RELEASE_VERSION.aar" \
+            --pattern "native-oidc-android-$RELEASE_VERSION.aar" \
             --pattern SHA256SUMS \
             --dir dist
           cd dist
-          grep -F "  appauth-rust-android-$RELEASE_VERSION.aar" SHA256SUMS | shasum -a 256 -c -
+          grep -F "  native-oidc-android-$RELEASE_VERSION.aar" SHA256SUMS | shasum -a 256 -c -
       - name: Run Android release consumer on an emulator
         env:
           RELEASE_VERSION: ${{ inputs.version }}
@@ -243,7 +243,7 @@ jobs:
           target: google_apis_playstore
           disable-linux-hw-accel: false
           disable-animations: true
-          script: scripts/check-android-release-consumer.sh "dist/appauth-rust-android-$RELEASE_VERSION.aar"
+          script: scripts/check-android-release-consumer.sh "dist/native-oidc-android-$RELEASE_VERSION.aar"
 
   android_maven:
     name: Validate published Android consumer (Maven Central)
@@ -299,10 +299,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           gh release download "v$env:RELEASE_VERSION" `
-            --pattern "appauth-rust-windows-$env:RELEASE_VERSION.zip" `
+            --pattern "native-oidc-windows-$env:RELEASE_VERSION.zip" `
             --pattern SHA256SUMS `
             --dir dist
-          $asset = "appauth-rust-windows-$env:RELEASE_VERSION.zip"
+          $asset = "native-oidc-windows-$env:RELEASE_VERSION.zip"
           $expected = ((Select-String "dist/SHA256SUMS" -Pattern "  $([regex]::Escape($asset))$").Line -split '\s+')[0]
           $actual = (Get-FileHash "dist/$asset" -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actual -ne $expected) {
@@ -312,4 +312,4 @@ jobs:
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ inputs.version }}
-        run: scripts/check-windows-release-consumer.ps1 -Package "dist/appauth-rust-windows-$env:RELEASE_VERSION.zip"
+        run: scripts/check-windows-release-consumer.ps1 -Package "dist/native-oidc-windows-$env:RELEASE_VERSION.zip"

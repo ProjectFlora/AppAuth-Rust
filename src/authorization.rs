@@ -240,7 +240,7 @@ struct DiscoveryMetadata {
 /// Parameters used to create an Authorization Code + PKCE request.
 ///
 /// ```
-/// use appauth_rust::{AuthorizationRequest, ServiceConfiguration};
+/// use native_oidc::{AuthorizationRequest, ServiceConfiguration};
 /// use url::Url;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {

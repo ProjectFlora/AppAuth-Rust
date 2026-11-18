@@ -7,25 +7,25 @@ cd "$repo_root"
 output_dir=target/uniffi
 scripts/generate-bindings.sh "$output_dir"
 xcrun swift-format lint --strict \
-    Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
+    Sources/NativeOIDC/IOSAuthorizationAdapter.swift \
     native/apple/IOSAuthorizationFlowSmoke.swift \
-    Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
+    Sources/NativeOIDC/MacOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
-    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift \
+    Sources/NativeOIDC/URLSessionNativeHttpTransport.swift \
     native/apple/MacOSAuthorizationFlowSmoke.swift
 
-swift_file="$output_dir/swift/appauth_rust.swift"
-module_map="$output_dir/swift/appauth_rustFFI.modulemap"
+swift_file="$output_dir/swift/native_oidc.swift"
+module_map="$output_dir/swift/native_oidcFFI.modulemap"
 swiftc \
     -target arm64-apple-ios18.0 \
     -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
     -Xcc "-fmodule-map-file=$module_map" \
     -typecheck \
     "$swift_file" \
-    Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
+    Sources/NativeOIDC/IOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
-    Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
-    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift
+    Sources/NativeOIDC/MacOSAuthorizationAdapter.swift \
+    Sources/NativeOIDC/URLSessionNativeHttpTransport.swift
 
 swiftc \
     -target arm64-apple-macosx15.0 \
@@ -33,10 +33,10 @@ swiftc \
     -Xcc "-fmodule-map-file=$module_map" \
     -typecheck \
     "$swift_file" \
-    Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
+    Sources/NativeOIDC/IOSAuthorizationAdapter.swift \
     native/apple/MacOSMockOAuthProvider.swift \
-    Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
-    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift
+    Sources/NativeOIDC/MacOSAuthorizationAdapter.swift \
+    Sources/NativeOIDC/URLSessionNativeHttpTransport.swift
 
 mkdir -p target/apple
 case "$(uname -m)" in
@@ -54,13 +54,13 @@ swiftc \
     -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
     -Xcc "-fmodule-map-file=$module_map" \
     -L target/debug \
-    -lappauth_rust \
+    -lnative_oidc \
     -Xlinker -rpath \
     -Xlinker "$repo_root/target/debug" \
     -o target/apple/mac-authorization-flow-smoke \
     "$swift_file" \
     native/apple/MacOSMockOAuthProvider.swift \
-    Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
-    Sources/AppAuthRust/URLSessionNativeHttpTransport.swift \
+    Sources/NativeOIDC/MacOSAuthorizationAdapter.swift \
+    Sources/NativeOIDC/URLSessionNativeHttpTransport.swift \
     native/apple/MacOSAuthorizationFlowSmoke.swift
 target/apple/mac-authorization-flow-smoke

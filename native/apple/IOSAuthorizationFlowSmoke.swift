@@ -67,7 +67,7 @@
         )
         let options = FfiAuthorizationOptions(
           clientId: "ios-smoke-client",
-          redirectUri: "appauth-smoke://oauth/callback",
+          redirectUri: "nativeoidc-smoke://oauth/callback",
           scopes: ["profile"],
           additionalParameters: [],
           additionalTokenParameters: []

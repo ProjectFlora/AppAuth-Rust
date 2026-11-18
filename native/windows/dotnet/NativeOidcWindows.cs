@@ -4,10 +4,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 
-namespace ProjectFlora.AppAuthRust;
+namespace ProjectFlora.NativeOidc;
 
 /// <summary>Runs Windows browser authorization through the native Rust library.</summary>
-public static class AppAuthWindows
+public static class NativeOidcWindows
 {
     /// <summary>
     /// Runs authorization on a worker thread and returns serialized authentication state.
@@ -185,54 +185,54 @@ public static class AppAuthWindows
 
     private static class NativeMethods
     {
-        private const string Library = "appauth_rust.dll";
+        private const string Library = "native_oidc.dll";
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_cancellation_new")]
+            EntryPoint = "native_oidc_windows_cancellation_new")]
         internal static extern IntPtr CreateCancellation();
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_cancellation_cancel")]
+            EntryPoint = "native_oidc_windows_cancellation_cancel")]
         internal static extern void Cancel(CancellationHandle handle);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_cancellation_free")]
+            EntryPoint = "native_oidc_windows_cancellation_free")]
         private static extern void FreeCancellation(IntPtr handle);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_authorize")]
+            EntryPoint = "native_oidc_windows_authorize")]
         internal static extern IntPtr Authorize(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string requestJson,
             CancellationHandle cancellation);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_refresh")]
+            EntryPoint = "native_oidc_windows_refresh")]
         internal static extern IntPtr Refresh(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string requestJson,
             CancellationHandle cancellation);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_end_session")]
+            EntryPoint = "native_oidc_windows_end_session")]
         internal static extern IntPtr EndSession(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string requestJson,
             CancellationHandle cancellation);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_revoke")]
+            EntryPoint = "native_oidc_windows_revoke")]
         internal static extern IntPtr Revoke(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string requestJson,
             CancellationHandle cancellation);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_authorization_result_status")]
+            EntryPoint = "native_oidc_windows_authorization_result_status")]
         internal static extern int ResultStatus(AuthorizationResultHandle result);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_authorization_result_value")]
+            EntryPoint = "native_oidc_windows_authorization_result_value")]
         internal static extern IntPtr ResultValue(AuthorizationResultHandle result);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
-            EntryPoint = "appauth_windows_authorization_result_free")]
+            EntryPoint = "native_oidc_windows_authorization_result_free")]
         private static extern void FreeResult(IntPtr result);
 
         internal sealed class CancellationHandle : SafeHandleZeroOrMinusOneIsInvalid

@@ -1,6 +1,6 @@
 # Windows desktop adapter
 
-AppAuth-Rust is an independent project by ProjectFlora. It is not affiliated
+NativeOIDC is an independent project by ProjectFlora. It is not affiliated
 with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth
 projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID
 Foundation.
@@ -9,10 +9,10 @@ The Windows adapter is a blocking C ABI over the shared Rust authorization
 core. It exposes authorization, token refresh, OIDC end-session, and token
 revocation. Browser flows open in the system browser, and loopback callbacks
 arrive on a dynamically allocated IPv4 port. Build
-the `appauth-rust` `cdylib` for `x86_64-pc-windows-msvc` and include
-[`include/appauth_windows.h`](include/appauth_windows.h) from C or C++.
+the `native-oidc` `cdylib` for `x86_64-pc-windows-msvc` and include
+[`include/native_oidc_windows.h`](include/native_oidc_windows.h) from C or C++.
 
-Call `appauth_windows_authorize` on a worker thread. Its request is a
+Call `native_oidc_windows_authorize` on a worker thread. Its request is a
 NUL-terminated UTF-8 JSON object. Use either `issuer` to discover provider
 metadata, or explicit `authorization_endpoint` and `token_endpoint` values.
 With explicit endpoints, supply both `issuer` and `jwks_uri` to enable OIDC ID
@@ -45,7 +45,7 @@ UTF-8 error messages.
 ## C++ usage
 
 ```cpp
-#include "appauth_windows.h"
+#include "native_oidc_windows.h"
 #include <string>
 #include <thread>
 
@@ -55,25 +55,25 @@ const char *requestJsonUtf8 = R"({
   "redirect_uri": "http://127.0.0.1/oauth/callback",
   "scopes": ["openid", "profile"]
 })";
-auto *cancellation = appauth_windows_cancellation_new();
-int resultStatus = APPAUTH_WINDOWS_AUTHORIZATION_ERROR;
+auto *cancellation = native_oidc_windows_cancellation_new();
+int resultStatus = NATIVE_OIDC_WINDOWS_AUTHORIZATION_ERROR;
 std::string resultValue;
 std::thread worker([&] {
-    auto *result = appauth_windows_authorize(requestJsonUtf8, cancellation);
-    resultStatus = appauth_windows_authorization_result_status(result);
-    const auto *value = appauth_windows_authorization_result_value(result);
+    auto *result = native_oidc_windows_authorize(requestJsonUtf8, cancellation);
+    resultStatus = native_oidc_windows_authorization_result_status(result);
+    const auto *value = native_oidc_windows_authorization_result_value(result);
     if (value != nullptr) {
         resultValue = value;
     }
-    appauth_windows_authorization_result_free(result);
+    native_oidc_windows_authorization_result_free(result);
 });
 // Call cancellation_cancel from another thread to cancel the operation.
 worker.join();
-appauth_windows_cancellation_free(cancellation);
+native_oidc_windows_cancellation_free(cancellation);
 ```
 
 To cancel while the call is running, invoke
-`appauth_windows_cancellation_cancel(cancellation)` from another thread. After
+`native_oidc_windows_cancellation_cancel(cancellation)` from another thread. After
 joining, inspect `resultStatus` and `resultValue` on the caller thread.
 
 ## .NET interop
@@ -83,21 +83,21 @@ strings explicitly and use `IntPtr` for the opaque handles. For example, with
 C#:
 
 ```csharp
-[DllImport("appauth_rust.dll", CallingConvention = CallingConvention.Cdecl,
-    EntryPoint = "appauth_windows_authorize")]
+[DllImport("native_oidc.dll", CallingConvention = CallingConvention.Cdecl,
+    EntryPoint = "native_oidc_windows_authorize")]
 internal static extern IntPtr Authorize(
     [MarshalAs(UnmanagedType.LPUTF8Str)] string requestJson,
     IntPtr cancellation);
 ```
 
-[`dotnet/AppAuthWindows.cs`](dotnet/AppAuthWindows.cs) provides an async C#
+[`dotnet/NativeOidcWindows.cs`](dotnet/NativeOidcWindows.cs) provides an async C#
 wrapper that runs the blocking call on a worker and connects a
 `CancellationToken` to the native cancellation handle. The wrapper project
-targets .NET Standard 2.1. Add the wrapper and `appauth_rust.dll` to a
+targets .NET Standard 2.1. Add the wrapper and `native_oidc.dll` to a
 compatible Windows .NET application:
 
 ```csharp
-var stateJson = await AppAuthWindows.AuthorizeAsync(requestJson, cancellationToken);
+var stateJson = await NativeOidcWindows.AuthorizeAsync(requestJson, cancellationToken);
 ```
 
 VB.NET can call the same C ABI with P/Invoke.
@@ -108,7 +108,7 @@ release; review the matrix and validation targets for every release.
 
 ## Token refresh
 
-Call `appauth_windows_refresh` on a worker thread with the same cancellation
+Call `native_oidc_windows_refresh` on a worker thread with the same cancellation
 handle lifecycle as authorization. Its JSON request uses either `issuer` to
 discover provider metadata, or explicit `authorization_endpoint` and
 `token_endpoint` values. With explicit endpoints, supply both `issuer` and
@@ -134,15 +134,15 @@ authentication state from a previous successful result:
 The state must contain a non-empty refresh token. `additional_parameters` is
 an optional array of `{ "name", "value" }` objects added to the token request;
 names must be unique. The returned status and value use
-`appauth_windows_authorization_result_*`, and a successful result value is the
+`native_oidc_windows_authorization_result_*`, and a successful result value is the
 updated serialized authentication state, which must be persisted so later
 refreshes present the current refresh token. A failed or cancelled refresh
 leaves the previous state valid. The .NET wrapper exposes the same operation as
-`AppAuthWindows.RefreshAsync`.
+`NativeOidcWindows.RefreshAsync`.
 
 ## End-session
 
-Call `appauth_windows_end_session` on a worker thread with the same
+Call `native_oidc_windows_end_session` on a worker thread with the same
 cancellation handle lifecycle as authorization. Its JSON request uses either
 `issuer` to discover the provider's `end_session_endpoint`, or explicit
 `authorization_endpoint`, `token_endpoint`, and `end_session_endpoint` values.
@@ -172,14 +172,14 @@ callback; the successful result value is a JSON object with the validated
 }
 ```
 
-The returned status and value use `appauth_windows_authorization_result_*`.
+The returned status and value use `native_oidc_windows_authorization_result_*`.
 End-session does not delete local authentication state: delete local state
 separately after logout. The .NET wrapper exposes the same operation as
-`AppAuthWindows.EndSessionAsync`.
+`NativeOidcWindows.EndSessionAsync`.
 
 ## Token revocation
 
-Call `appauth_windows_revoke` on a worker thread with the same cancellation
+Call `native_oidc_windows_revoke` on a worker thread with the same cancellation
 handle lifecycle as authorization. Its JSON request uses either `issuer` to
 discover the optional `revocation_endpoint`, or explicit authorization,
 token, and revocation endpoints. The latter is useful when discovery is not
@@ -198,7 +198,7 @@ available:
 
 `token_type_hint` may be `access_token` or `refresh_token`; omit it when the
 provider does not require a hint. The returned status and value use
-`appauth_windows_authorization_result_*`, and a successful result has an empty
+`native_oidc_windows_authorization_result_*`, and a successful result has an empty
 value. Revocation does not delete local authentication state: delete local
 state even when the network request fails or is cancelled. The .NET wrapper
-exposes the same operation as `AppAuthWindows.RevokeAsync`.
+exposes the same operation as `NativeOidcWindows.RevokeAsync`.

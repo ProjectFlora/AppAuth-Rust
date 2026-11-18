@@ -59,7 +59,7 @@
 #
 # Environment:
 #   GH_TOKEN                  GitHub token (set in CI); unauthenticated otherwise
-#   GITHUB_REPOSITORY         defaults to ProjectFlora/AppAuth-Rust
+#   GITHUB_REPOSITORY         defaults to ProjectFlora/NativeOIDC
 #   GITHUB_API_BASE           defaults to https://api.github.com (tests)
 #   MAVEN_CENTRAL_BASE_URL    defaults to https://repo.maven.apache.org/maven2
 #   SKIP_PUBLICATION_CHECK=1  skip the check (offline local use)
@@ -82,23 +82,23 @@ if [[ "${SKIP_PUBLICATION_CHECK:-}" == "1" ]]; then
 fi
 
 api_base="${GITHUB_API_BASE:-https://api.github.com}"
-repo="${GITHUB_REPOSITORY:-ProjectFlora/AppAuth-Rust}"
+repo="${GITHUB_REPOSITORY:-ProjectFlora/NativeOIDC}"
 central_base="${MAVEN_CENTRAL_BASE_URL:-https://repo.maven.apache.org/maven2}"
-base_path="net/project-flora/appauth/appauth-rust-android/${version}"
-pom_url="${central_base}/${base_path}/appauth-rust-android-${version}.pom"
+base_path="net/project-flora/nativeoidc/native-oidc-android/${version}"
+pom_url="${central_base}/${base_path}/native-oidc-android-${version}.pom"
 # The full publication, the same file set scripts/verify-android-maven-consumer.sh
 # gates on (Issue #131).
 artifact_files=(
-    "appauth-rust-android-${version}.aar"
-    "appauth-rust-android-${version}.pom"
-    "appauth-rust-android-${version}.module"
-    "appauth-rust-android-${version}-sources.jar"
-    "appauth-rust-android-${version}-javadoc.jar"
-    "appauth-rust-android-${version}.aar.asc"
-    "appauth-rust-android-${version}.pom.asc"
-    "appauth-rust-android-${version}.module.asc"
-    "appauth-rust-android-${version}-sources.jar.asc"
-    "appauth-rust-android-${version}-javadoc.jar.asc"
+    "native-oidc-android-${version}.aar"
+    "native-oidc-android-${version}.pom"
+    "native-oidc-android-${version}.module"
+    "native-oidc-android-${version}-sources.jar"
+    "native-oidc-android-${version}-javadoc.jar"
+    "native-oidc-android-${version}.aar.asc"
+    "native-oidc-android-${version}.pom.asc"
+    "native-oidc-android-${version}.module.asc"
+    "native-oidc-android-${version}-sources.jar.asc"
+    "native-oidc-android-${version}-javadoc.jar.asc"
 )
 
 # GET a REST endpoint, writing the body to $2 and printing the HTTP status

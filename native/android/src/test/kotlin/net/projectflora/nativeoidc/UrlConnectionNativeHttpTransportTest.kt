@@ -1,4 +1,4 @@
-package net.projectflora.appauth
+package net.projectflora.nativeoidc
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -10,10 +10,10 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uniffi.appauth_rust.FfiCancellationHandle
-import uniffi.appauth_rust.FfiException
-import uniffi.appauth_rust.FfiHttpRequest
-import uniffi.appauth_rust.NoHandle
+import uniffi.native_oidc.FfiCancellationHandle
+import uniffi.native_oidc.FfiException
+import uniffi.native_oidc.FfiHttpRequest
+import uniffi.native_oidc.NoHandle
 import java.io.BufferedReader
 import java.io.IOException
 import java.net.InetAddress

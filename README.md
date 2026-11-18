@@ -1,4 +1,4 @@
-# AppAuth-Rust
+# NativeOIDC
 
 Rust client library for OAuth 2.0 and OpenID Connect for native apps. Its
 feature scope was planned by comparison with
@@ -6,11 +6,11 @@ feature scope was planned by comparison with
 [AppAuth-Android](https://github.com/openid/AppAuth-Android), which serve as
 reference implementations only (see [FEATURE_MATRIX.md](FEATURE_MATRIX.md)).
 
-AppAuth-Rust is an independent project by ProjectFlora. It is not affiliated
+NativeOIDC is an independent project by ProjectFlora. It is not affiliated
 with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth
 projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID
-Foundation. The project will be renamed NativeOIDC
-([#146](https://github.com/ProjectFlora/AppAuth-Rust/issues/146)).
+Foundation. Up to v0.6.0 the project was named AppAuth-Rust; see
+[Migrating from AppAuth-Rust](#migrating-from-appauth-rust).
 
 See the [documentation index](docs/README.md) for platform installation guides,
 the shared authentication-state lifecycle, and public API coverage by language.
@@ -160,7 +160,7 @@ before the 1.0.0 tag; the pre-1.0 release policy in
 
 ## Native bindings
 
-- The UniFFI 0.32.2 API is exposed through `appauth_rust::ffi`. Generate Swift
+- The UniFFI 0.32.2 API is exposed through `native_oidc::ffi`. Generate Swift
   and Kotlin source with `scripts/generate-bindings.sh`; generated sources go
   under `target/uniffi` by default and should not be hand-edited.
 - Native callers provide a `NativeHttpTransport` implementation. It must not
@@ -173,7 +173,7 @@ before the 1.0.0 tag; the pre-1.0 release policy in
   [`native/windows/README.md`](native/windows/README.md).
 - Generate the public Rust API reference locally with
   `cargo doc --locked --no-deps`; the HTML output is written to
-  `target/doc/appauth_rust/index.html`.
+  `target/doc/native_oidc/index.html`.
 - `examples/manual_authorization.rs` shows the shared Rust-core flow. It prints
   the authorization URL and asks the caller to paste the redirect URL; native
   applications should use the platform adapters for browser launch and
@@ -185,19 +185,19 @@ GitHub Releases on all platforms. The package-channel evaluation recorded in
 [docs/distribution-channels.md](docs/distribution-channels.md) (issue #44)
 adopts Maven Central for Android and Swift Package Manager for Apple, with the
 GitHub Release assets remaining the fallback channel. Swift Package Manager is
-available from v0.5.0 ([#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82));
+available from v0.5.0 ([#82](https://github.com/ProjectFlora/NativeOIDC/issues/82));
 Maven Central is available from v0.6.0
-([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)). Carthage
-was evaluated and declined. The published [v0.1.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.1.0) contains the
+([#81](https://github.com/ProjectFlora/NativeOIDC/issues/81)). Carthage
+was evaluated and declined. The published [v0.1.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.1.0) contains the
 Apple XCFramework, Android AAR, API reference, and checksums; it predates the
-Windows adapter. The published [v0.2.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.2.0) adds the Windows DLL/C ABI package with
-C/C++ and .NET interop files. The published [v0.3.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.3.0)
+Windows adapter. The published [v0.2.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.2.0) adds the Windows DLL/C ABI package with
+C/C++ and .NET interop files. The published [v0.3.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.3.0)
 adds token revocation to the Rust, UniFFI, and Windows C ABI public-client
-APIs. The published [v0.4.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.4.0)
+APIs. The published [v0.4.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.4.0)
 adds token refresh and OIDC end-session to the Windows C ABI and .NET
-wrapper. The published [v0.5.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.5.0)
+wrapper. The published [v0.5.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.5.0)
 is the first release distributed through Swift Package Manager. The published
-[v0.6.0 release](https://github.com/ProjectFlora/AppAuth-Rust/releases/tag/v0.6.0)
+[v0.6.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.6.0)
 publishes the Android library to Maven Central.
 The release workflow is dispatched manually with a SemVer version that matches
 the crate version. A run without `publish` validates and packages a release
@@ -208,6 +208,36 @@ checksums. See [Releasing](docs/releasing.md) for the maintainer procedure. Rele
 documented interoperability or support-policy gaps; see `CHANGELOG.md` and
 `ROADMAP.md`.
 
+## Migrating from AppAuth-Rust
+
+The project was named AppAuth-Rust up to v0.6.0 and is named NativeOIDC from
+v0.7.0 ([#146](https://github.com/ProjectFlora/NativeOIDC/issues/146)). The
+API and behavior are unchanged by the rename, and serialized authentication
+state stays compatible; only the names below change. Releases v0.1.0 through
+v0.6.0 keep their original names and asset file names. The Android library
+was never published to Maven Central under the former coordinates and will
+not be. GitHub redirects the former repository URL, but update it anyway.
+
+| Item | Up to v0.6.0 (AppAuth-Rust) | From v0.7.0 (NativeOIDC) |
+| --- | --- | --- |
+| Repository and SPM package URL | `https://github.com/ProjectFlora/AppAuth-Rust` | `https://github.com/ProjectFlora/NativeOIDC` |
+| SPM product and Swift module | `AppAuthRust` (`import AppAuthRust`) | `NativeOIDC` (`import NativeOIDC`) |
+| Apple release archive | `AppAuthRust-Apple-X.Y.Z.zip` with `AppAuthRust.xcframework` and `appauth_rust.swift` | `NativeOIDC-Apple-X.Y.Z.zip` with `NativeOIDC.xcframework` and `native_oidc.swift` |
+| Android Maven coordinates | `net.project-flora.appauth:appauth-rust-android` (never published) | `net.project-flora.nativeoidc:native-oidc-android` |
+| Android release AAR | `appauth-rust-android-X.Y.Z.aar` | `native-oidc-android-X.Y.Z.aar` |
+| Kotlin packages | `net.projectflora.appauth`, `uniffi.appauth_rust` | `net.projectflora.nativeoidc`, `uniffi.native_oidc` |
+| Android callback activity in the app manifest | `net.projectflora.appauth.AndroidAuthorizationCallbackActivity` | `net.projectflora.nativeoidc.AndroidAuthorizationCallbackActivity` |
+| Windows release archive | `appauth-rust-windows-X.Y.Z.zip` | `native-oidc-windows-X.Y.Z.zip` |
+| Windows DLL and import library | `appauth_rust.dll`, `appauth_rust.dll.lib` | `native_oidc.dll`, `native_oidc.dll.lib` |
+| C header and identifiers | `appauth_windows.h`; `appauth_windows_*`, `APPAUTH_WINDOWS_*`, `AppAuthWindows*` | `native_oidc_windows.h`; `native_oidc_windows_*`, `NATIVE_OIDC_WINDOWS_*`, `NativeOidcWindows*` |
+| .NET wrapper | `ProjectFlora.AppAuthRust.AppAuthWindows` in `AppAuthWindows.cs` | `ProjectFlora.NativeOidc.NativeOidcWindows` in `NativeOidcWindows.cs` |
+| Rust crate | `appauth-rust` (`appauth_rust`) | `native-oidc` (`native_oidc`) |
+
+For SPM, change the package URL and the product name together, for example
+`.product(name: "NativeOIDC", package: "NativeOIDC")`. Because the 0.x minor
+release is breaking, `.upToNextMinor(from: "0.6.0")` does not move to v0.7.0
+on its own.
+
 ## Download and verify v0.6.0
 
 The following versioned assets are available from GitHub Releases, independently
@@ -215,17 +245,17 @@ of the temporary CI validation artifacts:
 
 | Asset | Download |
 | --- | --- |
-| Apple XCFramework and generated Swift API | [AppAuthRust-Apple-0.6.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.6.0/AppAuthRust-Apple-0.6.0.zip) |
-| Android AAR | [appauth-rust-android-0.6.0.aar](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.6.0/appauth-rust-android-0.6.0.aar) |
-| Windows DLL/C ABI and C++/.NET interop files | [appauth-rust-windows-0.6.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.6.0/appauth-rust-windows-0.6.0.zip) |
-| Rust API reference | [AppAuthRust-API-Docs-0.6.0.zip](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.6.0/AppAuthRust-API-Docs-0.6.0.zip) |
-| SHA-256 checksums for all four assets | [SHA256SUMS](https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.6.0/SHA256SUMS) |
+| Apple XCFramework and generated Swift API | [NativeOIDC-Apple-0.6.0.zip](https://github.com/ProjectFlora/NativeOIDC/releases/download/v0.6.0/NativeOIDC-Apple-0.6.0.zip) |
+| Android AAR | [native-oidc-android-0.6.0.aar](https://github.com/ProjectFlora/NativeOIDC/releases/download/v0.6.0/native-oidc-android-0.6.0.aar) |
+| Windows DLL/C ABI and C++/.NET interop files | [native-oidc-windows-0.6.0.zip](https://github.com/ProjectFlora/NativeOIDC/releases/download/v0.6.0/native-oidc-windows-0.6.0.zip) |
+| Rust API reference | [NativeOIDC-API-Docs-0.6.0.zip](https://github.com/ProjectFlora/NativeOIDC/releases/download/v0.6.0/NativeOIDC-API-Docs-0.6.0.zip) |
+| SHA-256 checksums for all four assets | [SHA256SUMS](https://github.com/ProjectFlora/NativeOIDC/releases/download/v0.6.0/SHA256SUMS) |
 
 Download the desired asset and `SHA256SUMS` from the same release. For example,
 from the directory containing the Android AAR and checksum file:
 
 ```sh
-grep -F '  appauth-rust-android-0.6.0.aar' SHA256SUMS | shasum -a 256 -c -
+grep -F '  native-oidc-android-0.6.0.aar' SHA256SUMS | shasum -a 256 -c -
 ```
 
 Use the exact downloaded asset name when verifying another package. GitHub
@@ -250,20 +280,20 @@ For a downloaded candidate, verify its SHA-256 entry before using it, then run
 the corresponding consumer check on its host platform:
 
 ```sh
-grep -F '  AppAuthRust-Apple-<version>.zip' SHA256SUMS | shasum -a 256 -c -
-scripts/check-apple-release-consumer.sh AppAuthRust-Apple-<version>.zip
+grep -F '  NativeOIDC-Apple-<version>.zip' SHA256SUMS | shasum -a 256 -c -
+scripts/check-apple-release-consumer.sh NativeOIDC-Apple-<version>.zip
 ```
 
 ```sh
-grep -F '  appauth-rust-android-<version>.aar' SHA256SUMS | shasum -a 256 -c -
-scripts/check-android-release-consumer.sh appauth-rust-android-<version>.aar
+grep -F '  native-oidc-android-<version>.aar' SHA256SUMS | shasum -a 256 -c -
+scripts/check-android-release-consumer.sh native-oidc-android-<version>.aar
 ```
 
 ```powershell
-$expected = ((Select-String SHA256SUMS -Pattern '  appauth-rust-windows-<version>\.zip$').Line -split '\s+')[0]
-$actual = (Get-FileHash appauth-rust-windows-<version>.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+$expected = ((Select-String SHA256SUMS -Pattern '  native-oidc-windows-<version>\.zip$').Line -split '\s+')[0]
+$actual = (Get-FileHash native-oidc-windows-<version>.zip -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -ne $expected) { throw 'SHA-256 mismatch' }
-scripts/check-windows-release-consumer.ps1 -Package appauth-rust-windows-<version>.zip
+scripts/check-windows-release-consumer.ps1 -Package native-oidc-windows-<version>.zip
 ```
 
 The PowerShell verification parses the portable `shasum`-format checksum file
@@ -277,13 +307,13 @@ host-side smoke of the generated API, and builds for the iOS simulator.
 
 ## Apple adapters
 
-- `Sources/AppAuthRust/IOSAuthorizationAdapter.swift` runs authorization in
+- `Sources/NativeOIDC/IOSAuthorizationAdapter.swift` runs authorization in
   `ASWebAuthenticationSession`; HTTPS callbacks use Apple's verified callback
   matcher, and custom URI schemes are supported as a fallback. The host app
   must configure a `webcredentials:<host>` associated domain or register its
   custom URL scheme, and provide an
   `ASWebAuthenticationPresentationContextProviding` implementation.
-- `Sources/AppAuthRust/MacOSAuthorizationAdapter.swift` accepts a redirect
+- `Sources/NativeOIDC/MacOSAuthorizationAdapter.swift` accepts a redirect
   template such as `http://127.0.0.1/oauth/callback`, replaces its port with a
   dynamically allocated port, and binds the listener only to IPv4 loopback.
   Unexpected paths receive 404 while the adapter continues waiting.
@@ -303,8 +333,8 @@ host-side smoke of the generated API, and builds for the iOS simulator.
 
 - Build a package for a specific version with
   `scripts/package-apple-xcframework.sh 0.6.0`. It creates
-  `target/apple/release-package/AppAuthRust-Apple-0.6.0.zip`, containing an
-  `AppAuthRust.xcframework` with static Rust libraries for iOS device,
+  `target/apple/release-package/NativeOIDC-Apple-0.6.0.zip`, containing an
+  `NativeOIDC.xcframework` with static Rust libraries for iOS device,
   iOS simulator, and universal macOS, the generated Swift API source, the
   platform adapters (the same sources the Swift package target compiles),
   and an installation guide.
@@ -324,21 +354,21 @@ host-side smoke of the generated API, and builds for the iOS simulator.
 Starting with v0.5.0, the Apple package is also available through Swift
 Package Manager. SPM is the recommended installation method; it resolves the
 same XCFramework published in the GitHub Release and compiles the generated
-Swift API and the platform adapters as part of the `AppAuthRust` library
+Swift API and the platform adapters as part of the `NativeOIDC` library
 product. The package supports iOS/iPadOS 18 and later and macOS 15 and later.
 
 In Xcode, choose **File > Add Package Dependencies...**, enter
-`https://github.com/ProjectFlora/AppAuth-Rust`, set **Dependency Rule** to
-**Up to Next Minor Version** from `0.6.0`, and add the `AppAuthRust` library
+`https://github.com/ProjectFlora/NativeOIDC`, set **Dependency Rule** to
+**Up to Next Minor Version** from `0.6.0`, and add the `NativeOIDC` library
 to your app target.
 
 In a `Package.swift` manifest, add the package dependency and the
-`AppAuthRust` product to your target:
+`NativeOIDC` product to your target:
 
 ```swift
 dependencies: [
     .package(
-        url: "https://github.com/ProjectFlora/AppAuth-Rust",
+        url: "https://github.com/ProjectFlora/NativeOIDC",
         .upToNextMinor(from: "0.6.0")
     ),
 ],
@@ -346,7 +376,7 @@ targets: [
     .target(
         name: "MyApp",
         dependencies: [
-            .product(name: "AppAuthRust", package: "AppAuth-Rust"),
+            .product(name: "NativeOIDC", package: "NativeOIDC"),
         ]
     ),
 ],
@@ -355,7 +385,7 @@ targets: [
 Pin to a minor version while the project is pre-1.0: 0.x minor releases may
 contain breaking API changes (see the
 [pre-1.0 release policy](ROADMAP.md#pre-10-release-policy)). Then
-`import AppAuthRust` in your Swift code. With SPM, skip the manual XCFramework
+`import NativeOIDC` in your Swift code. With SPM, skip the manual XCFramework
 and Swift source steps in
 [Swift XCFramework installation](docs/swift-xcframework.md); its callback
 configuration still applies.
@@ -383,7 +413,7 @@ that may not match the newer Swift sources.
   the registered custom-scheme fallback.
 - Declare both registered redirect URIs with the authorization server. The
   host app must register
-  `net.projectflora.appauth.AndroidAuthorizationCallbackActivity` with
+  `net.projectflora.nativeoidc.AndroidAuthorizationCallbackActivity` with
   `android:exported="true"` and browsable intent filters for those URIs. Set
   `android:autoVerify="true"` on the HTTPS filter and host the matching
   `assetlinks.json` file. The adapter ignores callbacks that do not match the
@@ -394,7 +424,7 @@ that may not match the newer Swift sources.
 
   ```xml
   <activity
-      android:name="net.projectflora.appauth.AndroidAuthorizationCallbackActivity"
+      android:name="net.projectflora.nativeoidc.AndroidAuthorizationCallbackActivity"
       android:exported="true"
       android:noHistory="true">
       <intent-filter android:autoVerify="true">
@@ -447,22 +477,22 @@ that may not match the newer Swift sources.
   The AAR includes Rust shared libraries for `arm64-v8a` and `x86_64`; CI
   verifies both entries and uploads the AAR as a workflow artifact. The
   current output is
-  `native/android/build/outputs/aar/appauth-rust-android-release.aar`.
+  `native/android/build/outputs/aar/native-oidc-android-release.aar`.
 - Starting with v0.6.0, releases are also published to Maven Central
-  ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)). With
+  ([#81](https://github.com/ProjectFlora/NativeOIDC/issues/81)). With
   `mavenCentral()` in the repositories, one dependency brings in the AAR and
   its runtime dependencies (jna, kotlinx-coroutines-android, and
   androidx.browser):
 
   ```kotlin
   dependencies {
-      implementation("net.project-flora.appauth:appauth-rust-android:<version>")
+      implementation("net.project-flora.nativeoidc:native-oidc-android:<version>")
   }
   ```
 
   Earlier versions are available only as GitHub Release assets, as described
   in the next item.
-- Download `appauth-rust-android-0.6.0.aar` from the
+- Download `native-oidc-android-0.6.0.aar` from the
   [published release](#download-and-verify-v060), verify its checksum, and copy
   it into the Android app's `libs` directory.
   Because a raw AAR has no dependency metadata, also declare the runtime
@@ -470,7 +500,7 @@ that may not match the newer Swift sources.
 
   ```kotlin
   dependencies {
-      implementation(files("libs/appauth-rust-android-0.6.0.aar"))
+      implementation(files("libs/native-oidc-android-0.6.0.aar"))
       implementation("net.java.dev.jna:jna:5.12.0@aar")
       implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
       implementation("androidx.browser:browser:1.8.0")
@@ -478,7 +508,7 @@ that may not match the newer Swift sources.
   ```
 
 - The CI `android-aar` artifact uses the build output name
-  `appauth-rust-android-release.aar` and expires after 14 days. The versioned
+  `native-oidc-android-release.aar` and expires after 14 days. The versioned
   GitHub Release AAR and `SHA256SUMS` are the persistent distribution artifacts.
 - Android authorization through a Custom Tab, callback activity, and code
   exchange is exercised against a local mock provider on an API 28 emulator.
@@ -537,7 +567,7 @@ that may not match the newer Swift sources.
   and Windows release target. These checks do not package release artifacts or
   exercise authorization flows on devices.
 - **Crate boundary:** Keep the protocol implementation in the single
-  `appauth-rust` Rust crate. Swift and Kotlin adapters are native-language
+  `native-oidc` Rust crate. Swift and Kotlin adapters are native-language
   packages; introduce a Cargo workspace only if a separate Rust crate is
   needed for bindings or distribution.
 

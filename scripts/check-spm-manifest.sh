@@ -18,9 +18,10 @@ set -euo pipefail
 # not exist yet).
 #
 # Releases up to 0.6.0 were published while the repository was named
-# ProjectFlora/AppAuth-Rust (Issue #146). Their assets keep that URL, which
-# GitHub redirects after the rename, so the check also accepts it for those
-# releases whatever the current repository name is.
+# ProjectFlora/AppAuth-Rust and their Apple archives AppAuthRust-Apple-*.zip
+# (Issue #146). Their assets keep that URL, which GitHub redirects after the
+# rename, so the check also accepts it for those releases whatever the
+# current repository name is, and expects the former archive name for them.
 #
 # Usage: scripts/check-spm-manifest.sh
 
@@ -84,9 +85,9 @@ cargo_version = package_match.group(1)
 if not re.fullmatch(r"\d+\.\d+\.\d+", cargo_version):
     sys.exit(f"Cargo package version is not MAJOR.MINOR.PATCH: {cargo_version!r}")
 
-needle = 'name: "AppAuthRustBinary",'
+needle = 'name: "NativeOIDCBinary",'
 if needle not in manifest:
-    sys.exit("Package.swift is missing the AppAuthRustBinary binary target")
+    sys.exit("Package.swift is missing the NativeOIDCBinary binary target")
 binary_block = manifest.split(needle, 1)[1].split(")", 1)[0]
 url_match = re.search(r'(?m)^[ \t]+url: "([^"]+)",', binary_block)
 checksum_match = re.search(r'(?m)^[ \t]+checksum: "([^"]+)"', binary_block)
@@ -105,10 +106,16 @@ LEGACY_REPO_URL = "https://github.com/ProjectFlora/AppAuth-Rust"
 LEGACY_LAST_VERSION = "0.6.0"
 
 
+def asset_prefix(version):
+    if semver(version) <= semver(LEGACY_LAST_VERSION):
+        return "AppAuthRust-Apple"
+    return "NativeOIDC-Apple"
+
+
 def match_release_url(base):
     return re.fullmatch(
         rf"{re.escape(base)}/releases/download/v(\d+\.\d+\.\d+)"
-        rf"/AppAuthRust-Apple-(\d+\.\d+\.\d+)\.zip",
+        rf"/(AppAuthRust-Apple|NativeOIDC-Apple)-(\d+\.\d+\.\d+)\.zip",
         url,
     )
 
@@ -127,14 +134,21 @@ if not url_match:
     sys.exit(
         f"Package.swift binary target URL is not a canonical release asset: "
         f"{url!r} (expected {repo_url!r}/releases/download/v<version>/"
-        f"AppAuthRust-Apple-<version>.zip; revert the binary target to its last "
+        f"NativeOIDC-Apple-<version>.zip; revert the binary target to its last "
         f"canonical value; a release writes new ones only at its tag)"
     )
 manifest_version = url_match.group(1)
-if manifest_version != url_match.group(2):
+if manifest_version != url_match.group(3):
     sys.exit(
         f"Package.swift binary target URL version {manifest_version!r} does not "
-        f"match its asset name version {url_match.group(2)!r}"
+        f"match its asset name version {url_match.group(3)!r}"
+    )
+if url_match.group(2) != asset_prefix(manifest_version):
+    sys.exit(
+        f"Package.swift binary target URL names release {manifest_version}'s "
+        f"archive {url_match.group(2)}-{manifest_version}.zip, but that "
+        f"release's archive is {asset_prefix(manifest_version)}-"
+        f"{manifest_version}.zip"
     )
 if semver(manifest_version) > semver(cargo_version):
     sys.exit(
@@ -151,6 +165,6 @@ lag = (
 )
 print(
     f"Swift package manifest is consistent (binary target "
-    f"AppAuthRust-Apple-{manifest_version}.zip, checksum {checksum}{lag})"
+    f"{url_match.group(2)}-{manifest_version}.zip, checksum {checksum}{lag})"
 )
 PY

@@ -1,7 +1,7 @@
 # Native distribution channels
 
 This document records the evaluation of package distribution channels for the
-native bindings, per [issue #44](https://github.com/ProjectFlora/AppAuth-Rust/issues/44).
+native bindings, per [issue #44](https://github.com/ProjectFlora/NativeOIDC/issues/44).
 It compares Maven Central, Swift Package Manager, Carthage, and the current
 GitHub Releases channel, and records the per-platform decision with rationale.
 Publishing and channel implementation are intentionally out of scope here and
@@ -18,8 +18,8 @@ validation" workflow against a published version.
 
 Consumer onboarding is manual on every platform:
 
-- **Apple:** add `AppAuthRust.xcframework` to the Xcode project with
-  **Do Not Embed**, add the generated `Swift/appauth_rust.swift` file with
+- **Apple:** add `NativeOIDC.xcframework` to the Xcode project with
+  **Do Not Embed**, add the generated `Swift/native_oidc.swift` file with
   target membership, set the minimum deployment version (iOS/iPadOS 18 or
   macOS 15), and verify the archive checksum. See
   [swift-xcframework.md](swift-xcframework.md).
@@ -71,7 +71,7 @@ properties of the current (2026) Central Portal:
 The main consumer win is dependency resolution: a hand-written or
 `maven-publish`-generated POM declares `jna` (as an AAR-typed dependency),
 `kotlinx-coroutines-android`, and `androidx.browser`, so a consumer writes a
-single `implementation("net.project-flora.appauth:appauth-rust-android:<version>")`
+single `implementation("net.project-flora.nativeoidc:native-oidc-android:<version>")`
 line and the transitive closure arrives automatically. Version pinning,
 upgrades, and overrides use ordinary Gradle mechanisms.
 
@@ -124,7 +124,7 @@ Neither spike modified this repository.
 ### Spike A: SPM binary target with the static XCFramework
 
 A minimal SPM package declared a binary target pointing at the release zip
-plus a source target containing the generated `Swift/appauth_rust.swift`, and
+plus a source target containing the generated `Swift/native_oidc.swift`, and
 an executable target that round-trips `FfiAuthenticationState` through the
 FFI (`fromJson` / `toJson`) — a live FFI call with no network activity.
 Five manifest/platform variants were built:
@@ -146,7 +146,7 @@ Conclusions for the SPM channel:
 - **The existing release zip needs no repackaging.** SPM tolerates a single
   wrapper directory at the zip root and ignores non-XCFramework entries, so a
   binary target can point directly at the current
-  `AppAuthRust-Apple-<version>.zip` asset. A slimmer zip remains an optional
+  `NativeOIDC-Apple-<version>.zip` asset. A slimmer zip remains an optional
   optimization.
 - The release binary's minimum OS versions are **iOS 18 / macOS 15**, both
   explicitly pinned in `scripts/package-apple-xcframework.sh` (`export
@@ -181,7 +181,7 @@ one Kotlin file importing `AndroidAuthorizationAdapter`.
 
 Result: **pass.** `assembleDebug` completed end to end — manifest merge,
 resource link, Kotlin compilation against the library, dexing, and packaging.
-The built APK contains the AAR's `libappauth_rust.so` (arm64-v8a, x86_64)
+The built APK contains the AAR's `libnative_oidc.so` (arm64-v8a, x86_64)
 alongside JNA's `libjnidispatch.so` for all seven ABIs the jna AAR ships.
 The resolved runtime classpath confirms the whole transitive closure arriving
 from that single declared dependency:
@@ -227,13 +227,13 @@ Findings:
 The Swift validations in this repository split the language-mode coverage
 of the SPM channel in two:
 
-- **The in-tree package** (`Package.swift`) pins the `AppAuthRust` source
-  target and the `AppAuthRustTests` test target to
+- **The in-tree package** (`Package.swift`) pins the `NativeOIDC` source
+  target and the `NativeOIDCTests` test target to
   `.swiftLanguageMode(.v5)`. This is a fact about the generated API: the
   checked-in UniFFI bindings are not Swift 6 strict-concurrency clean
   (Spike A above: the `rustCall` helpers fail under strict concurrency).
   Regenerating the bindings until they are Swift 6 clean is tracked in
-  [Issue #133](https://github.com/ProjectFlora/AppAuth-Rust/issues/133),
+  [Issue #133](https://github.com/ProjectFlora/NativeOIDC/issues/133),
   and the pin is lifted when that lands.
 - **The swiftc-based checks** (`check-apple-adapters.sh`,
   `check-apple-release-consumer.sh`) invoke `swiftc` without a
@@ -245,25 +245,25 @@ of the SPM channel in two:
   6.0` and pins no language mode, so it compiles in the Swift 6 language
   mode, the mode new consumer apps ship in. It selects the release
   workflow's Xcode (`XCODE_VERSION`, a stable Xcode 26.x;
-  [Issue #135](https://github.com/ProjectFlora/AppAuth-Rust/issues/135)),
+  [Issue #135](https://github.com/ProjectFlora/NativeOIDC/issues/135)),
   recording the versions in the step summary so a red run is
   attributable.
 
 The language-mode choice in the consumer job is deliberate
-([Issue #107](https://github.com/ProjectFlora/AppAuth-Rust/issues/107)).
+([Issue #107](https://github.com/ProjectFlora/NativeOIDC/issues/107)).
 A consumer of the published package pairs the v5-pinned library with its
 own language mode; the in-tree validations cover the Swift 5 mode
 pairing, and only the consumer job covers the Swift 6 mode pairing.
 The job no longer tracks whatever toolchain the runner image ships: it
 validates that pairing with the Xcode that built and pre-validated the
 published archive, a stable Xcode 26.x that App Store Connect accepts
-([Issue #135](https://github.com/ProjectFlora/AppAuth-Rust/issues/135)).
+([Issue #135](https://github.com/ProjectFlora/NativeOIDC/issues/135)).
 A newer Swift reaches the job only when `XCODE_VERSION` is bumped, so new
 diagnostics surface in that pull request rather than in an audit run. The
 job is a post-publication audit (it consumes published artifacts; see
 [Releasing](releasing.md)), so a failure is triaged with the recorded
 toolchain and fixed with a fixture pull request, or routed to
-[Issue #133](https://github.com/ProjectFlora/AppAuth-Rust/issues/133)
+[Issue #133](https://github.com/ProjectFlora/NativeOIDC/issues/133)
 when it reflects an API shape a real Swift 6 consumer would hit.
 
 Between the in-tree validations (Swift 5 mode consumers) and the
@@ -287,12 +287,12 @@ is covered.
   friction (three hand-declared transitive dependencies next to a file AAR)
   and matches where Android developers resolve dependencies. The GitHub
   Release AAR continues in parallel as the fallback channel. Follow-up:
-  [#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81).
+  [#81](https://github.com/ProjectFlora/NativeOIDC/issues/81).
 - **Apple — adopt Swift Package Manager.** Spike A confirms the binary-target
   mechanism works with the existing release artifacts, and SPM is the native
   default for the supported platforms. The GitHub Release zip continues as
   the fallback channel and as the binary source for the SPM target.
-  Follow-up: [#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82).
+  Follow-up: [#82](https://github.com/ProjectFlora/NativeOIDC/issues/82).
 - **Carthage — decline for now, revisit later.** The binary-spec route is
   technically possible, but the audience is covered by SPM, the tool's
   maintenance has slowed, and the compiler-version comparison adds a
@@ -310,12 +310,12 @@ is covered.
 The adopted channels are implemented in separate issues that reference this
 document:
 
-- **Publish the Android AAR to Maven Central** ([#81](https://github.com/ProjectFlora/AppAuth-Rust/issues/81)) — shipped in v0.6.0. Central Portal account and
+- **Publish the Android AAR to Maven Central** ([#81](https://github.com/ProjectFlora/NativeOIDC/issues/81)) — shipped in v0.6.0. Central Portal account and
   `net.project-flora` namespace registration (lead-time item), GPG key and
   signing setup, POM generation for the library module with the three
   transitive dependencies (jna as `aar` type, per Spike B), publication step
   in the release workflow, and consumer documentation updates.
-- **Distribute the Apple package through SPM** ([#82](https://github.com/ProjectFlora/AppAuth-Rust/issues/82)) — the package
+- **Distribute the Apple package through SPM** ([#82](https://github.com/ProjectFlora/NativeOIDC/issues/82)) — the package
   landed as `Package.swift` at the repository root: a subdirectory manifest
   is not an option because SPM resolves only a root manifest for remote git
   dependencies (the upstream feature request remains unimplemented), and a

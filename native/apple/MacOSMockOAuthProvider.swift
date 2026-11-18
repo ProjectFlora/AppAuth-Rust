@@ -8,7 +8,7 @@
     private static let headerTerminator = Data([13, 10, 13, 10])
 
     private let listener: NWListener
-    private let queue = DispatchQueue(label: "appauth-rust.mock-oauth-provider")
+    private let queue = DispatchQueue(label: "native-oidc.mock-oauth-provider")
     private var readyContinuation: CheckedContinuation<UInt16, any Error>?
     private var expectedChallenge: String?
     private var expectedRedirectURI: String?

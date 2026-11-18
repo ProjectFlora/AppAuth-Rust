@@ -143,31 +143,31 @@ enum WindowsAuthorizationError {
 
 /// Opaque cancellation handle for a blocking Windows authorization call.
 #[cfg(windows)]
-pub struct AppAuthWindowsCancellationHandle {
+pub struct NativeOidcWindowsCancellationHandle {
     cancellation: CancellationHandle,
 }
 
-/// Opaque result returned by [`appauth_windows_authorize`].
+/// Opaque result returned by [`native_oidc_windows_authorize`].
 #[cfg(windows)]
-pub struct AppAuthWindowsAuthorizationResult {
+pub struct NativeOidcWindowsAuthorizationResult {
     status: i32,
     value: CString,
 }
 
-/// Opaque result returned by [`appauth_windows_refresh`].
+/// Opaque result returned by [`native_oidc_windows_refresh`].
 #[cfg(windows)]
-pub type AppAuthWindowsRefreshResult = AppAuthWindowsAuthorizationResult;
+pub type NativeOidcWindowsRefreshResult = NativeOidcWindowsAuthorizationResult;
 
-/// Opaque result returned by [`appauth_windows_end_session`].
+/// Opaque result returned by [`native_oidc_windows_end_session`].
 #[cfg(windows)]
-pub type AppAuthWindowsEndSessionResult = AppAuthWindowsAuthorizationResult;
-
-#[cfg(windows)]
-/// Opaque result returned by [`appauth_windows_revoke`].
-pub type AppAuthWindowsRevocationResult = AppAuthWindowsAuthorizationResult;
+pub type NativeOidcWindowsEndSessionResult = NativeOidcWindowsAuthorizationResult;
 
 #[cfg(windows)]
-impl AppAuthWindowsAuthorizationResult {
+/// Opaque result returned by [`native_oidc_windows_revoke`].
+pub type NativeOidcWindowsRevocationResult = NativeOidcWindowsAuthorizationResult;
+
+#[cfg(windows)]
+impl NativeOidcWindowsAuthorizationResult {
     fn new(status: i32, value: impl Into<String>) -> *mut Self {
         let value = value.into().replace('\0', "\\u0000");
         let value = CString::new(value).expect("NUL characters were escaped");
@@ -799,15 +799,15 @@ fn revoke(
 }
 
 #[cfg(windows)]
-fn result(status: i32, value: impl Into<String>) -> *mut AppAuthWindowsAuthorizationResult {
-    AppAuthWindowsAuthorizationResult::new(status, value)
+fn result(status: i32, value: impl Into<String>) -> *mut NativeOidcWindowsAuthorizationResult {
+    NativeOidcWindowsAuthorizationResult::new(status, value)
 }
 
 #[cfg(windows)]
 fn run_authorize(
     request_json: &str,
     cancellation: CancellationHandle,
-) -> *mut AppAuthWindowsAuthorizationResult {
+) -> *mut NativeOidcWindowsAuthorizationResult {
     let request = match serde_json::from_str::<WindowsAuthorizationRequest>(request_json) {
         Ok(request) => request,
         Err(error) => return result(STATUS_ERROR, error.to_string()),
@@ -828,7 +828,7 @@ fn run_authorize(
 fn run_refresh(
     request_json: &str,
     cancellation: CancellationHandle,
-) -> *mut AppAuthWindowsRefreshResult {
+) -> *mut NativeOidcWindowsRefreshResult {
     let request = match serde_json::from_str::<WindowsRefreshRequest>(request_json) {
         Ok(request) => request,
         Err(error) => return result(STATUS_ERROR, error.to_string()),
@@ -849,7 +849,7 @@ fn run_refresh(
 fn run_end_session(
     request_json: &str,
     cancellation: CancellationHandle,
-) -> *mut AppAuthWindowsEndSessionResult {
+) -> *mut NativeOidcWindowsEndSessionResult {
     let request = match serde_json::from_str::<WindowsEndSessionRequest>(request_json) {
         Ok(request) => request,
         Err(error) => return result(STATUS_ERROR, error.to_string()),
@@ -873,7 +873,7 @@ fn run_end_session(
 fn run_revoke(
     request_json: &str,
     cancellation: CancellationHandle,
-) -> *mut AppAuthWindowsRevocationResult {
+) -> *mut NativeOidcWindowsRevocationResult {
     let request = match serde_json::from_str::<WindowsRevocationRequest>(request_json) {
         Ok(request) => request,
         Err(error) => return result(STATUS_ERROR, error.to_string()),
@@ -899,14 +899,15 @@ unsafe fn copy_utf8_string(value: *const c_char) -> std::result::Result<String, 
         .map_err(|_| "input string must be valid UTF-8")
 }
 
-/// Creates a cancellation handle for [`appauth_windows_authorize`].
+/// Creates a cancellation handle for [`native_oidc_windows_authorize`].
 ///
 /// The returned handle must be freed with
-/// [`appauth_windows_cancellation_free`].
+/// [`native_oidc_windows_cancellation_free`].
 #[cfg(windows)]
 #[no_mangle]
-pub extern "C" fn appauth_windows_cancellation_new() -> *mut AppAuthWindowsCancellationHandle {
-    Box::into_raw(Box::new(AppAuthWindowsCancellationHandle {
+pub extern "C" fn native_oidc_windows_cancellation_new() -> *mut NativeOidcWindowsCancellationHandle
+{
+    Box::into_raw(Box::new(NativeOidcWindowsCancellationHandle {
         cancellation: CancellationHandle::new(),
     }))
 }
@@ -919,11 +920,11 @@ pub extern "C" fn appauth_windows_cancellation_new() -> *mut AppAuthWindowsCance
 /// # Safety
 ///
 /// `handle` must be null or a live handle returned by
-/// [`appauth_windows_cancellation_new`].
+/// [`native_oidc_windows_cancellation_new`].
 #[cfg(windows)]
 #[no_mangle]
-pub unsafe extern "C" fn appauth_windows_cancellation_cancel(
-    handle: *const AppAuthWindowsCancellationHandle,
+pub unsafe extern "C" fn native_oidc_windows_cancellation_cancel(
+    handle: *const NativeOidcWindowsCancellationHandle,
 ) {
     if let Some(handle) = handle.as_ref() {
         handle.cancellation.cancel();
@@ -935,12 +936,12 @@ pub unsafe extern "C" fn appauth_windows_cancellation_cancel(
 /// # Safety
 ///
 /// `handle` must be null or a live handle returned by
-/// [`appauth_windows_cancellation_new`], and no authorization call may still
+/// [`native_oidc_windows_cancellation_new`], and no authorization call may still
 /// be using it.
 #[cfg(windows)]
 #[no_mangle]
-pub unsafe extern "C" fn appauth_windows_cancellation_free(
-    handle: *mut AppAuthWindowsCancellationHandle,
+pub unsafe extern "C" fn native_oidc_windows_cancellation_free(
+    handle: *mut NativeOidcWindowsCancellationHandle,
 ) {
     if !handle.is_null() {
         drop(Box::from_raw(handle));
@@ -967,14 +968,14 @@ pub unsafe extern "C" fn appauth_windows_cancellation_free(
 ///
 /// `request_json_utf8` must be null or a valid NUL-terminated UTF-8 string.
 /// `cancellation` must be null or a live handle returned by
-/// [`appauth_windows_cancellation_new`] that remains alive until this function
+/// [`native_oidc_windows_cancellation_new`] that remains alive until this function
 /// returns.
 #[cfg(windows)]
 #[no_mangle]
-pub unsafe extern "C" fn appauth_windows_authorize(
+pub unsafe extern "C" fn native_oidc_windows_authorize(
     request_json_utf8: *const c_char,
-    cancellation: *const AppAuthWindowsCancellationHandle,
-) -> *mut AppAuthWindowsAuthorizationResult {
+    cancellation: *const NativeOidcWindowsCancellationHandle,
+) -> *mut NativeOidcWindowsAuthorizationResult {
     if cancellation.is_null() {
         return result(STATUS_ERROR, "cancellation handle must not be null");
     }
@@ -1006,14 +1007,14 @@ pub unsafe extern "C" fn appauth_windows_authorize(
 ///
 /// `request_json_utf8` must be null or a valid NUL-terminated UTF-8 string.
 /// `cancellation` must be null or a live handle returned by
-/// [`appauth_windows_cancellation_new`] that remains alive until this function
+/// [`native_oidc_windows_cancellation_new`] that remains alive until this function
 /// returns.
 #[cfg(windows)]
 #[no_mangle]
-pub unsafe extern "C" fn appauth_windows_refresh(
+pub unsafe extern "C" fn native_oidc_windows_refresh(
     request_json_utf8: *const c_char,
-    cancellation: *const AppAuthWindowsCancellationHandle,
-) -> *mut AppAuthWindowsRefreshResult {
+    cancellation: *const NativeOidcWindowsCancellationHandle,
+) -> *mut NativeOidcWindowsRefreshResult {
     if cancellation.is_null() {
         return result(STATUS_ERROR, "cancellation handle must not be null");
     }
@@ -1048,14 +1049,14 @@ pub unsafe extern "C" fn appauth_windows_refresh(
 ///
 /// `request_json_utf8` must be null or a valid NUL-terminated UTF-8 string.
 /// `cancellation` must be null or a live handle returned by
-/// [`appauth_windows_cancellation_new`] that remains alive until this function
+/// [`native_oidc_windows_cancellation_new`] that remains alive until this function
 /// returns.
 #[cfg(windows)]
 #[no_mangle]
-pub unsafe extern "C" fn appauth_windows_end_session(
+pub unsafe extern "C" fn native_oidc_windows_end_session(
     request_json_utf8: *const c_char,
-    cancellation: *const AppAuthWindowsCancellationHandle,
-) -> *mut AppAuthWindowsEndSessionResult {
+    cancellation: *const NativeOidcWindowsCancellationHandle,
+) -> *mut NativeOidcWindowsEndSessionResult {
     if cancellation.is_null() {
         return result(STATUS_ERROR, "cancellation handle must not be null");
     }
@@ -1085,14 +1086,14 @@ pub unsafe extern "C" fn appauth_windows_end_session(
 ///
 /// `request_json_utf8` must be null or a valid NUL-terminated UTF-8 string.
 /// `cancellation` must be null or a live handle returned by
-/// [`appauth_windows_cancellation_new`] that remains alive until this function
+/// [`native_oidc_windows_cancellation_new`] that remains alive until this function
 /// returns.
 #[cfg(windows)]
 #[no_mangle]
-pub unsafe extern "C" fn appauth_windows_revoke(
+pub unsafe extern "C" fn native_oidc_windows_revoke(
     request_json_utf8: *const c_char,
-    cancellation: *const AppAuthWindowsCancellationHandle,
-) -> *mut AppAuthWindowsRevocationResult {
+    cancellation: *const NativeOidcWindowsCancellationHandle,
+) -> *mut NativeOidcWindowsRevocationResult {
     if cancellation.is_null() {
         return result(STATUS_ERROR, "cancellation handle must not be null");
     }
@@ -1115,11 +1116,11 @@ pub unsafe extern "C" fn appauth_windows_revoke(
 /// # Safety
 ///
 /// `authorization_result` must be null or a live result handle returned by
-/// [`appauth_windows_authorize`].
+/// [`native_oidc_windows_authorize`].
 #[cfg(windows)]
 #[no_mangle]
-pub unsafe extern "C" fn appauth_windows_authorization_result_status(
-    authorization_result: *const AppAuthWindowsAuthorizationResult,
+pub unsafe extern "C" fn native_oidc_windows_authorization_result_status(
+    authorization_result: *const NativeOidcWindowsAuthorizationResult,
 ) -> i32 {
     authorization_result
         .as_ref()
@@ -1134,11 +1135,11 @@ pub unsafe extern "C" fn appauth_windows_authorization_result_status(
 /// # Safety
 ///
 /// `authorization_result` must be null or a live result handle returned by
-/// [`appauth_windows_authorize`].
+/// [`native_oidc_windows_authorize`].
 #[cfg(windows)]
 #[no_mangle]
-pub unsafe extern "C" fn appauth_windows_authorization_result_value(
-    authorization_result: *const AppAuthWindowsAuthorizationResult,
+pub unsafe extern "C" fn native_oidc_windows_authorization_result_value(
+    authorization_result: *const NativeOidcWindowsAuthorizationResult,
 ) -> *const c_char {
     authorization_result
         .as_ref()
@@ -1150,11 +1151,11 @@ pub unsafe extern "C" fn appauth_windows_authorization_result_value(
 /// # Safety
 ///
 /// `authorization_result` must be null or a live result handle returned by
-/// [`appauth_windows_authorize`].
+/// [`native_oidc_windows_authorize`].
 #[cfg(windows)]
 #[no_mangle]
-pub unsafe extern "C" fn appauth_windows_authorization_result_free(
-    authorization_result: *mut AppAuthWindowsAuthorizationResult,
+pub unsafe extern "C" fn native_oidc_windows_authorization_result_free(
+    authorization_result: *mut NativeOidcWindowsAuthorizationResult,
 ) {
     if !authorization_result.is_null() {
         drop(Box::from_raw(authorization_result));
@@ -1881,7 +1882,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn c_abi_returns_and_frees_an_error_result() {
-        let cancellation = appauth_windows_cancellation_new();
+        let cancellation = native_oidc_windows_cancellation_new();
         let request = CString::new(
             r#"{
                 "issuer":"not a URL",
@@ -1891,29 +1892,29 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let result = unsafe { appauth_windows_authorize(request.as_ptr(), cancellation) };
+        let result = unsafe { native_oidc_windows_authorize(request.as_ptr(), cancellation) };
         assert_eq!(
-            unsafe { appauth_windows_authorization_result_status(result) },
+            unsafe { native_oidc_windows_authorization_result_status(result) },
             STATUS_ERROR
         );
         assert_eq!(
             unsafe {
-                CStr::from_ptr(appauth_windows_authorization_result_value(result))
+                CStr::from_ptr(native_oidc_windows_authorization_result_value(result))
                     .to_str()
                     .unwrap()
             },
             "issuer URL is invalid"
         );
         unsafe {
-            appauth_windows_authorization_result_free(result);
-            appauth_windows_cancellation_free(cancellation);
+            native_oidc_windows_authorization_result_free(result);
+            native_oidc_windows_cancellation_free(cancellation);
         }
     }
 
     #[cfg(windows)]
     #[test]
     fn c_abi_refresh_returns_and_frees_an_error_result() {
-        let cancellation = appauth_windows_cancellation_new();
+        let cancellation = native_oidc_windows_cancellation_new();
         let request = CString::new(
             r#"{
                 "issuer":"not a URL",
@@ -1925,29 +1926,29 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let result = unsafe { appauth_windows_refresh(request.as_ptr(), cancellation) };
+        let result = unsafe { native_oidc_windows_refresh(request.as_ptr(), cancellation) };
         assert_eq!(
-            unsafe { appauth_windows_authorization_result_status(result) },
+            unsafe { native_oidc_windows_authorization_result_status(result) },
             STATUS_ERROR
         );
         assert_eq!(
             unsafe {
-                CStr::from_ptr(appauth_windows_authorization_result_value(result))
+                CStr::from_ptr(native_oidc_windows_authorization_result_value(result))
                     .to_str()
                     .unwrap()
             },
             "issuer URL is invalid"
         );
         unsafe {
-            appauth_windows_authorization_result_free(result);
-            appauth_windows_cancellation_free(cancellation);
+            native_oidc_windows_authorization_result_free(result);
+            native_oidc_windows_cancellation_free(cancellation);
         }
     }
 
     #[cfg(windows)]
     #[test]
     fn c_abi_end_session_returns_and_frees_an_error_result() {
-        let cancellation = appauth_windows_cancellation_new();
+        let cancellation = native_oidc_windows_cancellation_new();
         let request = CString::new(
             r#"{
                 "authorization_endpoint":"https://issuer.example/authorize",
@@ -1957,22 +1958,22 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let result = unsafe { appauth_windows_end_session(request.as_ptr(), cancellation) };
+        let result = unsafe { native_oidc_windows_end_session(request.as_ptr(), cancellation) };
         assert_eq!(
-            unsafe { appauth_windows_authorization_result_status(result) },
+            unsafe { native_oidc_windows_authorization_result_status(result) },
             STATUS_ERROR
         );
         assert_eq!(
             unsafe {
-                CStr::from_ptr(appauth_windows_authorization_result_value(result))
+                CStr::from_ptr(native_oidc_windows_authorization_result_value(result))
                     .to_str()
                     .unwrap()
             },
             "invalid configuration: end-session endpoint must use HTTPS without user info or fragments"
         );
         unsafe {
-            appauth_windows_authorization_result_free(result);
-            appauth_windows_cancellation_free(cancellation);
+            native_oidc_windows_authorization_result_free(result);
+            native_oidc_windows_cancellation_free(cancellation);
         }
     }
 }

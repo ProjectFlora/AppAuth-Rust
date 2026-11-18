@@ -3,7 +3,7 @@ use std::{
     io::{self, Write},
 };
 
-use appauth_rust::{
+use native_oidc::{
     AuthorizationRequest, CancellationHandle, ReqwestTransport, ServiceConfiguration,
 };
 use url::Url;

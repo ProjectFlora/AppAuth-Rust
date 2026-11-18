@@ -1,4 +1,4 @@
-package net.projectflora.appauth
+package net.projectflora.nativeoidc
 
 import android.net.Uri
 import android.os.SystemClock
@@ -18,8 +18,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import uniffi.appauth_rust.FfiAuthorizationOptions
-import uniffi.appauth_rust.FfiServiceConfiguration
+import uniffi.native_oidc.FfiAuthorizationOptions
+import uniffi.native_oidc.FfiServiceConfiguration
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
@@ -55,7 +55,7 @@ class AndroidExternalBrowserAuthorizationTest {
 
             val scenario = ActivityScenario.launch(AndroidAuthorizationFlowTestActivity::class.java)
             try {
-                val result = CompletableDeferred<Result<uniffi.appauth_rust.FfiAuthenticationState>>()
+                val result = CompletableDeferred<Result<uniffi.native_oidc.FfiAuthenticationState>>()
                 val redirectUri = "com.example.app:/oauth/callback"
                 scenario.onActivity { activity ->
                     activity.authorize(

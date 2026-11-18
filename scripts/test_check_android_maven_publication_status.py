@@ -14,8 +14,8 @@ mock locally:
        GET /repos/<repo>/actions/workflows
        GET /repos/<repo>/actions/workflows/<id>/runs?per_page=100&page=<n>
        GET /repos/<repo>/actions/runs/<id>/jobs?per_page=100&attempt=<n>
-       HEAD <central>/net/project-flora/appauth/appauth-rust-android/<v>/
-            appauth-rust-android-<v>.{aar,pom,module,
+       HEAD <central>/net/project-flora/nativeoidc/native-oidc-android/<v>/
+            native-oidc-android-<v>.{aar,pom,module,
             -sources.jar,-javadoc.jar} and their .asc    (the Central check
             before a would-be definitive failure)
 
@@ -44,8 +44,8 @@ RUN_URL_2 = "https://github.com/%s/actions/runs/%d" % (REPO, RUN_ID_2)
 # The canonical Maven Central paths, exactly as the script builds them from
 # MAVEN_CENTRAL_BASE_URL (which the tests point at the mock): the full
 # publication, the file set the status check classifies (Issue #131).
-_BASE = ("/maven2/net/project-flora/appauth/appauth-rust-android/%s/"
-         "appauth-rust-android-%s") % (VERSION, VERSION)
+_BASE = ("/maven2/net/project-flora/nativeoidc/native-oidc-android/%s/"
+         "native-oidc-android-%s") % (VERSION, VERSION)
 POM_PATH = _BASE + ".pom"
 AAR_PATH = _BASE + ".aar"
 
@@ -289,8 +289,8 @@ class PublicationStatusCheckTests(unittest.TestCase):
         self.assertIn("never published to Maven Central", r.stderr)
         self.assertIn("publish_maven", r.stderr)
         self.assertIn(
-            "https://repo.maven.apache.org/maven2/net/project-flora/appauth/"
-            "appauth-rust-android/%s/appauth-rust-android-%s.pom"
+            "https://repo.maven.apache.org/maven2/net/project-flora/nativeoidc/"
+            "native-oidc-android/%s/native-oidc-android-%s.pom"
             % (VERSION, VERSION),
             r.stderr)
 

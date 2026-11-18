@@ -3,7 +3,7 @@
 Return to the [documentation index](README.md). This reference supplements
 the release's Linux-generated rustdoc, which excludes the Windows module.
 Use the [Windows user guide](../native/windows/README.md) for JSON examples
-and the [public header](../native/windows/include/appauth_windows.h) for
+and the [public header](../native/windows/include/native_oidc_windows.h) for
 declarations. This describes the source revision being read, not a new ABI.
 
 ## C ABI
@@ -15,27 +15,27 @@ architecture is `x86_64-pc-windows-msvc`.
 
 | Function | Contract |
 | --- | --- |
-| `appauth_windows_cancellation_new` | Returns an owned opaque cancellation handle |
-| `appauth_windows_cancellation_cancel` | Signals cancellation; may be called from another thread; null is ignored |
-| `appauth_windows_cancellation_free` | Releases the handle after all calls using it return; null is allowed |
-| `appauth_windows_authorize` | Opens browser, validates loopback callback, exchanges code; returns authentication-state JSON on success |
-| `appauth_windows_refresh` | Refreshes the supplied state; returns replacement authentication-state JSON on success |
-| `appauth_windows_end_session` | Opens browser; with redirect waits for validated loopback callback and returns response JSON; otherwise returns an empty success value |
-| `appauth_windows_revoke` | Revokes the supplied token; returns an empty success value |
-| `appauth_windows_authorization_result_status` | Reads status from any operation result |
-| `appauth_windows_authorization_result_value` | Borrows a UTF-8 string owned by the result; copy it before freeing the result |
-| `appauth_windows_authorization_result_free` | Releases any operation result; do not use its pointers afterward |
+| `native_oidc_windows_cancellation_new` | Returns an owned opaque cancellation handle |
+| `native_oidc_windows_cancellation_cancel` | Signals cancellation; may be called from another thread; null is ignored |
+| `native_oidc_windows_cancellation_free` | Releases the handle after all calls using it return; null is allowed |
+| `native_oidc_windows_authorize` | Opens browser, validates loopback callback, exchanges code; returns authentication-state JSON on success |
+| `native_oidc_windows_refresh` | Refreshes the supplied state; returns replacement authentication-state JSON on success |
+| `native_oidc_windows_end_session` | Opens browser; with redirect waits for validated loopback callback and returns response JSON; otherwise returns an empty success value |
+| `native_oidc_windows_revoke` | Revokes the supplied token; returns an empty success value |
+| `native_oidc_windows_authorization_result_status` | Reads status from any operation result |
+| `native_oidc_windows_authorization_result_value` | Borrows a UTF-8 string owned by the result; copy it before freeing the result |
+| `native_oidc_windows_authorization_result_free` | Releases any operation result; do not use its pointers afterward |
 
-`AppAuthWindowsCancellationHandle` and `AppAuthWindowsAuthorizationResult`
-are opaque. `AppAuthWindowsRefreshResult`, `AppAuthWindowsEndSessionResult`
-and `AppAuthWindowsRevocationResult` alias the authorization result type;
+`NativeOidcWindowsCancellationHandle` and `NativeOidcWindowsAuthorizationResult`
+are opaque. `NativeOidcWindowsRefreshResult`, `NativeOidcWindowsEndSessionResult`
+and `NativeOidcWindowsRevocationResult` alias the authorization result type;
 the same result accessors and free function apply to all four operations.
 
 | Status constant | Value | Result value |
 | --- | --- | --- |
-| `APPAUTH_WINDOWS_AUTHORIZATION_SUCCESS` | 0 | Operation-specific value above |
-| `APPAUTH_WINDOWS_AUTHORIZATION_ERROR` | 1 | Diagnostic error text |
-| `APPAUTH_WINDOWS_AUTHORIZATION_CANCELLED` | 2 | Cancellation message |
+| `NATIVE_OIDC_WINDOWS_AUTHORIZATION_SUCCESS` | 0 | Operation-specific value above |
+| `NATIVE_OIDC_WINDOWS_AUTHORIZATION_ERROR` | 1 | Diagnostic error text |
+| `NATIVE_OIDC_WINDOWS_AUTHORIZATION_CANCELLED` | 2 | Cancellation message |
 
 Errors flatten configuration, validation, provider, HTTP, transport and
 platform failures into text. There is no structured error-code/status API
@@ -79,16 +79,16 @@ features must not be presented as Windows ABI operations.
 
 ## .NET wrapper
 
-The [wrapper](../native/windows/dotnet/AppAuthWindows.cs) in namespace
-`ProjectFlora.AppAuthRust` targets .NET Standard 2.1 and loads
-`appauth_rust.dll` using P/Invoke with UTF-8 strings and Cdecl.
+The [wrapper](../native/windows/dotnet/NativeOidcWindows.cs) in namespace
+`ProjectFlora.NativeOidc` targets .NET Standard 2.1 and loads
+`native_oidc.dll` using P/Invoke with UTF-8 strings and Cdecl.
 
 | Method | Return |
 | --- | --- |
-| `AppAuthWindows.AuthorizeAsync(requestJson, cancellationToken)` | `Task<string>`: state JSON |
-| `AppAuthWindows.RefreshAsync(requestJson, cancellationToken)` | `Task<string>`: updated state JSON |
-| `AppAuthWindows.EndSessionAsync(requestJson, cancellationToken)` | `Task<string>`: callback JSON or empty string |
-| `AppAuthWindows.RevokeAsync(requestJson, cancellationToken)` | `Task`: no value |
+| `NativeOidcWindows.AuthorizeAsync(requestJson, cancellationToken)` | `Task<string>`: state JSON |
+| `NativeOidcWindows.RefreshAsync(requestJson, cancellationToken)` | `Task<string>`: updated state JSON |
+| `NativeOidcWindows.EndSessionAsync(requestJson, cancellationToken)` | `Task<string>`: callback JSON or empty string |
+| `NativeOidcWindows.RevokeAsync(requestJson, cancellationToken)` | `Task`: no value |
 
 All methods accept a string and optional `CancellationToken`. They run the
 blocking call on a worker, register cancellation and release native handles.
@@ -97,4 +97,4 @@ Null input throws `ArgumentNullException`; native cancellation becomes
 become `InvalidOperationException`. Deployment/loading errors can also surface
 from P/Invoke. There are no additional typed discovery, state, registration
 or expiry APIs in the wrapper. Installation and complete C# examples are
-tracked by [#88](https://github.com/ProjectFlora/AppAuth-Rust/issues/88).
+tracked by [#88](https://github.com/ProjectFlora/NativeOIDC/issues/88).

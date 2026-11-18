@@ -100,13 +100,13 @@ jobs:
       - name: Package Apple XCFramework
         run: scripts/package-apple-xcframework.sh 0.0.0-ci
       - name: Validate current Apple package consumer
-        run: scripts/check-apple-release-consumer.sh target/apple/release-package/AppAuthRust-Apple-0.0.0-ci.zip
+        run: scripts/check-apple-release-consumer.sh target/apple/release-package/NativeOIDC-Apple-0.0.0-ci.zip
       - name: Validate Swift package (host build, tests, iOS simulator)
-        run: scripts/check-spm-package.sh target/apple/release-package/AppAuthRust-Apple-0.0.0-ci.zip
+        run: scripts/check-spm-package.sh target/apple/release-package/NativeOIDC-Apple-0.0.0-ci.zip
       - uses: actions/upload-artifact@v7
         with:
           name: apple-xcframework-ios-${{ matrix.ios_simulator }}
-          path: target/apple/release-package/AppAuthRust-Apple-0.0.0-ci.zip
+          path: target/apple/release-package/NativeOIDC-Apple-0.0.0-ci.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -146,7 +146,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked --lib --target x86_64-pc-windows-msvc
       - run: cargo test --locked --lib --target x86_64-pc-windows-msvc
-      - run: dotnet build native/windows/dotnet/AppAuthWindows.csproj --configuration Release
+      - run: dotnet build native/windows/dotnet/NativeOidcWindows.csproj --configuration Release
       - name: Build current Windows package and validate external consumers
         shell: pwsh
         run: |
@@ -154,11 +154,11 @@ jobs:
           $package = "target/windows-audit-package"
           New-Item -ItemType Directory -Force "$package/include" | Out-Null
           New-Item -ItemType Directory -Force "$package/dotnet" | Out-Null
-          Copy-Item "target/x86_64-pc-windows-msvc/release/appauth_rust.dll" $package
-          Copy-Item "target/x86_64-pc-windows-msvc/release/appauth_rust.dll.lib" $package
-          Copy-Item "native/windows/include/appauth_windows.h" "$package/include"
-          Copy-Item "native/windows/dotnet/AppAuthWindows.cs" "$package/dotnet"
-          Copy-Item "native/windows/dotnet/AppAuthWindows.csproj" "$package/dotnet"
+          Copy-Item "target/x86_64-pc-windows-msvc/release/native_oidc.dll" $package
+          Copy-Item "target/x86_64-pc-windows-msvc/release/native_oidc.dll.lib" $package
+          Copy-Item "native/windows/include/native_oidc_windows.h" "$package/include"
+          Copy-Item "native/windows/dotnet/NativeOidcWindows.cs" "$package/dotnet"
+          Copy-Item "native/windows/dotnet/NativeOidcWindows.csproj" "$package/dotnet"
           Compress-Archive -Path "$package/*" -DestinationPath "target/windows-audit-package.zip" -Force
           scripts/check-windows-release-consumer.ps1 -Package target/windows-audit-package.zip
       - uses: actions/upload-artifact@v7
@@ -227,18 +227,18 @@ jobs:
           disable-animations: true
           script: |
             ./native/android/gradlew -p native/android connectedDebugAndroidTest || { echo "::group::Android emulator diagnostics"; adb devices -l || true; adb shell getprop || true; adb shell dumpsys activity activities || true; adb shell dumpsys window windows || true; adb exec-out uiautomator dump /dev/tty || true; adb logcat -d -t 500 || true; echo "::endgroup::"; exit 1; }
-            scripts/check-android-release-consumer.sh native/android/build/outputs/aar/appauth-rust-android-release.aar
+            scripts/check-android-release-consumer.sh native/android/build/outputs/aar/native-oidc-android-release.aar
       - name: Verify Android native libraries in AAR
         run: |
-          aar=native/android/build/outputs/aar/appauth-rust-android-release.aar
-          unzip -Z1 "$aar" | grep -Fx jni/arm64-v8a/libappauth_rust.so
-          unzip -Z1 "$aar" | grep -Fx jni/x86_64/libappauth_rust.so
+          aar=native/android/build/outputs/aar/native-oidc-android-release.aar
+          unzip -Z1 "$aar" | grep -Fx jni/arm64-v8a/libnative_oidc.so
+          unzip -Z1 "$aar" | grep -Fx jni/x86_64/libnative_oidc.so
       - name: Verify Maven Central publication contents
         run: scripts/check-android-maven-publication.sh 0.0.0-SNAPSHOT
       - uses: actions/upload-artifact@v7
         with:
           name: android-aar
-          path: native/android/build/outputs/aar/appauth-rust-android-release.aar
+          path: native/android/build/outputs/aar/native-oidc-android-release.aar
           if-no-files-found: error
           retention-days: 14
 
@@ -300,7 +300,7 @@ jobs:
       - uses: actions/github-script@v9
         with:
           script: |
-            const marker = '<!-- appauth-rust-ci-report -->';
+            const marker = '<!-- native-oidc-ci-report -->';
             const checks = [
               ['Tests', '${{ needs.test.result }}'],
               ['Apple adapters validation', '${{ needs.apple_adapters.result }}'],

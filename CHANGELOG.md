@@ -1,10 +1,30 @@
 # Changelog
 
-Notable changes to AppAuth-Rust are documented here. The 0.x series is
+Notable changes to NativeOIDC (named AppAuth-Rust up to v0.6.0) are
+documented here. The 0.x series is
 pre-1.0: releases may be published while interoperability testing and support
 policies are still evolving. Each release records its known limitations.
 
 ## [Unreleased]
+
+### Changed
+
+- Rename the project from AppAuth-Rust to NativeOIDC
+  ([#146](https://github.com/ProjectFlora/NativeOIDC/issues/146)). The
+  repository moves to `ProjectFlora/NativeOIDC`, and every consumer-facing
+  identifier changes: the SPM package, product, and Swift module
+  (`NativeOIDC`); the Android Maven coordinates
+  (`net.project-flora.nativeoidc:native-oidc-android`) and Kotlin packages
+  (`net.projectflora.nativeoidc`, `uniffi.native_oidc`); the Windows DLL
+  (`native_oidc.dll`), C header (`native_oidc_windows.h`) and identifiers
+  (`native_oidc_windows_*`, `NATIVE_OIDC_WINDOWS_*`, `NativeOidcWindows*`), and
+  .NET wrapper (`ProjectFlora.NativeOidc.NativeOidcWindows`); the release
+  asset names; and the Rust crate (`native-oidc`). The API, behavior, and
+  serialized authentication state are unchanged. Releases v0.1.0 through
+  v0.6.0 keep their former names, and the former Maven coordinates are never
+  published. See
+  [Migrating from AppAuth-Rust](README.md#migrating-from-appauth-rust) for the
+  full mapping.
 
 ### Documentation
 

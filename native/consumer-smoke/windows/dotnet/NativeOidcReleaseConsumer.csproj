@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <NativeOidcPackage Condition="'$(NativeOidcPackage)' == ''">missing</NativeOidcPackage>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(NativeOidcPackage)/dotnet/NativeOidcWindows.cs" Link="NativeOidcWindows.cs" />
+    <None Include="$(NativeOidcPackage)/native_oidc.dll" Link="native_oidc.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,8 +1,8 @@
 # Release support matrix
 
-Tracking: [#60](https://github.com/ProjectFlora/AppAuth-Rust/issues/60).
-OS decisions: [#43](https://github.com/ProjectFlora/AppAuth-Rust/issues/43),
-implemented by [PR #76](https://github.com/ProjectFlora/AppAuth-Rust/pull/76).
+Tracking: [#60](https://github.com/ProjectFlora/NativeOIDC/issues/60).
+OS decisions: [#43](https://github.com/ProjectFlora/NativeOIDC/issues/43),
+implemented by [PR #76](https://github.com/ProjectFlora/NativeOIDC/pull/76).
 
 ## Status and evidence
 
@@ -22,8 +22,8 @@ to the accompanying PR checks, not to the source review itself.
 #60 covers this baseline, CI mapping, limitations, and verification procedure.
 The release-dependent work is tracked separately:
 
-- [#77: candidate artifact verification](https://github.com/ProjectFlora/AppAuth-Rust/issues/77).
-- [#78: pre-tag OS support recheck and final decisions](https://github.com/ProjectFlora/AppAuth-Rust/issues/78).
+- [#77: candidate artifact verification](https://github.com/ProjectFlora/NativeOIDC/issues/77).
+- [#78: pre-tag OS support recheck and final decisions](https://github.com/ProjectFlora/NativeOIDC/issues/78).
 
 Completing #60 does not satisfy those remaining 1.0.0 readiness gates.
 

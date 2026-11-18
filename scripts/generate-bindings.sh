@@ -7,9 +7,9 @@ cd "$repo_root"
 output_dir=${1:-target/uniffi}
 
 case "$(uname -s)" in
-    Darwin) library=target/debug/libappauth_rust.dylib ;;
-    Linux) library=target/debug/libappauth_rust.so ;;
-    MINGW*|MSYS*|CYGWIN*) library=target/debug/appauth_rust.dll ;;
+    Darwin) library=target/debug/libnative_oidc.dylib ;;
+    Linux) library=target/debug/libnative_oidc.so ;;
+    MINGW*|MSYS*|CYGWIN*) library=target/debug/native_oidc.dll ;;
     *)
         echo "unsupported host for UniFFI metadata extraction" >&2
         exit 1

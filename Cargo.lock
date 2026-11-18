@@ -15,29 +15,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "appauth-rust"
-version = "0.6.0"
-dependencies = [
- "async-trait",
- "base64 0.22.1",
- "http",
- "jsonwebtoken",
- "rand 0.8.8",
- "reqwest",
- "ring",
- "rsa",
- "serde",
- "serde_json",
- "sha2",
- "thiserror",
- "tokio",
- "tokio-util",
- "uniffi",
- "url",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "askama"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -790,6 +767,29 @@ checksum = "1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee"
 dependencies = [
  "libc",
  "wasi",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "native-oidc"
+version = "0.6.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "http",
+ "jsonwebtoken",
+ "rand 0.8.8",
+ "reqwest",
+ "ring",
+ "rsa",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "uniffi",
+ "url",
  "windows-sys 0.61.2",
 ]
 

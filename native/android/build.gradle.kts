@@ -43,7 +43,7 @@ val buildAndroidRustLibraries by tasks.registering(Exec::class) {
 }
 
 android {
-    namespace = "net.projectflora.appauth"
+    namespace = "net.projectflora.nativeoidc"
     compileSdk = 35
 
     defaultConfig {
@@ -95,7 +95,7 @@ dependencies {
 }
 
 mavenPublishing {
-    coordinates("net.project-flora.appauth", "appauth-rust-android", releaseVersion)
+    coordinates("net.project-flora.nativeoidc", "native-oidc-android", releaseVersion)
     publishToMavenCentral()
     // The release workflow supplies the key as ORG_GRADLE_PROJECT_signingInMemoryKey.
     // Without it (local builds, CI checks) publications are left unsigned;
@@ -105,9 +105,9 @@ mavenPublishing {
     }
 
     pom {
-        name.set("AppAuth-Rust Android")
-        description.set("Android adapter and UniFFI Kotlin bindings for AppAuth-Rust, a Rust OAuth 2.0 and OpenID Connect client for native apps. AppAuth-Rust is an independent project by ProjectFlora. It is not affiliated with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID Foundation.")
-        url.set("https://github.com/ProjectFlora/AppAuth-Rust")
+        name.set("NativeOIDC Android")
+        description.set("Android adapter and UniFFI Kotlin bindings for NativeOIDC, a Rust OAuth 2.0 and OpenID Connect client for native apps. NativeOIDC is an independent project by ProjectFlora. It is not affiliated with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID Foundation.")
+        url.set("https://github.com/ProjectFlora/NativeOIDC")
         licenses {
             license {
                 name.set("The Apache License, Version 2.0")
@@ -123,9 +123,9 @@ mavenPublishing {
             }
         }
         scm {
-            url.set("https://github.com/ProjectFlora/AppAuth-Rust")
-            connection.set("scm:git:https://github.com/ProjectFlora/AppAuth-Rust.git")
-            developerConnection.set("scm:git:ssh://git@github.com/ProjectFlora/AppAuth-Rust.git")
+            url.set("https://github.com/ProjectFlora/NativeOIDC")
+            connection.set("scm:git:https://github.com/ProjectFlora/NativeOIDC.git")
+            developerConnection.set("scm:git:ssh://git@github.com/ProjectFlora/NativeOIDC.git")
         }
     }
 }

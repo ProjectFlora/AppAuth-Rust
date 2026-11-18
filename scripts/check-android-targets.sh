@@ -74,6 +74,6 @@ for target in aarch64-linux-android x86_64-linux-android; do
         esac
         abi_dir="$output_dir/$abi"
         mkdir -p "$abi_dir"
-        cp "target/$target/release/libappauth_rust.so" "$abi_dir/libappauth_rust.so"
+        cp "target/$target/release/libnative_oidc.so" "$abi_dir/libnative_oidc.so"
     fi
 done

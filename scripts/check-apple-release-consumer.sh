@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
-    echo "Usage: $0 <AppAuthRust-Apple-<version>.zip>" >&2
+    echo "Usage: $0 <NativeOIDC-Apple-<version>.zip>" >&2
     exit 2
 fi
 
@@ -21,15 +21,15 @@ unzip -q "$archive" -d "$work_dir"
 # The archive may include resource-fork sidecar entries (a `__MACOSX/` tree
 # from older archives, or `._*` files next to the package entries). Only the
 # actual package directory contains bindings and libraries.
-package_root=$(find "$work_dir" -path "$work_dir/__MACOSX" -prune -o -type d -name AppAuthRust-Apple -print -quit)
+package_root=$(find "$work_dir" -path "$work_dir/__MACOSX" -prune -o -type d -name NativeOIDC-Apple -print -quit)
 if [[ -z "$package_root" ]]; then
-    echo "Apple release archive does not contain AppAuthRust-Apple/" >&2
+    echo "Apple release archive does not contain NativeOIDC-Apple/" >&2
     exit 1
 fi
 
 framework_root="$package_root"
-bindings="$package_root/Swift/appauth_rust.swift"
-xcframework="$framework_root/AppAuthRust.xcframework"
+bindings="$package_root/Swift/native_oidc.swift"
+xcframework="$framework_root/NativeOIDC.xcframework"
 if [[ ! -d "$xcframework" || ! -f "$bindings" ]]; then
     echo "Apple release archive is missing its XCFramework or Swift bindings" >&2
     exit 1

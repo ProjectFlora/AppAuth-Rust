@@ -25,11 +25,11 @@ case "$(uname -m)" in
 esac
 
 output_root="$repo_root/target/apple/release-package"
-package_root="$output_root/AppAuthRust-Apple"
-xcframework="$package_root/AppAuthRust.xcframework"
+package_root="$output_root/NativeOIDC-Apple"
+xcframework="$package_root/NativeOIDC.xcframework"
 generated="$repo_root/target/uniffi"
 headers="$output_root/headers"
-macos_library="$repo_root/target/apple/libappauth_rust_macos.a"
+macos_library="$repo_root/target/apple/libnative_oidc_macos.a"
 
 # Require the whole output directory to be absent: the CI workflows remove
 # it in full before each run, and a local re-run must not stage over a
@@ -62,27 +62,27 @@ mkdir -p "$repo_root/target/apple" "$package_root/Swift" "$headers"
 # the Swift Package Manager target. The generated file is copied from the
 # freshly generated output, which the SPM bindings check verifies matches the
 # checked-in copy.
-cp "$generated/swift/appauth_rust.swift" "$package_root/Swift/"
-cp "$repo_root"/Sources/AppAuthRust/IOSAuthorizationAdapter.swift \
-    "$repo_root"/Sources/AppAuthRust/MacOSAuthorizationAdapter.swift \
-    "$repo_root"/Sources/AppAuthRust/URLSessionNativeHttpTransport.swift \
+cp "$generated/swift/native_oidc.swift" "$package_root/Swift/"
+cp "$repo_root"/Sources/NativeOIDC/IOSAuthorizationAdapter.swift \
+    "$repo_root"/Sources/NativeOIDC/MacOSAuthorizationAdapter.swift \
+    "$repo_root"/Sources/NativeOIDC/URLSessionNativeHttpTransport.swift \
     "$package_root/Swift/"
 cp "$repo_root/LICENSE" "$package_root/"
 cp "$repo_root/docs/swift-xcframework.md" "$package_root/README.md"
-cp "$generated/swift/appauth_rustFFI.h" "$headers/"
-cp "$generated/swift/appauth_rustFFI.modulemap" "$headers/module.modulemap"
+cp "$generated/swift/native_oidcFFI.h" "$headers/"
+cp "$generated/swift/native_oidcFFI.modulemap" "$headers/module.modulemap"
 
 xcrun lipo -create \
-    target/aarch64-apple-darwin/release/libappauth_rust.a \
-    target/x86_64-apple-darwin/release/libappauth_rust.a \
+    target/aarch64-apple-darwin/release/libnative_oidc.a \
+    target/x86_64-apple-darwin/release/libnative_oidc.a \
     -output "$macos_library"
 
 # The slice inputs are shared by both create-xcframework calls below; the
 # xcframework names derive from the libraries, so only -output differs.
 xcframework_args=(
-    -library target/aarch64-apple-ios/release/libappauth_rust.a
+    -library target/aarch64-apple-ios/release/libnative_oidc.a
     -headers "$headers"
-    -library target/aarch64-apple-ios-sim/release/libappauth_rust.a
+    -library target/aarch64-apple-ios-sim/release/libnative_oidc.a
     -headers "$headers"
     -library "$macos_library"
     -headers "$headers"
@@ -100,7 +100,7 @@ xcodebuild -create-xcframework \
 # (scripts/normalize_xcframework_plist.py: validate the slice set, sort the
 # array and each architecture list, rewrite in a fixed format), and requires
 # identical bytes before the archive embeds the framework.
-scratch_xcframework="$output_root/AppAuthRust-Apple-scratch.xcframework"
+scratch_xcframework="$output_root/NativeOIDC-Apple-scratch.xcframework"
 # The guard above requires $output_root to be absent before the run, so no
 # scratch from an earlier run exists here; the EXIT trap removes it on
 # every exit path instead, so the run never leaves its self-test outputs
@@ -128,12 +128,12 @@ xcrun swiftc \
     -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
     -Xcc "-fmodule-map-file=$headers/module.modulemap" \
     -L "$repo_root/target/apple" \
-    -lappauth_rust_macos \
+    -lnative_oidc_macos \
     -o "$repo_root/target/apple/mac-authorization-flow-smoke-static" \
-    "$generated/swift/appauth_rust.swift" \
+    "$generated/swift/native_oidc.swift" \
     "$repo_root/native/apple/MacOSMockOAuthProvider.swift" \
-    "$repo_root/Sources/AppAuthRust/MacOSAuthorizationAdapter.swift" \
-    "$repo_root/Sources/AppAuthRust/URLSessionNativeHttpTransport.swift" \
+    "$repo_root/Sources/NativeOIDC/MacOSAuthorizationAdapter.swift" \
+    "$repo_root/Sources/NativeOIDC/URLSessionNativeHttpTransport.swift" \
     "$repo_root/native/apple/MacOSAuthorizationFlowSmoke.swift"
 "$repo_root/target/apple/mac-authorization-flow-smoke-static"
 scripts/check-ios-authorization-flow.sh
@@ -175,7 +175,7 @@ export TZ=UTC
 xattr -cr "$package_root"
 find "$package_root" -print0 | xargs -0 touch -h -t 202601010000.00
 
-archive="$output_root/AppAuthRust-Apple-$version.zip"
+archive="$output_root/NativeOIDC-Apple-$version.zip"
 ditto -c -k --keepParent "$package_root" "$archive"
 python3 "$repo_root/scripts/normalize_zip.py" "$archive"
 
@@ -184,7 +184,7 @@ python3 "$repo_root/scripts/normalize_zip.py" "$archive"
 # (The raw double-ditto hashes would differ: the first zip's read of the
 # tree advances file atimes, which the second zip records in the UX extra
 # field; the normalizer is what makes the comparison meaningful.)
-recheck="$output_root/AppAuthRust-Apple-$version-determinism.zip"
+recheck="$output_root/NativeOIDC-Apple-$version-determinism.zip"
 # Extend the EXIT trap to the recheck zip as well (replacing the
 # scratch-only trap set with the scratch). With the guard requiring
 # $output_root to be absent, no recheck zip from an earlier run exists

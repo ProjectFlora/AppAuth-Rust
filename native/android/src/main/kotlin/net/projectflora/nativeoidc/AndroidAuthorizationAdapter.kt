@@ -1,4 +1,4 @@
-package net.projectflora.appauth
+package net.projectflora.nativeoidc
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
@@ -15,13 +15,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import uniffi.appauth_rust.FfiAuthenticationState
-import uniffi.appauth_rust.FfiAuthorizationOptions
-import uniffi.appauth_rust.FfiCancellationHandle
-import uniffi.appauth_rust.FfiException
-import uniffi.appauth_rust.FfiServiceConfiguration
-import uniffi.appauth_rust.NativeHttpTransport
-import uniffi.appauth_rust.beginAuthorization
+import uniffi.native_oidc.FfiAuthenticationState
+import uniffi.native_oidc.FfiAuthorizationOptions
+import uniffi.native_oidc.FfiCancellationHandle
+import uniffi.native_oidc.FfiException
+import uniffi.native_oidc.FfiServiceConfiguration
+import uniffi.native_oidc.NativeHttpTransport
+import uniffi.native_oidc.beginAuthorization
 import java.net.URI
 import java.net.URISyntaxException
 import java.util.concurrent.atomic.AtomicReference

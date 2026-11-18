@@ -50,18 +50,18 @@ central_base="${MAVEN_CENTRAL_BASE_URL:-https://repo.maven.apache.org/maven2}"
 # The group's Maven path (native/android/build.gradle.kts) and the full
 # publication, the file set scripts/check-android-maven-publication.sh
 # verifies locally before the upload (Issue #131).
-base_path="net/project-flora/appauth/appauth-rust-android/${VERSION}"
+base_path="net/project-flora/nativeoidc/native-oidc-android/${VERSION}"
 artifact_files=(
-    "appauth-rust-android-${VERSION}.aar"
-    "appauth-rust-android-${VERSION}.pom"
-    "appauth-rust-android-${VERSION}.module"
-    "appauth-rust-android-${VERSION}-sources.jar"
-    "appauth-rust-android-${VERSION}-javadoc.jar"
-    "appauth-rust-android-${VERSION}.aar.asc"
-    "appauth-rust-android-${VERSION}.pom.asc"
-    "appauth-rust-android-${VERSION}.module.asc"
-    "appauth-rust-android-${VERSION}-sources.jar.asc"
-    "appauth-rust-android-${VERSION}-javadoc.jar.asc"
+    "native-oidc-android-${VERSION}.aar"
+    "native-oidc-android-${VERSION}.pom"
+    "native-oidc-android-${VERSION}.module"
+    "native-oidc-android-${VERSION}-sources.jar"
+    "native-oidc-android-${VERSION}-javadoc.jar"
+    "native-oidc-android-${VERSION}.aar.asc"
+    "native-oidc-android-${VERSION}.pom.asc"
+    "native-oidc-android-${VERSION}.module.asc"
+    "native-oidc-android-${VERSION}-sources.jar.asc"
+    "native-oidc-android-${VERSION}-javadoc.jar.asc"
 )
 
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
@@ -108,7 +108,7 @@ gate_summary() {
 
 # Stage 2: strict resolution preflight (see header).
 strict_check() {
-    "$repo_root/native/android/gradlew" -p "$fixture" -PappauthVersion="$VERSION" \
+    "$repo_root/native/android/gradlew" -p "$fixture" -PnativeOidcVersion="$VERSION" \
         --refresh-dependencies checkDebugAarMetadata
 }
 
