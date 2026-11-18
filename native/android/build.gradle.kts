@@ -79,6 +79,16 @@ val generateLicenseNotices by tasks.registering(Exec::class) {
     }
 }
 
+buildAndroidRustLibraries.configure {
+    inputs.property(
+        "rustToolchain",
+        providers.exec {
+            workingDir(repositoryRoot)
+            commandLine("rustc", "--version", "--verbose")
+        }.standardOutput.asText,
+    )
+}
+
 android {
     namespace = "net.projectflora.nativeoidc"
     compileSdk = 35
