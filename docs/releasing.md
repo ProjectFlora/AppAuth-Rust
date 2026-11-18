@@ -130,8 +130,8 @@ the release tracking issue.
 
 ## License notices
 
-Every release package ships `LICENSE` and `THIRD_PARTY_LICENSES.txt`
-(see the README's
+Every release package ships `LICENSE`, `THIRD_PARTY_LICENSES.txt` and
+`RUST_STANDARD_LIBRARY_COPYRIGHT.html` (see the README's
 [Third-party licenses](../README.md#third-party-licenses) section for the
 locations). The notices are generated, never edited by hand:
 
@@ -139,9 +139,19 @@ locations). The notices are generated, never edited by hand:
   `about.toml` (which crates and targets: the crates linked into the
   release libraries for every release target, without dev and build
   dependencies) and `about.hbs` (the text, including the Rust standard
-  library and UniFFI-generated bindings sections). It runs offline, so the
-  output depends only on `Cargo.lock`, and requires the pinned cargo-about
-  version.
+  library and UniFFI-generated bindings sections). It runs offline and
+  requires the pinned cargo-about version.
+- The Rust standard library is not in `Cargo.lock`, so the script takes its
+  notices from the active Rust toolchain: it appends the toolchain version
+  and the license files of compiler-builtins and libm (the parts not under
+  `MIT OR Apache-2.0`, with copyright notices of their own) from the
+  rust-src component, which it installs, and copies the toolchain's
+  `share/doc/rust/COPYRIGHT-library.html` as
+  `RUST_STANDARD_LIBRARY_COPYRIGHT.html`. The output therefore depends on
+  `Cargo.lock` and the toolchain, and each package generates it with the
+  toolchain that builds it. The release workflow pins every package job to
+  the same Rust version (`dtolnay/rust-toolchain@1.100.0`), so all packages
+  ship the same notices; change them together.
 - The Apple packaging script, the Android release build
   (`generateLicenseNotices`) and `scripts/package-windows.ps1` (after the
   workflow step that runs the script) put the files into the packages.
@@ -161,6 +171,10 @@ Maintenance:
 - **A `ring` update**: `about.toml` pins the checksums of ring's license
   files, so generation fails until they are reviewed and the checksums
   updated.
+- **A Rust toolchain update**: check that the toolchain still has the two
+  license files the script appends, and whether another part of the
+  standard library gained a license other than `MIT OR Apache-2.0` (its
+  `library/` sources in rust-src).
 - **A cargo-about or cargo-deny update**: change the version in
   `scripts/generate-third-party-licenses.sh` (cargo-about) and in every
   `taiki-e/install-action` step of `ci.yml` and `release.yml` together.
@@ -168,8 +182,10 @@ Maintenance:
 `release-consumer.yml` runs the same consumer checks, so it requires the
 notices too and can validate only v0.7.1 and later. v0.1.0 through v0.7.0
 shipped without them; their notices were generated afterwards from each
-tag's `Cargo.lock` and attached to the GitHub Releases as
-`THIRD_PARTY_LICENSES-<version>.txt`, leaving `SHA256SUMS` unchanged
+tag's `Cargo.lock` and the Rust version of each release run, and attached
+to the GitHub Releases as `THIRD_PARTY_LICENSES-<version>.txt` and
+`RUST_STANDARD_LIBRARY_COPYRIGHT-<version>.html`, leaving `SHA256SUMS`
+unchanged
 ([#161](https://github.com/ProjectFlora/NativeOIDC/issues/161)).
 
 ## Why CI creates the tag

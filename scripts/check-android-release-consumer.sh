@@ -11,7 +11,11 @@ archive=$(cd -- "$(dirname -- "$1")" && pwd)/$(basename -- "$1")
 fixture="$repo_root/native/consumer-smoke/android"
 library="$fixture/app/libs/native-oidc.aar"
 
-notices=(META-INF/native-oidc/LICENSE META-INF/native-oidc/THIRD_PARTY_LICENSES.txt)
+notices=(
+    META-INF/native-oidc/LICENSE
+    META-INF/native-oidc/THIRD_PARTY_LICENSES.txt
+    META-INF/native-oidc/RUST_STANDARD_LIBRARY_COPYRIGHT.html
+)
 classes_jar=$(mktemp)
 
 mkdir -p "$(dirname -- "$library")"

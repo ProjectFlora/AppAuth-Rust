@@ -158,7 +158,9 @@ jobs:
         with:
           packages: platform-tools
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
-      - uses: dtolnay/rust-toolchain@stable
+      # The same Rust as the Apple job, so every package links the same
+      # standard library and ships the same notices for it.
+      - uses: dtolnay/rust-toolchain@1.100.0
       # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
       - uses: taiki-e/install-action@v2
         with:
@@ -231,7 +233,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      # The same Rust as the Apple job, so every package links the same
+      # standard library and ships the same notices for it.
+      - uses: dtolnay/rust-toolchain@1.100.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked --lib --target x86_64-pc-windows-msvc
       - run: cargo test --locked --lib --target x86_64-pc-windows-msvc
@@ -453,7 +457,9 @@ jobs:
         with:
           packages: platform-tools
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
-      - uses: dtolnay/rust-toolchain@stable
+      # The same Rust as the Apple job, so every package links the same
+      # standard library and ships the same notices for it.
+      - uses: dtolnay/rust-toolchain@1.100.0
       # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
       - uses: taiki-e/install-action@v2
         with:

@@ -45,6 +45,8 @@ val buildAndroidRustLibraries by tasks.registering(Exec::class) {
 // License notices for the release AAR, in classes.jar under a path of their
 // own so they do not collide with other libraries' META-INF/LICENSE in apps.
 // Only release builds ship them, so debug builds do not need cargo-about.
+// The standard library notices come from the Rust toolchain running this
+// build, which is also the one that builds the Rust libraries.
 val generatedLicenses = layout.buildDirectory.dir("generated/licenses")
 val generateLicenseNotices by tasks.registering(Exec::class) {
     val noticeDir = generatedLicenses.map { it.dir("META-INF/native-oidc").asFile }

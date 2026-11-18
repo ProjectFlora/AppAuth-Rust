@@ -1,7 +1,8 @@
 # Builds the Windows release library and packages it as <Package>.zip, with
-# the header, the .NET wrapper, LICENSE and THIRD_PARTY_LICENSES.txt at the
-# zip root. Run scripts/generate-third-party-licenses.sh first (from bash);
-# the package takes its notices from target/licenses/THIRD_PARTY_LICENSES.txt.
+# the header, the .NET wrapper, LICENSE and the license notices at the zip
+# root. Run scripts/generate-third-party-licenses.sh first (from bash, with
+# the same Rust toolchain); the package takes its notices from
+# target/licenses/.
 param(
     [Parameter(Mandatory = $true)]
     [string]$Package
@@ -12,9 +13,11 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Push-Location $repoRoot
 
 try {
-    $notices = "target/licenses/THIRD_PARTY_LICENSES.txt"
-    if (-not (Test-Path $notices)) {
-        throw "$notices is missing; run scripts/generate-third-party-licenses.sh first."
+    $notices = "target/licenses/THIRD_PARTY_LICENSES.txt", "target/licenses/RUST_STANDARD_LIBRARY_COPYRIGHT.html"
+    foreach ($notice in $notices) {
+        if (-not (Test-Path $notice)) {
+            throw "$notice is missing; run scripts/generate-third-party-licenses.sh first."
+        }
     }
 
     cargo build --locked --release --lib --target x86_64-pc-windows-msvc

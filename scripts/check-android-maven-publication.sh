@@ -30,6 +30,7 @@ unzip -Z1 "$base.aar" | grep -Fx jni/x86_64/libnative_oidc.so
 unzip -p "$base.aar" classes.jar > "$local_repo/classes.jar"
 unzip -Z1 "$local_repo/classes.jar" | grep -Fx META-INF/native-oidc/LICENSE
 unzip -Z1 "$local_repo/classes.jar" | grep -Fx META-INF/native-oidc/THIRD_PARTY_LICENSES.txt
+unzip -Z1 "$local_repo/classes.jar" | grep -Fx META-INF/native-oidc/RUST_STANDARD_LIBRARY_COPYRIGHT.html
 unzip -Z1 "$base-sources.jar" | grep -E '(^|/)uniffi/native_oidc/native_oidc\.kt$'
 unzip -Z1 "$base-sources.jar" | grep -E '(^|/)net/projectflora/nativeoidc/AndroidAuthorizationAdapter\.kt$'
 
