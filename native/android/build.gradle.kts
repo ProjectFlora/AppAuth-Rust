@@ -88,8 +88,7 @@ android {
 
     sourceSets.getByName("main").java.srcDir(generatedBindings.map { it.dir("kotlin") })
     sourceSets.getByName("main").jniLibs.srcDir(androidRustLibraries)
-    // The task (not its directory) as the source, so every task reading it depends on it.
-    sourceSets.getByName("release").resources.srcDir(generateLicenseNotices)
+    sourceSets.getByName("release").resources.srcDir(generatedLicenses)
 
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -103,6 +102,10 @@ tasks.named("preBuild").configure {
 tasks.configureEach {
     if (name == "mergeDebugJniLibFolders" || name == "mergeReleaseJniLibFolders") {
         dependsOn(buildAndroidRustLibraries)
+    }
+    // AGP does not infer this dependency from the resources source directory.
+    if (name == "processReleaseJavaRes") {
+        dependsOn(generateLicenseNotices)
     }
     // The published sources and javadoc jars read the generated bindings.
     if (name == "sourceReleaseJar" || name.startsWith("javaDocRelease")) {
