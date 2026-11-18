@@ -145,7 +145,12 @@ rewrites `main`'s `Package.swift`. `main` therefore keeps the binary target
 last committed to it by hand, and it falls further behind the Cargo version
 with every release unless someone updates it.
 `scripts/check-spm-manifest.sh` accepts any such lag and rejects only a
-manifest that leads the Cargo version. SPM consumers resolve released
+manifest that leads the Cargo version. Releases up to 0.6.0 were published
+while the repository was named `ProjectFlora/AppAuth-Rust`; the check also
+accepts their original asset URLs, which GitHub redirects after the rename
+([#146](https://github.com/ProjectFlora/AppAuth-Rust/issues/146)), so
+renaming the repository does not invalidate the binary target on `main`.
+SPM consumers resolve released
 versions by tag and are unaffected; depending on the `main` branch through
 SPM is not supported.
 
