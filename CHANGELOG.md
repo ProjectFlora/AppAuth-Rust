@@ -23,6 +23,11 @@ interoperability testing and support policies are still evolving. Each release r
   Releases now carry the notice files, and Maven
   Central users of v0.7.0 should move to this release
   ([#161](https://github.com/ProjectFlora/NativeOIDC/issues/161)).
+- Start each release's generated notes at the previous release. Release
+  commits are tagged off `main`, so GitHub started the notes of every
+  release since v0.5.0 at `v0.4.0`, the last release tagged on `main`; the
+  notes of v0.6.0 and v0.7.0 have been corrected
+  ([#151](https://github.com/ProjectFlora/NativeOIDC/issues/151)).
 
 ### Documentation
 
