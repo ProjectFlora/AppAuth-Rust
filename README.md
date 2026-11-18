@@ -1,8 +1,16 @@
 # AppAuth-Rust
 
-Rust client library for OAuth 2.0 and OpenID Connect, informed by
+Rust client library for OAuth 2.0 and OpenID Connect for native apps. Its
+feature scope was planned by comparison with
 [AppAuth-iOS](https://github.com/openid/AppAuth-iOS) and
-[AppAuth-Android](https://github.com/openid/AppAuth-Android).
+[AppAuth-Android](https://github.com/openid/AppAuth-Android), which serve as
+reference implementations only (see [FEATURE_MATRIX.md](FEATURE_MATRIX.md)).
+
+AppAuth-Rust is an independent project by ProjectFlora. It is not affiliated
+with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth
+projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID
+Foundation. The project will be renamed NativeOIDC
+([#146](https://github.com/ProjectFlora/AppAuth-Rust/issues/146)).
 
 See the [documentation index](docs/README.md) for platform installation guides,
 the shared authentication-state lifecycle, and public API coverage by language.
@@ -57,8 +65,8 @@ before the 1.0.0 tag; the pre-1.0 release policy in
 ## Redirect policy
 
 - **iOS / iPadOS:** Prefer verified HTTPS redirects; allow a custom URI scheme
-  fallback. AppAuth-iOS requires iOS 17.4+ and `webcredentials` domain
-  association for HTTPS redirects.
+  fallback. HTTPS callbacks through `ASWebAuthenticationSession` require
+  iOS 17.4+ and `webcredentials` domain association.
 - **Android:** Prefer verified Android App Links; allow a custom URI scheme
   fallback. App Links require API 23+ and domain association.
 - **macOS:** Use an HTTP loopback redirect on a dynamically allocated port,

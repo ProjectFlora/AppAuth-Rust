@@ -1,5 +1,10 @@
 # Windows desktop adapter
 
+AppAuth-Rust is an independent project by ProjectFlora. It is not affiliated
+with, endorsed by, or sponsored by the OpenID Foundation or the AppAuth
+projects (AppAuth-iOS, AppAuth-Android). OpenID is a trademark of the OpenID
+Foundation.
+
 The Windows adapter is a blocking C ABI over the shared Rust authorization
 core. It exposes authorization, token refresh, OIDC end-session, and token
 revocation. Browser flows open in the system browser, and loopback callbacks

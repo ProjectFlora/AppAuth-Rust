@@ -98,7 +98,21 @@ This roadmap tracks work remaining for the initial scope in
   consumers are the native bindings, publishing requires package metadata,
   docs.rs, and `cargo publish` validation work, and the version policy relative
   to the Maven Central and SPM packages is not yet settled. Re-evaluate after
-  1.0.0 or when a concrete pure-Rust consumer need emerges.
+  1.0.0 or when a concrete pure-Rust consumer need emerges. Until then the
+  crate sets `publish = false`.
+- **Project name:** Decided 2026-11-18
+  ([#145](https://github.com/ProjectFlora/AppAuth-Rust/issues/145)). Rename
+  the project to NativeOIDC in v0.7.0
+  ([#146](https://github.com/ProjectFlora/AppAuth-Rust/issues/146)). The
+  current name contains the name of the OpenID Foundation's AppAuth projects
+  and may be read as an official Rust port; this project is not affiliated
+  with them. Do not use "AppAuth" or "OpenID" (a trademark of the OpenID
+  Foundation) in the name; use "OIDC" as the common abbreviation of the
+  specification. Leave "Rust" out, because consumers use the Swift, Kotlin,
+  C++, and .NET APIs and Rust is an implementation detail. Rename before the
+  first Maven Central publication succeeds, so that no artifact is published
+  under the old coordinates. State the non-affiliation in the README, the
+  documentation index, the release-asset READMEs, and the POM.
 
 ## Open decisions
 
