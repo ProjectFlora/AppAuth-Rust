@@ -7,10 +7,15 @@
 # was not there yet (#131). This check fails the run, before any build job
 # starts, if the public key is not resolvable by fingerprint.
 #
-# It covers every *primary* key in GPG_PRIVATE_KEY. A key server lookup by
-# primary fingerprint returns the whole key block, subkeys included, and
-# keys.openpgp.org does not resolve subkey fingerprints on the
-# by-fingerprint endpoint, so subkeys are deliberately not checked.
+# It covers every *primary* key in GPG_PRIVATE_KEY, whether the secret holds
+# a secret key block (a GPG_PRIVATE_KEY secret almost always does) or a public
+# key block. A secret key packet (type 5) embeds the full public key packet
+# (RFC 9580 section 5.5.3), and a version 4 fingerprint is computed over that
+# public part only, so the parser recovers the public part from the secret
+# packet and fingerprints it. A key server lookup by primary fingerprint
+# returns the whole key block, subkeys included, and keys.openpgp.org does
+# not resolve subkey fingerprints on the by-fingerprint endpoint, so subkeys
+# are deliberately not checked.
 #
 # GPG_PRIVATE_KEY is required. This differs from
 # check-android-maven-publication.sh, which skips its signature checks when
@@ -71,7 +76,10 @@ chmod 600 "$key_file"
 
 # The parser is standard-library Python so the check runs on any machine
 # with python3 (no GnuPG dependency). Fingerprint: RFC 9580 section 5.5.4.2
-# (v4: SHA-1 of 0x99 + 2-octet body length + body).
+# (v4: SHA-1 of 0x99 + 2-octet body length + body). A secret key packet
+# (type 5) embeds the public key packet, so its public part is recovered by
+# parsing the algorithm-specific material (section 5.5.5) and validating the
+# secret tail (section 5.5.3); the fingerprint then uses that public part.
 cat > "$workdir/parse_key.py" <<'PY'
 import base64
 import binascii
@@ -254,6 +262,181 @@ def fingerprint_v4(body):
     return hashlib.sha1(b"\x99" + len(body).to_bytes(2, "big") + body).hexdigest().upper()
 
 
+# Symmetric ciphers and their block sizes in octets (RFC 9580 section 9.3).
+# The block size is the size of the IV in a passphrase-protected secret
+# key packet.
+CIPHER_BLOCK_SIZES = {
+    1: 8,    # IDEA
+    2: 8,    # TripleDES
+    3: 8,    # CAST5
+    4: 8,    # Blowfish
+    7: 16,   # AES-128
+    8: 16,   # AES-192
+    9: 16,   # AES-256
+    10: 16,  # Twofish
+    11: 16,  # Camellia-128
+    12: 16,  # Camellia-192
+    13: 16,  # Camellia-256
+}
+
+# Size in octets of the type-specific fields of an S2K specifier, not
+# counting the 1-octet S2K type (RFC 9580 section 3.7.1).
+S2K_FIELD_SIZES = {
+    0: 1,    # simple: 1-octet hash algorithm
+    1: 8,    # salted: 8-octet salt
+    3: 9,    # iterated and salted: 8-octet salt + 1-octet count code
+}
+
+
+def _mpi_end(data, i):
+    """Return the index just past the MPI (RFC 9580 section 3.2) at data[i],
+    or None when it is truncated. The 2-octet length is in bits; a
+    non-minimal encoding (leading octet with a clear top bit) is tolerated
+    because the section 3.2 minimal rule is a version 6 MUST only."""
+    if i + 2 > len(data):
+        return None
+    bits = int.from_bytes(data[i:i + 2], "big")
+    if bits == 0:
+        return i + 2
+    end = i + 2 + (bits + 7) // 8
+    return end if end <= len(data) else None
+
+
+def _mpi_run(data):
+    """Count the consecutive MPIs spanning data exactly; None when any MPI is
+    truncated. An MPI's bit count bounds its content, so a random octet
+    stream usually fails this walk: a passing run is a strong structural
+    signal that the octets really are secret key material."""
+    count = 0
+    i = 0
+    while i < len(data):
+        end = _mpi_end(data, i)
+        if end is None:
+            return None
+        i = end
+        count += 1
+        if count > 256:
+            return None
+    return count
+
+
+def _public_material_end(body):
+    """Locate the end of the algorithm-specific public key material of a
+    version 4 key packet body (RFC 9580 sections 5.5.2.2 and 5.5.5).
+    Returns the index in the body just past the material, or None when the
+    material cannot be parsed (unknown algorithm, or an MPI whose declared
+    bit count overruns the packet). In a secret key packet that index is
+    where the S2K usage octet begins (section 5.5.3) and the tail is
+    validated separately, so the material itself need not run to the end of
+    the body; a public key packet's material does."""
+    if len(body) < 7 or body[0] != 4:
+        return None
+    algo = body[5]
+    mat = body[6:]
+    if algo in (1, 2, 3):  # RSA: modulus, public exponent (5.5.5.2)
+        end = _mpi_end(mat, 0)
+        end = _mpi_end(mat, end) if end is not None else None
+    elif algo in (16, 17):  # ElGamal (16) / DSA (17): p, q, g, y
+        end = 0
+        for _ in range(4):
+            end = _mpi_end(mat, end)
+            if end is None:
+                break
+    elif algo in (18, 19):  # ECDH / ECDSA: [1-octet len][curve OID][point MPI]
+        if mat[0] in (0, 0xFF):  # reserved variable-length values
+            return None
+        end = 1 + mat[0]
+        end = _mpi_end(mat, end) if end <= len(mat) else None
+        if end is not None and algo == 18:  # ECDH appends [1-octet len][KDF]
+            if end + 1 > len(mat) or mat[end] in (0, 0xFF):
+                end = None
+            else:
+                end += 1 + mat[end]
+                if end > len(mat):
+                    end = None
+    elif algo == 22:  # EdDSA: [1-octet len][curve OID][MPI: format + key]
+        if mat[0] in (0, 0xFF):
+            return None
+        end = 1 + mat[0]
+        if end + 2 > len(mat):
+            end = None
+        else:
+            bits = int.from_bytes(mat[end:end + 2], "big")
+            octets = (bits + 7) // 8 if bits else 0
+            if octets < 2:  # a point is at least a format + 1 key octet
+                end = None
+            else:
+                end += 2 + octets
+                if end > len(mat):
+                    end = None
+    else:
+        return None  # unknown or reserved public key algorithm
+    if end is None or end <= 0 or end >= len(mat):
+        # The material is empty, or ran all the way to the end of the body:
+        # a secret key packet must have a non-empty tail after it.
+        return None
+    return 6 + end
+
+
+def _secret_tail_ok(body, b):
+    """Check the secret key fields (RFC 9580 section 5.5.3) of a version 4
+    secret key packet from body[b], the S2K usage octet, to the end of the
+    body. The fingerprint uses only the public part, so this is a sanity
+    gate: a secret packet whose tail does not parse will not import cleanly
+    in any implementation, and its public part is not trusted."""
+    n = len(body)
+    usage = body[b]
+    if usage == 0:
+        # Unprotected: [secret MPIs][2-octet checksum of the secret material].
+        if n - b < 5:
+            return False
+        mpis = body[b + 1:-2]
+        return _mpi_run(mpis) is not None and \
+            sum(mpis) % 65536 == int.from_bytes(body[-2:], "big")
+    if 1 <= usage <= 13:
+        # Legacy form: the usage octet is the cipher (simple MD5 S2K).
+        # [cipher][IV][CFB-encrypted (secret MPIs + 2-octet checksum)].
+        iv = CIPHER_BLOCK_SIZES.get(usage)
+        return iv is not None and n - b >= 1 + iv + 16
+    if usage in (253, 254, 255) or 100 <= usage <= 110:
+        # [cipher][S2K type][type-specific fields][IV][CFB-encrypted data].
+        if n - b < 3:
+            return False
+        iv = CIPHER_BLOCK_SIZES.get(body[b + 1])
+        if iv is None:
+            return False
+        if usage in (253, 254, 255):
+            s2k = S2K_FIELD_SIZES.get(body[b + 2])
+            if s2k is not None:
+                return n - b >= 2 + 1 + s2k + iv + 16
+        # Private/experimental S2K types (100-110) have a variable field
+        # size; only the minimum can be checked.
+        return n - b >= 2 + 1 + iv + 16
+    return False
+
+
+def key_fingerprint(tag, body):
+    """Return (fingerprint, problem) for a key packet (RFC 9580 section
+    5.5.4.2). For a secret key or secret subkey packet (tag 5/7) the
+    fingerprint is that of the embedded public part: key servers serve that
+    part and consumers verify signatures against it. problem is None when
+    the fingerprint is computable, else a human-readable reason."""
+    if not body or body[0] != 4:
+        return None, None
+    if tag in (6, 14):
+        return fingerprint_v4(body), None
+    if tag in (5, 7):
+        end = _public_material_end(body)
+        if end is None:
+            return None, "its public key material could not be parsed " \
+                "(algorithm %d)" % body[5]
+        if not _secret_tail_ok(body, end):
+            return None, "its secret key protection fields could not be " \
+                "parsed (S2K usage octet %d)" % body[end]
+        return fingerprint_v4(body[:end]), None
+    return None, None
+
+
 def primary_fingerprints(path):
     try:
         text = open(path, encoding="utf-8", errors="replace").read()
@@ -268,18 +451,23 @@ def primary_fingerprints(path):
         if data is None:
             fail("the key material is not valid base64/OpenPGP data; the secret value may be corrupted")
         for tag, body in iter_packets(data):
-            if tag not in (6, 14) or not body:
+            if tag not in (5, 6, 7, 14) or not body:
                 continue
             if body[0] != 4:
                 print("note: skipping a version %d key (this check supports version 4 keys only; "
                       "verify its publication manually)" % body[0], file=sys.stderr)
                 continue
-            fpr = fingerprint_v4(body)
-            if tag == 14:
+            fpr, problem = key_fingerprint(tag, body)
+            if problem is not None:
+                print("note: a secret key packet is malformed (%s); its fingerprint cannot be "
+                      "derived, verify its publication manually" % problem, file=sys.stderr)
+                continue
+            if tag in (5, 6):
+                if fpr not in fprs:
+                    fprs.append(fpr)
+            else:
                 print("note: subkey %s is not checked directly; a lookup by the primary "
                       "fingerprint returns it" % fpr, file=sys.stderr)
-            elif fpr not in fprs:
-                fprs.append(fpr)
     if not fprs:
         fail("no version-4 primary key packet found in GPG_PRIVATE_KEY")
     return fprs
