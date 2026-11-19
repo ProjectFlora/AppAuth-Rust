@@ -97,8 +97,10 @@ repackages those assets; its Maven Central upload failed signature validation
 and was never published. The published
 [v0.7.0 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.7.0)
 renames the project to NativeOIDC and publishes the Android library to Maven
-Central. See
-[Download and verify v0.7.0](README.md#download-and-verify-v070) for exact asset
+Central. The published
+[v0.7.1 release](https://github.com/ProjectFlora/NativeOIDC/releases/tag/v0.7.1)
+adds the license notices to every release package. See
+[Download and verify v0.7.1](README.md#download-and-verify-v071) for exact asset
 names, download links, and checksum verification using the same release's
 `SHA256SUMS`. The XCFramework contains the generated Swift API and Rust
 library; the AAR contains the generated Kotlin API and Android Rust libraries;
