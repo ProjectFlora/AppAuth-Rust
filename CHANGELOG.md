@@ -13,10 +13,12 @@ interoperability testing and support policies are still evolving. Each release r
   dispatch (candidate and publish), derives the fingerprint of every primary
   key in the `GPG_PRIVATE_KEY` secret and requires each to resolve at
   `keys.openpgp.org` by fingerprint, retrying to absorb key-server
-  propagation lag. The secret may hold a secret or a public key block: a
-  secret key packet embeds the public key (RFC 9580 section 5.5.3), and the
-  check derives the fingerprint from that embedded public part. A public key
-  absent from the key server failed v0.6.0's
+  propagation lag. The parser handles both a secret and a public key block
+  (a secret key packet embeds the public key, RFC 9580 section 5.5.3, and
+  the check derives the fingerprint from that embedded public part), but
+  material without secret key packets fails: it cannot sign, so the run
+  would break only at the Maven signing step. A public key absent from the
+  key server failed v0.6.0's
   Maven Central sync validation, which is why v0.6.0 was never published
   there ([#131](https://github.com/ProjectFlora/NativeOIDC/issues/131),
   [#152](https://github.com/ProjectFlora/NativeOIDC/issues/152)).

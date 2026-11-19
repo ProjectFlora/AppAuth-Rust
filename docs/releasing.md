@@ -20,7 +20,11 @@ check: it derives the fingerprint of every primary key in the
 retrying briefly to absorb key-server propagation lag. Maven Central's sync
 validation fetches the signing key's public key from the key server, so a
 key that is not there yet fails the run before any package is built rather
-than after a full build ([Repository settings](#repository-settings)).
+than after a full build ([Repository settings](#repository-settings)). The
+check is fail-safe: it also fails when the secret holds only public key
+material (nothing to sign with) or a key it cannot fingerprint (an
+unsupported version, or a truncated or malformed packet), so those break the
+run early instead of at the Maven signing step.
 
 ## 1. Prepare the release
 
@@ -322,12 +326,16 @@ of previous runs, so move any archive you keep somewhere else first.
 
 ## Recovering from a failed run
 
-- **Key server check failed** (no package was built): the `GPG_PRIVATE_KEY`
-  secret's public key is not resolvable at `keys.openpgp.org`; the job log
-  names the fingerprint and the lookup URL. Upload the ASCII-armored public
+- **Key server check failed** (no package was built): the job fails when a
+  signing key's public part is not resolvable at `keys.openpgp.org` (the log
+  names the fingerprint and the lookup URL; upload the ASCII-armored public
   key at <https://keys.openpgp.org/upload>, wait for the pool to propagate,
   confirm the `200` with the curl check in step 3, and dispatch the run
-  again.
+  again), or when the secret cannot be used for signing as-is — it holds
+  only public key material, or a key the check cannot fingerprint
+  (unsupported version, truncated or malformed packet); the log names the
+  reason. In the latter cases, fix the repository secret
+  (`gpg --armor --export-secret-keys <fpr>`) and dispatch the run again.
 
 - **Failed before "Create release commit and tag"**: nothing was published.
   Fix the cause and dispatch the workflow again.

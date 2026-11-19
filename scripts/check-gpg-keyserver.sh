@@ -7,20 +7,23 @@
 # was not there yet (#131). This check fails the run, before any build job
 # starts, if the public key is not resolvable by fingerprint.
 #
-# It covers every *primary* key in GPG_PRIVATE_KEY, whether the secret holds
-# a secret key block (a GPG_PRIVATE_KEY secret almost always does) or a public
-# key block. A secret key packet (type 5) embeds the full public key packet
-# (RFC 9580 section 5.5.3), and a version 4 fingerprint is computed over that
-# public part only, so the parser recovers the public part from the secret
-# packet and fingerprints it. A key server lookup by primary fingerprint
-# returns the whole key block, subkeys included, and keys.openpgp.org does
-# not resolve subkey fingerprints on the by-fingerprint endpoint, so subkeys
-# are deliberately not checked.
+# It covers every *primary* key in GPG_PRIVATE_KEY. The parser handles a
+# secret key block (a GPG_PRIVATE_KEY secret almost always is one) and a
+# public key block alike: a secret key packet (type 5) embeds the full public
+# key packet (RFC 9580 section 5.5.3), and a version 4 fingerprint is
+# computed over that public part only, so the parser recovers the public part
+# from the secret packet and fingerprints it. A key server lookup by primary
+# fingerprint returns the whole key block, subkeys included, and
+# keys.openpgp.org does not resolve subkey fingerprints on the
+# by-fingerprint endpoint, so subkeys are deliberately not checked.
 #
-# A primary key that cannot be fingerprinted (an unsupported key version, or
-# a secret packet whose fields do not parse) fails the gate rather than being
-# skipped: its publication cannot be verified, so it must not let the run
-# through on the strength of another key in the same secret.
+# Fail-safe: a primary key that cannot be fingerprinted (an unsupported key
+# version, a secret packet whose fields do not parse, or a packet truncated
+# in its header or body) fails the gate rather than being skipped: its
+# publication cannot be verified, so it must not let the run through on the
+# strength of another key in the same secret. A secret holding only public
+# key material also fails: it cannot sign, so the run would break at the
+# Maven signing step, after a full build.
 #
 # GPG_PRIVATE_KEY is required. This differs from
 # check-android-maven-publication.sh, which skips its signature checks when
@@ -189,8 +192,22 @@ def key_blocks(text):
     return []
 
 
+def _reject_truncated_packet(tag):
+    # The data ends in the middle of a packet (its header or body). For a
+    # primary key packet (tag 5/6) that is corruption the gate must reject:
+    # a valid key earlier in the same block must not let the run through.
+    # Other packet types (subkeys, signatures, user ids) only end the parse:
+    # they are not part of the gate's verdict.
+    if tag in (5, 6):
+        fail("a primary key packet is truncated; check the key material for corruption")
+
+
 def iter_packets(data):
-    """Yield (tag, body) for each OpenPGP packet (RFC 9580 section 4.2)."""
+    """Yield (tag, body) for each OpenPGP packet (RFC 9580 section 4.2).
+
+    A packet that does not fit in the remaining data fails the gate when it
+    is a primary key packet (see _reject_truncated_packet) and otherwise
+    ends the parse."""
     i = 0
     n = len(data)
     while i < n:
@@ -203,6 +220,7 @@ def iter_packets(data):
             tag = first & 0x3F
             i += 1
             if i >= n:
+                _reject_truncated_packet(tag)
                 return
             l0 = data[i]
             if l0 < 192:
@@ -210,11 +228,13 @@ def iter_packets(data):
                 i += 1
             elif l0 < 224:
                 if i + 1 >= n:
+                    _reject_truncated_packet(tag)
                     return
                 length = ((l0 - 192) << 8) + data[i + 1] + 192
                 i += 2
             elif l0 == 255:
                 if i + 4 > n:
+                    _reject_truncated_packet(tag)
                     return
                 length = int.from_bytes(data[i + 1:i + 5], "big")
                 i += 5
@@ -231,12 +251,14 @@ def iter_packets(data):
                         break
                     elif l < 224:
                         if i + 1 >= n:
+                            _reject_truncated_packet(tag)
                             return
                         length += ((l - 192) << 8) + data[i + 1] + 192
                         i += 2
                         break
                     else:
                         if i + 4 > n:
+                            _reject_truncated_packet(tag)
                             return
                         length += int.from_bytes(data[i + 1:i + 5], "big")
                         i += 5
@@ -246,6 +268,9 @@ def iter_packets(data):
             tag = (first >> 2) & 0x0F
             length_type = first & 0x03
             if length_type == 0:
+                if i + 1 >= n:
+                    _reject_truncated_packet(tag)
+                    return
                 length = data[i + 1]
                 i += 2
             elif length_type == 1:
@@ -258,8 +283,7 @@ def iter_packets(data):
                 length = n - i - 1
                 i += 1
         if i + length > n:
-            if tag in (5, 6):
-                fail("a primary key packet is truncated; check the secret for corruption")
+            _reject_truncated_packet(tag)
             return
         yield tag, data[i:i + length]
         i += length
@@ -447,12 +471,15 @@ def key_fingerprint(tag, body):
 def primary_fingerprints(path):
     """Return the version 4 primary key fingerprints of the key material.
 
-    A primary key this check cannot fingerprint (an unsupported version, or
-    a secret packet whose fields do not parse) fails the gate: its
-    publication cannot be verified, and a key whose publication cannot be
-    verified must not let the run through (a v4 key in the same secret
-    cannot stand in for it). Subkeys are deliberately not checked, so their
-    problems only merit a note."""
+    A primary key this check cannot fingerprint (an unsupported version, a
+    secret packet whose fields do not parse, or a truncated packet) fails
+    the gate: its publication cannot be verified, and a key whose
+    publication cannot be verified must not let the run through (a v4 key
+    in the same secret cannot stand in for it). Subkeys are deliberately not
+    checked, so their problems only merit a note. The material must also
+    carry secret key material (a secret key or secret subkey packet): a
+    public-only secret cannot sign, so the run would fail only at the Maven
+    signing step, after a full build."""
     try:
         text = open(path, encoding="utf-8", errors="replace").read()
     except OSError as error:
@@ -461,6 +488,7 @@ def primary_fingerprints(path):
     if not blocks:
         fail("no PGP key block in GPG_PRIVATE_KEY (expected an ASCII-armored key, or a single raw base64 key)")
     fprs = []
+    saw_secret = False
     for block in blocks:
         data = decode_block(block)
         if data is None:
@@ -468,6 +496,8 @@ def primary_fingerprints(path):
         for tag, body in iter_packets(data):
             if tag not in (5, 6, 7, 14) or not body:
                 continue
+            if tag in (5, 7):
+                saw_secret = True
             if body[0] != 4:
                 if tag in (5, 6):
                     fail("a version %d primary key is in GPG_PRIVATE_KEY, but this check "
@@ -494,6 +524,11 @@ def primary_fingerprints(path):
                       "fingerprint returns it" % fpr, file=sys.stderr)
     if not fprs:
         fail("no version-4 primary key packet found in GPG_PRIVATE_KEY")
+    if not saw_secret:
+        fail("GPG_PRIVATE_KEY contains no secret key material (only public key packets); "
+             "release signing requires the secret key, so the run would fail at the "
+             "Maven signing step. Set the repository secret to the ASCII-armored "
+             "secret key block (export it with: gpg --armor --export-secret-keys <fpr>)")
     return fprs
 
 

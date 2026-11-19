@@ -20,7 +20,13 @@ The key server is a local mock; the key material is:
     the "subkeys are not checked directly" path);
   * the version 6 certificate from RFC 9580 appendix A.3 (no CRC footer,
     76-character lines), which the check must reject with a
-    manual-verification notice because it supports v4 keys only.
+    manual-verification notice because it supports v4 keys only;
+  * the RFC A.1 key as a public block only (no secret packet), which the
+    check must reject: it cannot sign, so the failure must not be deferred
+    to the Maven signing step; and
+  * a truncated primary key packet (a length header cut short, or a body
+    shorter than its declared length), which must fail the gate rather than
+    be silently ignored after an earlier valid key.
 """
 import base64
 import http.server
@@ -293,7 +299,10 @@ class KeyserverCheckTests(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
 
-    def run_script(self, routes, key=RFC_ED25519_KEY, attempts="3", delay="0",
+    # The default secret is the A.1 key as a secret packet: the check fails
+    # on material without secret key packets, so tests of the lookup path
+    # feed it (same RFC key, same fingerprint as the public fixture).
+    def run_script(self, routes, key=A1_SECRET_KEY, attempts="3", delay="0",
                    with_secret=True, summary=None):
         self.server.routes = routes
         self.server.requests.clear()
@@ -387,7 +396,9 @@ class KeyserverCheckTests(unittest.TestCase):
         self.assertEqual(self.server.requests, [])
 
     def test_multiple_keys_all_resolved(self):
-        key = RFC_ED25519_KEY + "\n" + RSA_KEY
+        # A secret block and a public block in one secret: both primaries
+        # are checked, the secret material satisfies the signability gate.
+        key = A1_SECRET_KEY + "\n" + RSA_KEY
         routes = {
             route(RFC_ED25519_FPR): block(RFC_ED25519_KEY),
             route(RSA_FPR): block(RSA_KEY),
@@ -401,7 +412,7 @@ class KeyserverCheckTests(unittest.TestCase):
                          sorted([route(RFC_ED25519_FPR), route(RSA_FPR)]))
 
     def test_multiple_keys_one_missing(self):
-        key = RFC_ED25519_KEY + "\n" + RSA_KEY
+        key = A1_SECRET_KEY + "\n" + RSA_KEY
         routes = {
             route(RFC_ED25519_FPR): block(RFC_ED25519_KEY),
             route(RSA_FPR): (404, None),
@@ -434,6 +445,38 @@ class KeyserverCheckTests(unittest.TestCase):
         self.assertIn("version 6", r.stderr)
         # The gate fails before any lookup.
         self.assertEqual(self.server.requests, [])
+
+    def test_public_only_key(self):
+        # Public key material only: the key resolves, but the run cannot
+        # sign, so the gate fails before any build rather than deferring
+        # the failure to the Maven signing step.
+        r = self.run_script({route(RFC_ED25519_FPR): block(RFC_ED25519_KEY)},
+                            key=RFC_ED25519_KEY)
+        self.assertEqual(r.returncode, 1, (r.stdout, r.stderr))
+        self.assertIn("no secret key material", r.stderr)
+        self.assertEqual(self.server.requests, [])
+
+    def test_truncated_primary_key(self):
+        # A primary key packet that does not fit in the block is corruption
+        # the gate must reject instead of ignoring: a valid key earlier in
+        # the same material must not carry the gate. The parser stops at
+        # the truncation, so the cases cover a length header cut short and
+        # a body shorter than its declared length.
+        body = A1_PUBLIC_PART + _a1_tail_unprotected()
+        whole = b"\xc5" + bytes([len(body)]) + body
+        cases = {
+            "header": b"\xc5\xff\x00",  # 2 of the 4 length octets
+            "body": b"\xc5" + bytes([len(body)]) + body[:-2],
+        }
+        for label, junk in cases.items():
+            with self.subTest(label):
+                key = A1_SECRET_KEY + "\n" + _secret_armor(junk)
+                r = self.run_script(
+                    {route(RFC_ED25519_FPR): block(RFC_ED25519_KEY)}, key=key)
+                self.assertEqual(r.returncode, 1, (r.stdout, r.stderr))
+                self.assertIn("truncated", r.stderr)
+                # The gate fails before any lookup.
+                self.assertEqual(self.server.requests, [])
 
     def test_secret_key_unprotected(self):
         # The secret key packet (type 5) embeds the public part; the
