@@ -6,13 +6,11 @@ import PackageDescription
 // SHA-256 checksum of that release's archive. On main the pipeline never
 // updates them, so main points at an older release whose binary may not
 // match the newer Swift sources; depend on a release tag, not on main
-// (see docs/releasing.md: "Why CI creates the tag"). Until the first
-// NativeOIDC release, main still points at an AppAuth-Rust archive, whose
-// module is appauth_rustFFI, so main does not build through SPM.
-// The source target carries the UniFFI-generated Swift API (do not edit;
-// CI verifies it matches the current Rust source) and the platform
-// adapters. The generated API is not Swift 6 strict-concurrency clean, so
-// the target is pinned to Swift 5 language mode.
+// (see docs/releasing.md: "Why CI creates the tag"). The source target
+// carries the UniFFI-generated Swift API (do not edit; CI verifies it
+// matches the current Rust source) and the platform adapters. The generated
+// API is not Swift 6 strict-concurrency clean, so the target is pinned to
+// Swift 5 language mode.
 let package = Package(
     name: "NativeOIDC",
     platforms: [
@@ -28,8 +26,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "NativeOIDCBinary",
-            url: "https://github.com/ProjectFlora/AppAuth-Rust/releases/download/v0.4.0/AppAuthRust-Apple-0.4.0.zip",
-            checksum: "a298fca36ea9c06f515dc6aa69cd366dd905607d06aac8b29f22abf7df352d95"
+            url: "https://github.com/ProjectFlora/NativeOIDC/releases/download/v0.7.0/NativeOIDC-Apple-0.7.0.zip",
+            checksum: "185e099716ea5a7f74c91d7f82e2036d6ade0d33f759c079b15635d49777d127"
         ),
         .target(
             name: "NativeOIDC",

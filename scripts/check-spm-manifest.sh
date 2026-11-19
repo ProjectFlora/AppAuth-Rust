@@ -23,6 +23,9 @@ set -euo pipefail
 # rename, so the check also accepts it for those releases whatever the
 # current repository name is, and expects the former archive name for them.
 #
+# On main the binary target is updated manually in release preparation PRs.
+# Once main catches up to a prior release (e.g., v0.6.x), these legacy URL
+# acceptances will no longer be needed but are retained for safety until then.
 # Usage: scripts/check-spm-manifest.sh
 
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
