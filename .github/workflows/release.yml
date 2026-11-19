@@ -125,9 +125,27 @@ jobs:
               "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$previous_tag...$GITHUB_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  keyserver:
+    name: Check signing key at key server
+    # Every run (candidate and publish) verifies, before any package is
+    # built, that the public part of every primary key in GPG_PRIVATE_KEY
+    # resolves at keys.openpgp.org by fingerprint. Maven Central's sync
+    # validation fetches the public key from the key server; its absence
+    # rejected v0.6.0's upload (#131).
+    needs: validate_version
+    runs-on: ubuntu-latest
+    env:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      KEYSERVER_ATTEMPTS: "3"
+      KEYSERVER_RETRY_DELAY: "30"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check signing key resolves at keys.openpgp.org
+        run: scripts/check-gpg-keyserver.sh
+
   apple:
     name: Build Apple release package
-    needs: validate_version
+    needs: [validate_version, keyserver]
     runs-on: macos-26
     env:
       IOS_SIMULATOR_MAJOR_VERSION: '18'
@@ -175,7 +193,7 @@ jobs:
 
   android:
     name: Build Android release package
-    needs: validate_version
+    needs: [validate_version, keyserver]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -235,7 +253,7 @@ jobs:
 
   api_docs:
     name: Build API reference
-    needs: validate_version
+    needs: [validate_version, keyserver]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -258,7 +276,7 @@ jobs:
 
   windows:
     name: Build Windows desktop package
-    needs: validate_version
+    needs: [validate_version, keyserver]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -400,7 +418,7 @@ jobs:
   publish:
     if: ${{ inputs.publish }}
     name: Publish GitHub Release
-    needs: [validate_version, apple, android, api_docs, windows, apple_consumer, android_consumer, windows_consumer, spm_manifest]
+    needs: [validate_version, keyserver, apple, android, api_docs, windows, apple_consumer, android_consumer, windows_consumer, spm_manifest]
     runs-on: ubuntu-latest
     permissions:
       contents: write
