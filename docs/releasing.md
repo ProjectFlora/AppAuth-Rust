@@ -37,6 +37,12 @@ release workflow writes them into the release commit at the version tag.
 `main`'s copy is not updated by a release (see
 [Why CI creates the tag](#why-ci-creates-the-tag)).
 
+To keep `main` closer to released versions, maintainers may optionally update
+the binary target in a release preparation PR to point at the previous
+published release. This is not required: the workflow will rewrite it at the
+tag anyway, and `scripts/check-spm-manifest.sh` allows the manifest to lag
+the Cargo version (see [Why CI creates the tag](#why-ci-creates-the-tag)).
+
 Merge the pull request once CI passes.
 
 ## 2. Run a release candidate
@@ -223,11 +229,10 @@ SPM is not supported.
 
 ### Updating main's Package.swift
 
-To keep `main` in sync with releases, update the `NativeOIDCBinary` target in
-`Package.swift` during release preparation pull requests:
+To keep `main` closer to released versions, maintainers may optionally update
+the binary target in a release preparation PR to point at the previous
+published release (e.g., for preparing v0.8.0, use v0.7.0's URL and checksum).
 
-- Set the binary target to point at the **previous** published release (e.g., for
-  preparing v0.8.0, use v0.7.0's URL and checksum).
 - Update both `url` and `checksum` together; do not edit them manually after
   that.
 - Merge the PR once CI passes (`scripts/check-spm-manifest.sh` will succeed if
