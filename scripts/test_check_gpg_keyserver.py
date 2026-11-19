@@ -263,6 +263,20 @@ def block(armor):
     return (200, armor.encode())
 
 
+def _gpg(env, base_args, *args):
+    # GnuPG reports key-generation problems on stderr; surfacing the captured
+    # output in the assertion message keeps a future gpg version breakage
+    # diagnosable instead of reducing it to a bare exit code.
+    p = subprocess.run(["gpg", *base_args, *args], env=env,
+                       capture_output=True, text=True, timeout=60)
+    if p.returncode != 0:
+        raise AssertionError(
+            "gpg %s failed (exit %d): %s"
+            % (" ".join(list(base_args) + list(args)),
+               p.returncode, (p.stderr.strip() or p.stdout.strip())))
+    return p
+
+
 class KeyserverCheckTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -444,13 +458,16 @@ class KeyserverCheckTests(unittest.TestCase):
     def test_gpg_generated_key(self):
         # Cross-validate the parser against a real GnuPG-generated key,
         # including its subkey layout (the GitHub runner ships GnuPG; a
-        # machine without it skips this test).
+        # machine without it skips this test). The unprotected form uses
+        # --pinentry-mode loopback with an empty passphrase: that is the
+        # way GnuPG 2.5 documents creating an unprotected key and it also
+        # works on 2.4, while --no-protection no longer does (exit 2).
         home = tempfile.mkdtemp()
         try:
             env = dict(os.environ, GNUPGHOME=home)
-            gpg = lambda *args: subprocess.run(
-                ["gpg", "--batch", "--no-protection", *args], env=env,
-                capture_output=True, text=True, check=True, timeout=60)
+            gpg = lambda *args: _gpg(
+                env, ["--batch", "--pinentry-mode", "loopback",
+                      "--passphrase", ""], *args)
             gpg("--quick-generate-key",
                 "Keyserver Check Test <test@example.invalid>", "ed25519")
             listing = gpg("--with-colons", "--list-secret-keys").stdout
@@ -473,10 +490,9 @@ class KeyserverCheckTests(unittest.TestCase):
         home = tempfile.mkdtemp()
         try:
             env = dict(os.environ, GNUPGHOME=home)
-            gpg = lambda *args: subprocess.run(
-                ["gpg", "--batch", "--pinentry-mode", "loopback",
-                 "--passphrase", "test", *args], env=env,
-                capture_output=True, text=True, check=True, timeout=60)
+            gpg = lambda *args: _gpg(
+                env, ["--batch", "--pinentry-mode", "loopback",
+                      "--passphrase", "test"], *args)
             gpg("--quick-generate-key",
                 "Keyserver Check Test <test@example.invalid>", "ed25519")
             listing = gpg("--with-colons", "--list-secret-keys").stdout
