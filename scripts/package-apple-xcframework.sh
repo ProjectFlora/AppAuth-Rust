@@ -68,6 +68,7 @@ cp "$repo_root"/Sources/NativeOIDC/IOSAuthorizationAdapter.swift \
     "$repo_root"/Sources/NativeOIDC/URLSessionNativeHttpTransport.swift \
     "$package_root/Swift/"
 cp "$repo_root/LICENSE" "$package_root/"
+scripts/generate-third-party-licenses.sh "$package_root/THIRD_PARTY_LICENSES.txt"
 cp "$repo_root/docs/swift-xcframework.md" "$package_root/README.md"
 cp "$generated/swift/native_oidcFFI.h" "$headers/"
 cp "$generated/swift/native_oidcFFI.modulemap" "$headers/module.modulemap"

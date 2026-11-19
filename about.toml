@@ -1,0 +1,53 @@
+# cargo-about configuration for THIRD_PARTY_LICENSES.txt, the license notices
+# shipped in every release package (scripts/generate-third-party-licenses.sh).
+# The allowed licenses themselves are enforced by cargo-deny (deny.toml).
+
+# Every crate here offers one of these; for a crate offering several, the
+# first listed one is used. Apache-2.0 comes first to match this project.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "ISC",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
+]
+
+# The union of the targets the release packages are built for. One notice
+# file covers all three packages.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+    "aarch64-linux-android",
+    "x86_64-linux-android",
+    "x86_64-pc-windows-msvc",
+]
+
+# Only crates linked into the shipped libraries. Build scripts, dev
+# dependencies and the uniffi-cli feature (never enabled here) are not.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+
+# This project's own LICENSE ships next to the notice file, not in it.
+private = { ignore = true }
+
+# ring's license files are LICENSE-BoringSSL (Apache-2.0, for the code from
+# BoringSSL) and LICENSE-other-bits (ISC); LICENSE only points at them.
+# Without this, cargo-about also picks up license headers of individual
+# source files. The checksums make a ring update fail until the files are
+# reviewed again.
+[ring.clarify]
+license = "Apache-2.0 AND ISC"
+
+[[ring.clarify.files]]
+path = "LICENSE-BoringSSL"
+license = "Apache-2.0"
+checksum = "005fc765ddc5115da796cca915baa9557abae13ff35e0a47c47affc56f6c414d"
+
+[[ring.clarify.files]]
+path = "LICENSE-other-bits"
+license = "ISC"
+checksum = "f025ccfb7dfb6bdfedc75ca0f67acc69e6fb4998143d834f7c2f38a29989680f"

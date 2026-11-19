@@ -49,11 +49,17 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.value }}
+      previous_tag: ${{ steps.previous_release.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
+      # A release ships only dependencies under licenses deny.toml allows.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2
+      - run: cargo deny check licenses
       - id: version
         name: Match SemVer release version to Cargo package version
         env:
@@ -90,6 +96,34 @@ jobs:
             exit 1
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
+      # Release commits branch off main, so earlier release tags are not in
+      # the new tag's history and GitHub would start the generated notes at
+      # the last tag on main (v0.4.0, Issue #151). Start them at the highest
+      # published release below this version instead, and record it so a
+      # candidate run shows the range the notes will cover.
+      - id: previous_release
+        name: Find the previous release for the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          tags=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1000 \
+            --json tagName --jq '.[].tagName')
+          previous_tag=$(printf '%s\n' "$tags" "v$RELEASE_VERSION" |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+            sort -uV |
+            awk -v current="v$RELEASE_VERSION" '$0 == current { print prev; exit } { prev = $0 }')
+          if [[ -z "$previous_tag" ]]; then
+            echo "No published release precedes v$RELEASE_VERSION to start the release notes from" >&2
+            exit 1
+          fi
+          echo "tag=$previous_tag" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release notes range"
+            echo
+            echo "Release notes start at \`$previous_tag\`:" \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$previous_tag...$GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   keyserver:
     name: Check signing key at key server
@@ -130,6 +164,10 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
       - uses: Swatinem/rust-cache@v2
+      # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
       - name: Record toolchain versions
         run: |
           {
@@ -167,7 +205,13 @@ jobs:
         with:
           packages: platform-tools
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
-      - uses: dtolnay/rust-toolchain@stable
+      # The same Rust as the Apple job, so every package links the same
+      # standard library and ships the same notices for it.
+      - uses: dtolnay/rust-toolchain@1.100.0
+      # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
       - name: Configure Android NDK
         env:
           ANDROID_API_LEVEL: '28'
@@ -236,26 +280,23 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      # The same Rust as the Apple job, so every package links the same
+      # standard library and ships the same notices for it.
+      - uses: dtolnay/rust-toolchain@1.100.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked --lib --target x86_64-pc-windows-msvc
       - run: cargo test --locked --lib --target x86_64-pc-windows-msvc
+      # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
+      - run: scripts/generate-third-party-licenses.sh
+        shell: bash
       - name: Build and package Windows library
+        shell: pwsh
         env:
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
-        run: |
-          cargo build --locked --release --lib --target x86_64-pc-windows-msvc
-          $package = "dist/native-oidc-windows-$env:RELEASE_VERSION"
-          New-Item -ItemType Directory -Force "$package/include" | Out-Null
-          New-Item -ItemType Directory -Force "$package/dotnet" | Out-Null
-          $target = "target/x86_64-pc-windows-msvc/release"
-          Copy-Item "$target/native_oidc.dll" $package
-          Copy-Item "$target/native_oidc.dll.lib" $package
-          Copy-Item "native/windows/include/native_oidc_windows.h" "$package/include"
-          Copy-Item "native/windows/dotnet/NativeOidcWindows.cs" "$package/dotnet"
-          Copy-Item "native/windows/dotnet/NativeOidcWindows.csproj" "$package/dotnet"
-          Copy-Item "native/windows/README.md" $package
-          Compress-Archive -Path "$package/*" -DestinationPath "$package.zip"
+        run: scripts/package-windows.ps1 -Package "dist/native-oidc-windows-$env:RELEASE_VERSION"
       - uses: actions/upload-artifact@v7
         with:
           name: release-windows
@@ -424,6 +465,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.validate_version.outputs.version }}
+          PREVIOUS_TAG: ${{ needs.validate_version.outputs.previous_tag }}
         run: |
           cd dist
           shasum -a 256 \
@@ -440,7 +482,8 @@ jobs:
             SHA256SUMS \
             --verify-tag \
             --title "NativeOIDC v$RELEASE_VERSION" \
-            --generate-notes
+            --generate-notes \
+            --notes-start-tag "$PREVIOUS_TAG"
 
   publish_maven:
     if: ${{ inputs.publish }}
@@ -463,7 +506,13 @@ jobs:
         with:
           packages: platform-tools
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
-      - uses: dtolnay/rust-toolchain@stable
+      # The same Rust as the Apple job, so every package links the same
+      # standard library and ships the same notices for it.
+      - uses: dtolnay/rust-toolchain@1.100.0
+      # cargo-about at the version scripts/generate-third-party-licenses.sh requires.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
       - name: Configure Android NDK
         env:
           ANDROID_API_LEVEL: '28'

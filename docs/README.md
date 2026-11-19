@@ -21,7 +21,10 @@ by each language and the examples and checks available today.
 These are the current entry points, not a claim that all language guides are
 complete. [#63](https://github.com/ProjectFlora/NativeOIDC/issues/63) tracks
 completion; [#89](https://github.com/ProjectFlora/NativeOIDC/issues/89) tracks
-distribution of the complete, version-matched documentation set.
+distribution of the complete, version-matched documentation set. Apple and
+Android public APIs target Swift and Kotlin only; Objective-C and Java hosts
+should use an app-side wrapper, as described in the
+[shared user guide](user-guide.md#supported-application-languages).
 
 ## API reference
 

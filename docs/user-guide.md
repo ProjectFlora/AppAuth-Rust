@@ -3,6 +3,28 @@
 Return to the [documentation index](README.md). Language-specific entry points
 and the [API coverage matrix](api-coverage.md) identify the concrete APIs.
 
+## Supported application languages
+
+The public API targets Swift on Apple platforms and Kotlin on Android.
+Windows desktop hosts use the C ABI, callable from C++ and from .NET through
+P/Invoke, and Rust callers use the core crate directly.
+
+Objective-C and Java applications have no library-provided entry point.
+UniFFI generates Swift and Kotlin bindings only, and the platform adapters
+expose their central operations as Swift `async` and Kotlin `suspend`, with
+cancellation and error types built around those idioms. Such applications
+should place a small wrapper (binding class) in the app:
+
+- Objective-C hosts wrap the Swift API, for example in an `@objc` class with
+  completion-handler methods that run the `async` work in a Swift task.
+- Java hosts wrap the Kotlin API, for example in a Kotlin function that
+  returns a `CompletableFuture` or accepts a Java callback.
+
+The wrapper is where main-thread hops, Activity lifecycle handling, and
+timeout policy belong, because the application knows those best. The decision
+and rationale are recorded in [ROADMAP.md](../ROADMAP.md)
+([#144](https://github.com/ProjectFlora/NativeOIDC/issues/144)).
+
 ## Configure a native public client
 
 Register a native public client and the exact redirect URIs with your provider.

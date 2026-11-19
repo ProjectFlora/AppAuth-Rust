@@ -1,0 +1,48 @@
+# cargo-deny configuration. CI runs `cargo deny check licenses`, which fails
+# when a crate linked into the release libraries is not available under one
+# of the licenses below. Before allowing a new license, check that it is
+# compatible with Apache-2.0 and that THIRD_PARTY_LICENSES.txt
+# (about.toml) still covers what it requires.
+
+[graph]
+# The same targets as about.toml: the release packages' targets.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+    "aarch64-linux-android",
+    "x86_64-linux-android",
+    "x86_64-pc-windows-msvc",
+]
+# Dev dependencies are not shipped. The uniffi-cli feature, used only to run
+# uniffi-bindgen at build time, stays off because no features are enabled.
+exclude-dev = true
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "ISC",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.8
+# Licenses allowed only for the crates that need them, so a new crate under
+# them is reviewed first.
+exceptions = [
+    # Requires telling recipients where the source is: THIRD_PARTY_LICENSES.txt
+    # links each crate's source on crates.io.
+    { crate = "uniffi", allow = ["MPL-2.0"] },
+    { crate = "uniffi_core", allow = ["MPL-2.0"] },
+    { crate = "uniffi_internal_macros", allow = ["MPL-2.0"] },
+    { crate = "uniffi_macros", allow = ["MPL-2.0"] },
+    { crate = "uniffi_meta", allow = ["MPL-2.0"] },
+    { crate = "uniffi_pipeline", allow = ["MPL-2.0"] },
+    { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
+]
+
+[licenses.private]
+# native-oidc itself (publish = false) is Apache-2.0 and ships its own LICENSE.
+ignore = true
+

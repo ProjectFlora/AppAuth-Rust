@@ -205,6 +205,122 @@ jobs:
         # target the archive consumer check links).
         run: xcodebuild -scheme Consumer -destination 'generic/platform=iOS Simulator' EXCLUDED_ARCHS=x86_64 build
 
+  # Consumers that pinned a release on the former repository URL, as in
+  # .package(url: "https://github.com/ProjectFlora/AppAuth-Rust", exact:
+  # "0.6.0"): the renamed repository's tags are immutable, so both the git
+  # dependency and the binary target URL in the v0.6.0 manifest still name
+  # the former repository, and both resolve only through GitHub's redirect.
+  # This job is the only check of that redirect path (Issue #154). It
+  # mirrors the spm job, including the Swift 6 language mode consumer and
+  # the release workflow's Xcode, and deliberately ignores the workflow's
+  # version input (the former-name releases stop at 0.6.0): it runs on
+  # every dispatch, so the redirect keeps being exercised as new releases
+  # are validated. The consumer directory name must not collide with the
+  # dependency's identity (`appauth-rust`), for the same reason the spm
+  # job keeps the consumer outside $GITHUB_WORKSPACE.
+  legacy_spm:
+    name: Validate SPM consumer on the former repository URL
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+      - name: Record toolchain versions
+        run: |
+          {
+            echo "### Toolchain"
+            xcodebuild -version
+            echo
+            swift --version
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Create the SPM consumer package
+        run: |
+          mkdir -p "$RUNNER_TEMP/spm-consumer-legacy/Sources/Consumer"
+          cd "$RUNNER_TEMP/spm-consumer-legacy"
+          cat > Package.swift <<'EOF'
+          // swift-tools-version: 6.0
+          import PackageDescription
+
+          let package = Package(
+              name: "Consumer",
+              platforms: [
+                  .iOS(.v18),
+                  .macOS(.v15),
+              ],
+              dependencies: [
+                  .package(
+                      url: "https://github.com/ProjectFlora/AppAuth-Rust",
+                      exact: "0.6.0"
+                  ),
+              ],
+              targets: [
+                  .executableTarget(
+                      name: "Consumer",
+                      dependencies: [
+                          .product(name: "AppAuthRust", package: "AppAuth-Rust"),
+                      ]
+                  ),
+              ]
+          )
+          EOF
+          cat > Sources/Consumer/Consumer.swift <<'EOF'
+          import AppAuthRust
+
+          enum ConsumerError: Error {
+              case roundTripMismatch
+              case configurationMismatch
+          }
+
+          @main
+          struct Main {
+              static func main() async throws {
+                  // The same host-side smoke the in-tree package runs in its
+                  // tests: exercise the generated API through the binary
+                  // target's FFI module, with no network activity.
+                  let stateJson = #"{"token_response":{"access_token":"old","token_type":"Bearer","refresh_token":"refresh"}}"#
+                  let state = try FfiAuthenticationState.fromJson(serialized: stateJson)
+                  let serialized = try await state.toJson()
+                  let restored = try FfiAuthenticationState.fromJson(serialized: serialized)
+                  let reserialized = try await restored.toJson()
+                  guard reserialized == serialized else {
+                      throw ConsumerError.roundTripMismatch
+                  }
+                  let response = await restored.tokenResponse()
+                  guard response.accessToken == "old" else {
+                      throw ConsumerError.roundTripMismatch
+                  }
+
+                  let configuration = try FfiServiceConfiguration(
+                      authorizationEndpoint: "https://idp.example/authorize",
+                      tokenEndpoint: "https://idp.example/token"
+                  )
+                  let withValidation = try configuration.withOidcValidationEndpoints(
+                      issuer: "https://idp.example",
+                      jwksUri: "https://idp.example/.well-known/jwks.json"
+                  )
+                  guard withValidation.issuer() == "https://idp.example/",
+                        withValidation.jwksUri() == "https://idp.example/.well-known/jwks.json"
+                  else {
+                      throw ConsumerError.configurationMismatch
+                  }
+
+                  print("Former-URL v0.6.0 SPM consumer smoke passed")
+              }
+          }
+          EOF
+      - name: Resolve the former-URL release tag and build for macOS
+        working-directory: ${{ runner.temp }}/spm-consumer-legacy
+        run: swift build
+      - name: Run the consumer smoke
+        working-directory: ${{ runner.temp }}/spm-consumer-legacy
+        run: swift run Consumer
+      - name: Build for the iOS simulator
+        working-directory: ${{ runner.temp }}/spm-consumer-legacy
+        # The v0.6.0 release xcframework ships the same arm64 simulator
+        # slice the spm job excludes x86_64 for.
+        run: xcodebuild -scheme Consumer -destination 'generic/platform=iOS Simulator' EXCLUDED_ARCHS=x86_64 build
+
   android:
     name: Validate published Android consumer
     runs-on: ubuntu-latest

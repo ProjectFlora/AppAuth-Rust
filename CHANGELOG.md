@@ -13,10 +13,60 @@ interoperability testing and support policies are still evolving. Each release r
   dispatch (candidate and publish), derives the fingerprint of every primary
   key in the `GPG_PRIVATE_KEY` secret and requires each to resolve at
   `keys.openpgp.org` by fingerprint, retrying to absorb key-server
-  propagation lag. A public key absent from the key server failed v0.6.0's
+  propagation lag. The secret may hold a secret or a public key block: a
+  secret key packet embeds the public key (RFC 9580 section 5.5.3), and the
+  check derives the fingerprint from that embedded public part. A public key
+  absent from the key server failed v0.6.0's
   Maven Central sync validation, which is why v0.6.0 was never published
   there ([#131](https://github.com/ProjectFlora/NativeOIDC/issues/131),
   [#152](https://github.com/ProjectFlora/NativeOIDC/issues/152)).
+- Add a former-URL SPM consumer job to the release consumer validation
+  workflow: a clean macOS runner resolves `v0.6.0` from
+  `ProjectFlora/AppAuth-Rust`, downloads the binary artifact through
+  GitHub's repository redirect, runs the host-side FFI smoke, and builds
+  for the iOS simulator
+  ([#154](https://github.com/ProjectFlora/NativeOIDC/issues/154)). The
+  renamed repository's tags are immutable, so this job is the only check
+  of that redirect path: it runs on every dispatch, so the redirect keeps
+  being exercised as new releases are validated.
+
+### Fixed
+
+- Ship license notices in every release package. The Apple and Windows
+  zips and the Android AAR (on GitHub Releases and Maven Central) now
+  contain `LICENSE`, `THIRD_PARTY_LICENSES.txt` (the notices for the Rust
+  crates in `Cargo.lock`, generated with cargo-about, and for the standard
+  library's compiler-builtins and libm) and
+  `RUST_STANDARD_LIBRARY_COPYRIGHT.html` (the Rust toolchain's notice file
+  for the standard library); the Windows zip previously had no `LICENSE`
+  either. The release workflow builds every package with the same pinned
+  Rust version. In the AAR they are in `classes.jar` under
+  `META-INF/native-oidc/`. CI checks the dependency licenses with
+  cargo-deny (`deny.toml`), and the consumer checks require the notice
+  files. v0.1.0 through v0.7.0 shipped without the notices: their GitHub
+  Releases now carry the notice files, and Maven
+  Central users of v0.7.0 should move to this release
+  ([#161](https://github.com/ProjectFlora/NativeOIDC/issues/161)).
+- Start each release's generated notes at the previous release. Release
+  commits are tagged off `main`, so GitHub started the notes of every
+  release since v0.5.0 at `v0.4.0`, the last release tagged on `main`; the
+  notes of v0.6.0 and v0.7.0 have been corrected
+  ([#151](https://github.com/ProjectFlora/NativeOIDC/issues/151)).
+
+### Documentation
+
+- State that the public API targets Swift and Kotlin only, that Objective-C
+  and Java applications should use an app-side wrapper (for example a Swift
+  `@objc` class with completion handlers, or a Kotlin function returning a
+  `CompletableFuture` or accepting a callback), in the README, the feature
+  matrix, the shared user guide, the documentation index, and the API
+  coverage matrix. Record the decision and rationale in
+  [ROADMAP.md](ROADMAP.md)
+  ([#144](https://github.com/ProjectFlora/NativeOIDC/issues/144)).
+- Record in the migration section that SPM consumers pinning a release up
+  to v0.6.0 on the former URL continue to work: the redirect covers both
+  the git dependency and the release asset that those manifests download
+  their XCFramework from ([#154](https://github.com/ProjectFlora/NativeOIDC/issues/154)).
 
 ## [0.7.0] - 2026-11-18
 

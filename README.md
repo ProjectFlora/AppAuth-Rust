@@ -160,6 +160,19 @@ before the 1.0.0 tag; the pre-1.0 release policy in
 
 ## Native bindings
 
+- The public API for Apple and Android targets Swift and Kotlin only. UniFFI
+  generates those two languages, and the platform adapters expose their
+  central operations as Swift `async` and Kotlin `suspend` with cancellation
+  and error handling built around those idioms. Objective-C and Java
+  applications have no library-provided entry point: place a small Swift or
+  Kotlin wrapper (binding class) in the app, for example a Swift `@objc`
+  class with completion handlers, or a Kotlin function returning a
+  `CompletableFuture` or accepting a callback. Windows hosts use the C ABI
+  (C++ and .NET) and are unaffected. The decision and rationale are recorded
+  in [ROADMAP.md](ROADMAP.md)
+  ([#144](https://github.com/ProjectFlora/NativeOIDC/issues/144)); the
+  [shared user guide](docs/user-guide.md#supported-application-languages)
+  describes the wrapper approach.
 - The UniFFI 0.32.2 API is exposed through `native_oidc::ffi`. Generate Swift
   and Kotlin source with `scripts/generate-bindings.sh`; generated sources go
   under `target/uniffi` by default and should not be hand-edited.
@@ -222,6 +235,14 @@ state stays compatible; only the names below change. Releases v0.1.0 through
 v0.6.0 keep their original names and asset file names. The Android library
 was never published to Maven Central under the former coordinates and will
 not be. GitHub redirects the former repository URL, but update it anyway.
+SPM consumers pinning v0.6.0 on the former URL are checked by the
+`legacy_spm` job in the release consumer validation workflow, which
+resolves the tag, downloads the binary artifact through GitHub's
+redirect, and builds for macOS and the iOS simulator on a clean runner.
+Its first run of the job
+([44411052452](https://github.com/ProjectFlora/NativeOIDC/actions/runs/44411052452/job/135178975314))
+passed every step, confirming that the former URL works end-to-end for
+SPM consumers ([#154](https://github.com/ProjectFlora/NativeOIDC/issues/154)).
 
 | Item | Up to v0.6.0 (AppAuth-Rust) | From v0.7.0 (NativeOIDC) |
 | --- | --- | --- |
@@ -266,6 +287,41 @@ grep -F '  native-oidc-android-0.7.0.aar' SHA256SUMS | shasum -a 256 -c -
 Use the exact downloaded asset name when verifying another package. GitHub
 Release assets are the persistent distribution channel; the CI validation
 artifacts expire after 14 days.
+
+## Third-party licenses
+
+The NativeOIDC libraries are licensed under the Apache License, Version 2.0,
+and statically include Rust crates under their own licenses (MIT, ISC,
+BSD-3-Clause, Unicode-3.0, CDLA-Permissive-2.0, and MPL-2.0 for UniFFI),
+plus the Rust standard library. From v0.7.1, every release package carries
+this project's `LICENSE` and two notice files:
+`THIRD_PARTY_LICENSES.txt`, the notices for those crates with a crates.io
+source link for each, followed by the notices of the standard library's
+compiler-builtins and libm from the Rust toolchain that built the package;
+and `RUST_STANDARD_LIBRARY_COPYRIGHT.html`, that toolchain's own notice
+file for the standard library:
+
+| Package | Location |
+| --- | --- |
+| `NativeOIDC-Apple-<version>.zip` | In `NativeOIDC-Apple/` |
+| `native-oidc-android-<version>.aar` (GitHub Release and Maven Central) | In `META-INF/native-oidc/` in `classes.jar`; apps keep them at that path in the APK |
+| `native-oidc-windows-<version>.zip` | At the zip root |
+
+An app that ships NativeOIDC distributes these dependencies too, so include
+the notices with the app, for example on its open-source licenses screen.
+
+v0.1.0 through v0.7.0 were published without these notices. Their GitHub
+Releases now also carry `THIRD_PARTY_LICENSES-<version>.txt` and
+`RUST_STANDARD_LIBRARY_COPYRIGHT-<version>.html`, generated afterwards from
+each release's `Cargo.lock` and the Rust version that built it; each
+release's `SHA256SUMS` is unchanged and does not cover them. The v0.7.0 AAR on Maven Central cannot be
+replaced, so use v0.7.1 or later.
+
+A dependency change must keep `cargo deny check licenses` passing: CI fails
+when a crate linked into the libraries is not under a license that
+[`deny.toml`](deny.toml) allows. See
+[docs/releasing.md](docs/releasing.md#license-notices) for how the notices
+are generated.
 
 ## Release consumer validation
 
@@ -312,6 +368,9 @@ host-side smoke of the generated API, and builds for the iOS simulator.
 
 ## Apple adapters
 
+- The adapters are a Swift API. Objective-C applications should wrap them
+  with a small `@objc` class in the app; see the
+  [shared user guide](docs/user-guide.md#supported-application-languages).
 - `Sources/NativeOIDC/IOSAuthorizationAdapter.swift` runs authorization in
   `ASWebAuthenticationSession`; HTTPS callbacks use Apple's verified callback
   matcher, and custom URI schemes are supported as a fallback. The host app
@@ -412,6 +471,9 @@ that may not match the newer Swift sources.
 
 ## Android adapter
 
+- The adapter is a Kotlin API. Java applications should wrap it with a small
+  Kotlin class or function in the app; see the
+  [shared user guide](docs/user-guide.md#supported-application-languages).
 - `native/android` launches authorization in a Custom Tab. It uses the HTTPS
   App Link redirect only when Android reports the host as verified and the
   configured callback activity resolves for that URI; otherwise it selects

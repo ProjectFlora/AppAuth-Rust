@@ -26,6 +26,13 @@ val generateUniFfiBindings by tasks.registering(Exec::class) {
     outputs.dir(generatedBindings)
 }
 
+// The Rust libraries and the standard library notices both come from the
+// active toolchain, so a different Rust version must rebuild both together.
+val rustToolchain = providers.exec {
+    workingDir(repositoryRoot)
+    commandLine("rustc", "--version", "--verbose")
+}.standardOutput.asText
+
 val buildAndroidRustLibraries by tasks.registering(Exec::class) {
     workingDir(repositoryRoot)
     commandLine(
@@ -39,7 +46,37 @@ val buildAndroidRustLibraries by tasks.registering(Exec::class) {
         repositoryRoot.resolve("scripts/check-android-targets.sh"),
         fileTree(repositoryRoot.resolve("src")),
     )
+    inputs.property("rustToolchain", rustToolchain)
     outputs.dir(androidRustLibraries)
+}
+
+// License notices for the release AAR, in classes.jar under a path of their
+// own so they do not collide with other libraries' META-INF/LICENSE in apps.
+// Only release builds ship them, so debug builds do not need cargo-about.
+// The standard library notices come from the Rust toolchain running this
+// build, which is also the one that builds the Rust libraries.
+val generatedLicenses = layout.buildDirectory.dir("generated/licenses")
+val generateLicenseNotices by tasks.registering(Exec::class) {
+    val noticeDir = generatedLicenses.map { it.dir("META-INF/native-oidc").asFile }
+    workingDir(repositoryRoot)
+    commandLine(
+        "bash",
+        repositoryRoot.resolve("scripts/generate-third-party-licenses.sh").absolutePath,
+        noticeDir.get().resolve("THIRD_PARTY_LICENSES.txt").absolutePath,
+    )
+    inputs.files(
+        repositoryRoot.resolve("Cargo.toml"),
+        repositoryRoot.resolve("Cargo.lock"),
+        repositoryRoot.resolve("LICENSE"),
+        repositoryRoot.resolve("about.toml"),
+        repositoryRoot.resolve("about.hbs"),
+        repositoryRoot.resolve("scripts/generate-third-party-licenses.sh"),
+    )
+    inputs.property("rustToolchain", rustToolchain)
+    outputs.dir(generatedLicenses)
+    doLast {
+        repositoryRoot.resolve("LICENSE").copyTo(noticeDir.get().resolve("LICENSE"), overwrite = true)
+    }
 }
 
 android {
@@ -62,6 +99,7 @@ android {
 
     sourceSets.getByName("main").java.srcDir(generatedBindings.map { it.dir("kotlin") })
     sourceSets.getByName("main").jniLibs.srcDir(androidRustLibraries)
+    sourceSets.getByName("release").resources.srcDir(generatedLicenses)
 
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -75,6 +113,10 @@ tasks.named("preBuild").configure {
 tasks.configureEach {
     if (name == "mergeDebugJniLibFolders" || name == "mergeReleaseJniLibFolders") {
         dependsOn(buildAndroidRustLibraries)
+    }
+    // AGP does not infer this dependency from the resources source directory.
+    if (name == "processReleaseJavaRes") {
+        dependsOn(generateLicenseNotices)
     }
     // The published sources and javadoc jars read the generated bindings.
     if (name == "sourceReleaseJar" || name.startsWith("javaDocRelease")) {

@@ -33,6 +33,9 @@ In a pull request to `main`:
 - Update README's download section, the SPM installation version (the
   `from:` version and Xcode dependency rule), the Maven Central
   dependency version, and any version-specific notes.
+- If dependencies changed, check that `THIRD_PARTY_LICENSES.txt` still
+  reads correctly (CI uploads it as the `third-party-licenses` artifact;
+  see [License notices](#license-notices)).
 - Recheck Windows client support as required by the
   [support matrix](support-matrix.md). For 1.0.0, complete the
   [final verification record](support-matrix.md#final-100-verification).
@@ -41,6 +44,12 @@ Do not edit the `NativeOIDCBinary` URL or checksum in `Package.swift`; the
 release workflow writes them into the release commit at the version tag.
 `main`'s copy is not updated by a release (see
 [Why CI creates the tag](#why-ci-creates-the-tag)).
+
+To keep `main` closer to released versions, maintainers may optionally update
+the binary target in a release preparation PR to point at the previous
+published release. This is not required: the workflow will rewrite it at the
+tag anyway, and `scripts/check-spm-manifest.sh` allows the manifest to lag
+the Cargo version (see [Why CI creates the tag](#why-ci-creates-the-tag)).
 
 Merge the pull request once CI passes.
 
@@ -67,6 +76,9 @@ Confirm that every job succeeds, including **Prepare and validate release
 Package.swift** (`spm_manifest`). That job's log shows the rewritten
 `Package.swift` diff: the URL must be
 `https://github.com/ProjectFlora/NativeOIDC/releases/download/vX.Y.Z/NativeOIDC-Apple-X.Y.Z.zip`.
+The **Validate release version** step summary names the release the
+generated notes will start from and links the comparison; it must be the
+previous release (see [Release notes range](#release-notes-range)).
 
 The Apple jobs build and validate with the Xcode set by `XCODE_VERSION` in
 `release.yml` (a stable Xcode 26.x, since App Store Connect requires Xcode
@@ -108,7 +120,8 @@ Then the `publish` job:
 2. Creates the annotated `vX.Y.Z` tag on that commit and pushes **only the
    tag**. `main` is not updated.
 3. Creates the GitHub Release with the Apple, Android, Windows, and API docs
-   assets plus `SHA256SUMS`, and generated release notes.
+   assets plus `SHA256SUMS`, and release notes generated from the previous
+   release (see [Release notes range](#release-notes-range)).
 
 After the GitHub Release is created, the `publish_maven` job checks out the
 `vX.Y.Z` tag, builds the Android library, checks the signed publication with
@@ -150,6 +163,66 @@ Its `spm` job resolves the `vX.Y.Z` tag through Swift Package Manager by URL, wh
 manifest's checksum against the published archive. Record the run URL in
 the release tracking issue.
 
+## License notices
+
+Every release package ships `LICENSE`, `THIRD_PARTY_LICENSES.txt` and
+`RUST_STANDARD_LIBRARY_COPYRIGHT.html` (see the README's
+[Third-party licenses](../README.md#third-party-licenses) section for the
+locations). The notices are generated, never edited by hand:
+
+- `scripts/generate-third-party-licenses.sh` runs cargo-about with
+  `about.toml` (which crates and targets: the crates linked into the
+  release libraries for every release target, without dev and build
+  dependencies) and `about.hbs` (the text, including the Rust standard
+  library and UniFFI-generated bindings sections). It runs offline and
+  requires the pinned cargo-about version.
+- The Rust standard library is not in `Cargo.lock`, so the script takes its
+  notices from the active Rust toolchain: it appends the toolchain version
+  and the license files of compiler-builtins and libm (the parts not under
+  `MIT OR Apache-2.0`, with copyright notices of their own) from the
+  rust-src component, which it installs, and copies the toolchain's
+  `share/doc/rust/COPYRIGHT-library.html` as
+  `RUST_STANDARD_LIBRARY_COPYRIGHT.html`. The output therefore depends on
+  `Cargo.lock` and the toolchain, and each package generates it with the
+  toolchain that builds it. The release workflow pins every package job to
+  the same Rust version (`dtolnay/rust-toolchain@1.100.0`), so all packages
+  ship the same notices; change them together.
+- The Apple packaging script, the Android release build
+  (`generateLicenseNotices`) and `scripts/package-windows.ps1` (after the
+  workflow step that runs the script) put the files into the packages.
+  The consumer checks and `scripts/check-android-maven-publication.sh`
+  fail when a package lacks them; the Android consumer check also requires
+  them in the consumer app's APK.
+- `cargo deny check licenses` (`deny.toml`) runs in CI and in the release
+  workflow's version validation. It allows MPL-2.0 only for the UniFFI
+  crates and CDLA-Permissive-2.0 only for `webpki-roots`.
+
+Maintenance:
+
+- **A dependency under a new license**: check that the license is
+  compatible with Apache-2.0 and what it requires of binary distribution,
+  then add it to `deny.toml` (as a per-crate exception when it should stay
+  limited to that crate) and to `accepted` in `about.toml`.
+- **A `ring` update**: `about.toml` pins the checksums of ring's license
+  files, so generation fails until they are reviewed and the checksums
+  updated.
+- **A Rust toolchain update**: check that the toolchain still has the two
+  license files the script appends, and whether another part of the
+  standard library gained a license other than `MIT OR Apache-2.0` (its
+  `library/` sources in rust-src).
+- **A cargo-about or cargo-deny update**: change the version in
+  `scripts/generate-third-party-licenses.sh` (cargo-about) and in every
+  `taiki-e/install-action` step of `ci.yml` and `release.yml` together.
+
+`release-consumer.yml` runs the same consumer checks, so it requires the
+notices too and can validate only v0.7.1 and later. v0.1.0 through v0.7.0
+shipped without them; their notices were generated afterwards from each
+tag's `Cargo.lock` and the Rust version of each release run, and attached
+to the GitHub Releases as `THIRD_PARTY_LICENSES-<version>.txt` and
+`RUST_STANDARD_LIBRARY_COPYRIGHT-<version>.html`, leaving `SHA256SUMS`
+unchanged
+([#161](https://github.com/ProjectFlora/NativeOIDC/issues/161)).
+
 ## Why CI creates the tag
 
 Swift Package Manager reads `Package.swift` at the version tag, and that
@@ -178,6 +251,40 @@ renaming the repository does not invalidate the binary target on `main`.
 SPM consumers resolve released
 versions by tag and are unaffected; depending on the `main` branch through
 SPM is not supported.
+
+### Updating main's Package.swift
+
+To keep `main` closer to released versions, maintainers may optionally update
+the binary target in a release preparation PR to point at the previous
+published release (e.g., for preparing v0.8.0, use v0.7.0's URL and checksum).
+
+- Update both `url` and `checksum` together; do not edit them manually after
+  that.
+- Merge the PR once CI passes (`scripts/check-spm-manifest.sh` will succeed if
+  the manifest does not lead the Cargo version).
+
+Once main catches up to a prior release (e.g., v0.7.x), legacy URL acceptances
+in `scripts/check-spm-manifest.sh` will no longer be needed but are retained
+for safety until then.
+
+### Release notes range
+
+Because each release commit is reachable only from its tag, earlier release
+tags are not in the new tag's history. Left to choose the starting tag
+itself, GitHub picks the last tag in that history, which is `v0.4.0`, the
+last release tagged on `main`, so every release would list everything
+since `v0.4.0`. The workflow therefore passes the starting tag explicitly
+(`--notes-start-tag`): the highest published, non-draft,
+non-prerelease GitHub Release whose `vX.Y.Z` tag sorts below the new
+version by SemVer. A patch for an older line (for example `v0.6.1` after
+`v0.7.0`) therefore starts at `v0.6.0`, and a tag left without a GitHub
+Release by a failed run is skipped. If no earlier release is found, the
+run fails rather than generating notes from the wrong range. GitHub
+compares the two tags through their merge base, so the notes list the pull
+requests merged to `main` between the two dispatched commits.
+Releases v0.6.0 and v0.7.0 were published with notes starting at `v0.4.0`
+and were corrected afterwards
+([#151](https://github.com/ProjectFlora/NativeOIDC/issues/151)).
 
 ### What the packaging self-test checks
 
@@ -271,8 +378,10 @@ git push origin :refs/tags/vX.Y.Z
   doing so ends the redirect and breaks those consumers.
 
 - `release-consumer.yml` expects the release asset names and Maven
-  coordinates of v0.7.0 and later. Releases up to v0.6.0 used the former
-  names and cannot be revalidated with the current workflow.
+  coordinates of v0.7.0 and later, and the license notices of v0.7.1 and
+  later (see [License notices](#license-notices)). Releases up to v0.6.0
+  used the former names, and v0.7.0 lacks the notices, so none of them can
+  be revalidated with the current workflow.
 
 - The `publish` job needs `contents: write`. If tag rulesets protect `v*`,
   allow `github-actions[bot]` (the GitHub Actions app) to create those tags.
