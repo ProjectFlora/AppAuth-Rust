@@ -61,7 +61,13 @@ Merge the pull request once CI passes.
 
 A candidate run builds and validates every package without publishing
 anything. Candidate runs can be dispatched from any branch, so release
-pipeline changes can be checked before they merge.
+pipeline changes can be checked before they merge. The key server check
+holds the signing key (`GPG_PRIVATE_KEY`) in its environment and runs the
+dispatched branch's copy of the check script, so dispatch candidates from
+`main` or a fully trusted branch only: a branch that is not trusted with
+the private signing key should not be dispatched. (Publish runs are
+already restricted to `main` by the version check, so this only concerns
+candidates.)
 
 The first job is the key server check (the signing key's public part must
 resolve at `keys.openpgp.org`). If the key is not published, the run fails

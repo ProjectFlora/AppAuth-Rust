@@ -132,6 +132,9 @@ jobs:
     # resolves at keys.openpgp.org by fingerprint. Maven Central's sync
     # validation fetches the public key from the key server; its absence
     # rejected v0.6.0's upload (#131).
+    # This job holds the signing key (it prints fingerprints only, never key
+    # material) and runs the dispatched branch's code, so dispatch candidate
+    # runs from main or a fully trusted branch only.
     needs: validate_version
     runs-on: ubuntu-latest
     env:
