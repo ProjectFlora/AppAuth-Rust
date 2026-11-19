@@ -236,9 +236,13 @@ v0.6.0 keep their original names and asset file names. The Android library
 was never published to Maven Central under the former coordinates and will
 not be. GitHub redirects the former repository URL, but update it anyway.
 SPM consumers pinning v0.6.0 on the former URL are checked by the
-`legacy_spm` job in the release consumer validation workflow. Git and curl
-redirects have been confirmed; clean SwiftPM artifact download and build
-verification is pending in [#154](https://github.com/ProjectFlora/NativeOIDC/issues/154).
+`legacy_spm` job in the release consumer validation workflow, which
+resolves the tag, downloads the binary artifact through GitHub's
+redirect, and builds for macOS and the iOS simulator on a clean runner.
+Its first run
+([44411052452](https://github.com/ProjectFlora/NativeOIDC/actions/runs/44411052452))
+passed every step, confirming that the former URL works end-to-end for
+SPM consumers ([#154](https://github.com/ProjectFlora/NativeOIDC/issues/154)).
 
 | Item | Up to v0.6.0 (AppAuth-Rust) | From v0.7.0 (NativeOIDC) |
 | --- | --- | --- |
