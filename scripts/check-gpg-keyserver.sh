@@ -258,7 +258,9 @@ def iter_packets(data):
                 length = n - i - 1
                 i += 1
         if i + length > n:
-            return  # truncated; stop
+            if tag in (5, 6):
+                fail("a primary key packet is truncated; check the secret for corruption")
+            return
         yield tag, data[i:i + length]
         i += length
 
