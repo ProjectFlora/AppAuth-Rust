@@ -138,9 +138,11 @@ None.
   feature set or compatibility guarantees are complete. They may be published
   as regular GitHub Releases while known gaps remain; release notes must state
   the status and limitations.
-- v0.7.0 is the current implementation snapshot. It renames the project
-  from AppAuth-Rust to NativeOIDC and is the first release whose Android AAR
-  is published to Maven Central, on top of the previously published v0.5.0
+- v0.7.1 is the current implementation snapshot. It ships the license
+  notices in every release package
+  ([#161](https://github.com/ProjectFlora/NativeOIDC/issues/161)) on top of
+  v0.7.0, which renames the project from AppAuth-Rust to NativeOIDC and is
+  the first release whose Android AAR is published to Maven Central, on top of the previously published v0.5.0
   assets, which add Swift Package Manager distribution for the Apple package
   and include token refresh and OIDC end-session in the Windows C ABI and .NET
   wrapper. The v0.6.0 Maven Central upload failed signature validation and

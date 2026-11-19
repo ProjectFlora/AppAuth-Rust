@@ -6,6 +6,8 @@ interoperability testing and support policies are still evolving. Each release r
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-20
+
 ### Changed
 
 - The Release workflow checks the signing key at the key server before any
@@ -69,6 +71,35 @@ interoperability testing and support policies are still evolving. Each release r
   to v0.6.0 on the former URL continue to work: the redirect covers both
   the git dependency and the release asset that those manifests download
   their XCFramework from ([#154](https://github.com/ProjectFlora/NativeOIDC/issues/154)).
+
+### Distribution
+
+- Published as a regular GitHub Release while remaining a pre-1.0 version,
+  with the Apple XCFramework, Android AAR, Windows DLL/C ABI package, API
+  documentation, and SHA-256 checksums. Each package now carries `LICENSE`,
+  `THIRD_PARTY_LICENSES.txt`, and `RUST_STANDARD_LIBRARY_COPYRIGHT.html`.
+- The Android library is published to Maven Central as
+  `net.project-flora.nativeoidc:native-oidc-android:0.7.1`. Swift Package
+  Manager remains available through release tags.
+- The public API, behavior, and serialized authentication state are
+  unchanged from 0.7.0.
+
+### Known limitations
+
+- Live identity-provider interoperability has not been validated, including
+  token revocation.
+- macOS and Windows tests do not automate the real system-browser flow.
+- Release consumer fixtures exercise refresh and end-session error paths in
+  the Windows C++ and .NET hosts and token revocation in the Windows .NET
+  host only; the Android and Apple XCFramework fixtures only construct the
+  configuration object, and the SPM consumer runs a host-side smoke of the
+  generated API without an authorization flow.
+- The ASCII armor of the Maven Central signature files carries a
+  `Version: BCPG v@RELEASE_NAME@` header, as in 0.7.0. The header is a
+  comment and the signatures verify
+  ([#169](https://github.com/ProjectFlora/NativeOIDC/issues/169)).
+- SPM is supported only through release tags; depending on the `main`
+  branch is not supported.
 
 ## [0.7.0] - 2026-11-18
 
