@@ -14,6 +14,14 @@ creates the tag itself (see [Why CI creates the tag](#why-ci-creates-the-tag)).
 | 3. Publish run | Release workflow from `main`, `publish: true` | Release commit, `vX.Y.Z` tag, GitHub Release with assets and `SHA256SUMS`, and the Android library on Maven Central |
 | 4. Verify | Published release consumer validation workflow | Published assets and the Swift package resolve and build |
 
+Every release run — a candidate or a publish — starts with a key server
+check: it derives the fingerprint of every primary key in the
+`GPG_PRIVATE_KEY` secret and requires each to resolve at `keys.openpgp.org`,
+retrying briefly to absorb key-server propagation lag. Maven Central's sync
+validation fetches the signing key's public key from the key server, so a
+key that is not there yet fails the run before any package is built rather
+than after a full build ([Repository settings](#repository-settings)).
+
 ## 1. Prepare the release
 
 In a pull request to `main`:
@@ -42,6 +50,11 @@ A candidate run builds and validates every package without publishing
 anything. Candidate runs can be dispatched from any branch, so release
 pipeline changes can be checked before they merge.
 
+The first job is the key server check (the signing key's public part must
+resolve at `keys.openpgp.org`). If the key is not published, the run fails
+there and the build jobs are skipped, so a missing key costs one job, not a
+full build.
+
 ```sh
 gh workflow run release.yml --ref main -f version=X.Y.Z -f publish=false
 gh run watch "$(gh run list --workflow release.yml --limit 1 --json databaseId -q '.[0].databaseId')"
@@ -66,6 +79,18 @@ workflows together, after checking the
 for the image's installed Xcode versions and simulator runtimes.
 
 ## 3. Publish
+
+Before dispatching, confirm the signing key's public part is resolvable at
+the key server. The run re-checks this with a short retry, but a freshly
+published key can take minutes to hours to propagate through the pool:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' \
+    "https://keys.openpgp.org/vks/v1/by-fingerprint/<fingerprint>"
+```
+
+The fingerprint is the one `gpg --list-keys --fingerprint` shows for the
+key in the `GPG_PRIVATE_KEY` secret. Expect `200`.
 
 Dispatch from `main` with **publish** checked:
 
@@ -190,6 +215,13 @@ of previous runs, so move any archive you keep somewhere else first.
 
 ## Recovering from a failed run
 
+- **Key server check failed** (no package was built): the `GPG_PRIVATE_KEY`
+  secret's public key is not resolvable at `keys.openpgp.org`; the job log
+  names the fingerprint and the lookup URL. Upload the ASCII-armored public
+  key at <https://keys.openpgp.org/upload>, wait for the pool to propagate,
+  confirm the `200` with the curl check in step 3, and dispatch the run
+  again.
+
 - **Failed before "Create release commit and tag"**: nothing was published.
   Fix the cause and dispatch the workflow again.
 
@@ -251,6 +283,20 @@ git push origin :refs/tags/vX.Y.Z
   - `MAVEN_USER` and `MAVEN_PASSWORD`: a Central Portal user token with
     publishing rights to the verified `net.project-flora` namespace.
   - `GPG_PRIVATE_KEY`: the ASCII-armored private signing key. Its public key
-    must be published to a key server that Maven Central checks, such as
-    `keys.openpgp.org`.
+    must be published to `keys.openpgp.org`, where Maven Central's sync
+    validation fetches it (its absence rejected v0.6.0's upload,
+    [#131](https://github.com/ProjectFlora/NativeOIDC/issues/131)). The
+    `keyserver` job in the Release workflow enforces this on every run,
+    candidate and publish: it derives the fingerprint of every primary key
+    in the secret and requires each to resolve at
+    `https://keys.openpgp.org/vks/v1/by-fingerprint/<fingerprint>`,
+    retrying three times with 30-second pauses. The key server does not
+    resolve subkey fingerprints on that endpoint, so only the primary keys
+    are checked; a lookup by primary fingerprint returns the whole key
+    block, subkeys included.
   - `GPG_PASSPHRASE`: the passphrase of that key.
+
+- `keys.openpgp.org`'s live lookup endpoints are the `vks/v1/...` ones; the
+  older `vkb/v1/...` endpoints answer `404` even for published keys, so do
+  not use them to check a key. Upload a public key at
+  <https://keys.openpgp.org/upload>.

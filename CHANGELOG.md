@@ -6,6 +6,18 @@ interoperability testing and support policies are still evolving. Each release r
 
 ## [Unreleased]
 
+### Changed
+
+- The Release workflow checks the signing key at the key server before any
+  package is built: a new `keyserver` job, which runs on every release
+  dispatch (candidate and publish), derives the fingerprint of every primary
+  key in the `GPG_PRIVATE_KEY` secret and requires each to resolve at
+  `keys.openpgp.org` by fingerprint, retrying to absorb key-server
+  propagation lag. A public key absent from the key server failed v0.6.0's
+  Maven Central sync validation, which is why v0.6.0 was never published
+  there ([#131](https://github.com/ProjectFlora/NativeOIDC/issues/131),
+  [#152](https://github.com/ProjectFlora/NativeOIDC/issues/152)).
+
 ## [0.7.0] - 2026-11-18
 
 ### Changed
