@@ -239,8 +239,8 @@ SPM consumers pinning v0.6.0 on the former URL are checked by the
 `legacy_spm` job in the release consumer validation workflow, which
 resolves the tag, downloads the binary artifact through GitHub's
 redirect, and builds for macOS and the iOS simulator on a clean runner.
-Its first run
-([44411052452](https://github.com/ProjectFlora/NativeOIDC/actions/runs/44411052452))
+Its first run of the job
+([44411052452](https://github.com/ProjectFlora/NativeOIDC/actions/runs/44411052452/job/135178975314))
 passed every step, confirming that the former URL works end-to-end for
 SPM consumers ([#154](https://github.com/ProjectFlora/NativeOIDC/issues/154)).
 
