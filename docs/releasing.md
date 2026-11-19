@@ -60,8 +60,9 @@ Merge the pull request once CI passes.
 ## 2. Run a release candidate
 
 A candidate run builds and validates every package without publishing
-anything. Candidate runs can be dispatched from any branch, so release
-pipeline changes can be checked before they merge. The key server check
+anything. Candidate runs can be dispatched from `main` or a fully trusted
+branch, so release pipeline changes can be checked before they merge. The
+key server check
 holds the signing key (`GPG_PRIVATE_KEY`) in its environment and runs the
 dispatched branch's copy of the check script, so dispatch candidates from
 `main` or a fully trusted branch only: a branch that is not trusted with
