@@ -327,22 +327,39 @@ class KeyserverCheckTests(unittest.TestCase):
             self.assertIn("Every signing key", r.stdout)
             self.assertEqual(self.server.requests, [route(RFC_ED25519_FPR)])
             with open(summary) as f:
-                self.assertIn(RFC_ED25519_FPR, f.read())
+                text = f.read()
+            self.assertIn(RFC_ED25519_FPR, text)
+            self.assertIn("Every signing key", text)
         finally:
             if os.path.exists(summary):
                 os.unlink(summary)
 
     def test_not_resolved(self):
-        r = self.run_script({route(RFC_ED25519_FPR): (404, None)})
-        self.assertEqual(r.returncode, 1, r.stdout)
-        self.assertIn("does not resolve", r.stderr)
-        self.assertIn(RFC_ED25519_FPR, r.stderr)
-        self.assertIn("keys.openpgp.org/upload", r.stderr)
-        self.assertIn("Re-dispatch the release run", r.stderr)
-        # The retry loop ran; the remediation names the key, so the
-        # maintainer can act on it without reading the logs.
-        self.assertEqual(len(self.server.requests), 3)
-        self.assertEqual(self.server.requests[0], route(RFC_ED25519_FPR))
+        summary = os.path.join(tempfile.gettempdir(),
+                               "step-summary-%d" % (os.getpid() + 1))
+        try:
+            r = self.run_script({route(RFC_ED25519_FPR): (404, None)},
+                                summary=summary)
+            self.assertEqual(r.returncode, 1, r.stdout)
+            self.assertIn("does not resolve", r.stderr)
+            self.assertIn(RFC_ED25519_FPR, r.stderr)
+            self.assertIn("keys.openpgp.org/upload", r.stderr)
+            self.assertIn("Re-dispatch the release run", r.stderr)
+            # The retry loop ran; the remediation names the key, so the
+            # maintainer can act on it without reading the logs.
+            self.assertEqual(len(self.server.requests), 3)
+            self.assertEqual(self.server.requests[0], route(RFC_ED25519_FPR))
+            # The step summary reports the key's actual result, not a
+            # blanket success: a failed lookup must be visible there.
+            with open(summary) as f:
+                text = f.read()
+            self.assertIn("Not every signing key", text)
+            self.assertIn("not resolvable", text)
+            self.assertIn(RFC_ED25519_FPR, text)
+            self.assertNotIn("Every signing key", text)
+        finally:
+            if os.path.exists(summary):
+                os.unlink(summary)
 
     def test_retry_then_resolves(self):
         # Propagation lag: 404 twice, then the pool catches up.
@@ -404,6 +421,18 @@ class KeyserverCheckTests(unittest.TestCase):
         r = self.run_script({route(RFC_V6_FPR): (404, None)}, key=RFC_V6_KEY)
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("version 6", r.stderr)
+        self.assertEqual(self.server.requests, [])
+
+    def test_mixed_supported_and_unsupported_key(self):
+        # A v4 primary alongside an unverifiable v6 primary: the gate must
+        # fail on the v6 key rather than pass on the strength of the v4 key
+        # (the mixed-version bypass of the gate).
+        key = RFC_ED25519_KEY + "\n" + RFC_V6_KEY
+        r = self.run_script({route(RFC_ED25519_FPR): block(RFC_ED25519_KEY)},
+                            key=key)
+        self.assertEqual(r.returncode, 1, (r.stdout, r.stderr))
+        self.assertIn("version 6", r.stderr)
+        # The gate fails before any lookup.
         self.assertEqual(self.server.requests, [])
 
     def test_secret_key_unprotected(self):

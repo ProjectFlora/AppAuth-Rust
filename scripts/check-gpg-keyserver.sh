@@ -17,6 +17,11 @@
 # not resolve subkey fingerprints on the by-fingerprint endpoint, so subkeys
 # are deliberately not checked.
 #
+# A primary key that cannot be fingerprinted (an unsupported key version, or
+# a secret packet whose fields do not parse) fails the gate rather than being
+# skipped: its publication cannot be verified, so it must not let the run
+# through on the strength of another key in the same secret.
+#
 # GPG_PRIVATE_KEY is required. This differs from
 # check-android-maven-publication.sh, which skips its signature checks when
 # the signing key is unset: this check runs on every release dispatch
@@ -438,6 +443,14 @@ def key_fingerprint(tag, body):
 
 
 def primary_fingerprints(path):
+    """Return the version 4 primary key fingerprints of the key material.
+
+    A primary key this check cannot fingerprint (an unsupported version, or
+    a secret packet whose fields do not parse) fails the gate: its
+    publication cannot be verified, and a key whose publication cannot be
+    verified must not let the run through (a v4 key in the same secret
+    cannot stand in for it). Subkeys are deliberately not checked, so their
+    problems only merit a note."""
     try:
         text = open(path, encoding="utf-8", errors="replace").read()
     except OSError as error:
@@ -454,13 +467,22 @@ def primary_fingerprints(path):
             if tag not in (5, 6, 7, 14) or not body:
                 continue
             if body[0] != 4:
-                print("note: skipping a version %d key (this check supports version 4 keys only; "
-                      "verify its publication manually)" % body[0], file=sys.stderr)
+                if tag in (5, 6):
+                    fail("a version %d primary key is in GPG_PRIVATE_KEY, but this check "
+                         "supports version 4 keys only; remove it from the secret if it is "
+                         "not the release signing key, or verify its publication manually"
+                         % body[0])
+                print("note: a version %d subkey is not checked directly (this check "
+                      "supports version 4 keys only)" % body[0], file=sys.stderr)
                 continue
             fpr, problem = key_fingerprint(tag, body)
             if problem is not None:
-                print("note: a secret key packet is malformed (%s); its fingerprint cannot be "
-                      "derived, verify its publication manually" % problem, file=sys.stderr)
+                if tag in (5, 6):
+                    fail("a primary key packet is malformed (%s); its fingerprint cannot be "
+                         "derived, so its publication cannot be verified; check the secret "
+                         "for corruption" % problem)
+                print("note: a subkey packet is malformed (%s); it is not checked directly"
+                      % problem, file=sys.stderr)
                 continue
             if tag in (5, 6):
                 if fpr not in fprs:
@@ -504,6 +526,11 @@ PY
 fprs_file="$workdir/fprs"
 python3 "$workdir/parse_key.py" fprs "$key_file" > "$fprs_file" || exit 1
 
+# One line per key: the fingerprint and its outcome (ok / mismatch /
+# missing), so the step summary reports each key's actual result.
+results_file="$workdir/results"
+: > "$results_file"
+
 url_base="${KEYSERVER_BASE_URL%/}/vks/v1/by-fingerprint"
 status=0
 for fpr in $(cat "$fprs_file"); do
@@ -538,8 +565,15 @@ for fpr in $(cat "$fprs_file"); do
     done
     if [[ -n "$resolved" ]]; then
         echo "Resolved $fpr"
+        printf '%s\t%s\n' "$fpr" ok >> "$results_file"
     else
         status=1
+        if [[ "$code" == "200" ]]; then
+            outcome=mismatch
+        else
+            outcome=missing
+        fi
+        printf '%s\t%s\n' "$fpr" "$outcome" >> "$results_file"
         cat >&2 <<EOF
 ERROR: public key $fpr does not resolve at $url after $KEYSERVER_ATTEMPTS attempt(s).
 
@@ -562,11 +596,25 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     {
         echo "### Key server"
         echo
-        echo "The signing key's public part resolves at ${KEYSERVER_BASE_URL}:"
+        if [[ "$status" -eq 0 ]]; then
+            echo "Every signing key in GPG_PRIVATE_KEY resolves at ${KEYSERVER_BASE_URL}:"
+        else
+            echo "**Not every signing key resolves at ${KEYSERVER_BASE_URL}; the run is failing before any build.** To publish the missing key: upload its ASCII-armored public part at https://keys.openpgp.org/upload, then re-dispatch the run."
+        fi
         echo
-        for fpr in $(cat "$fprs_file"); do
-            echo "- \`$fpr\`"
-        done
+        while IFS=$'\t' read -r fpr outcome; do
+            case "$outcome" in
+                ok)
+                    echo "- ✅ \`$fpr\` resolves"
+                    ;;
+                mismatch)
+                    echo "- ❌ \`$fpr\` — the key server answered 200 but its block is not this key"
+                    ;;
+                *)
+                    echo "- ❌ \`$fpr\` — not resolvable after ${KEYSERVER_ATTEMPTS} attempt(s)"
+                    ;;
+            esac
+        done < "$results_file"
     } >> "$GITHUB_STEP_SUMMARY"
 fi
 
