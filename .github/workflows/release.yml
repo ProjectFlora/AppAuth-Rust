@@ -71,9 +71,11 @@ jobs:
             echo "Release versions must use MAJOR.MINOR.PATCH" >&2
             exit 1
           fi
-          # Candidate runs (no publish) may be dispatched from any branch so
-          # release changes can be validated before they merge; publishing
-          # requires the dispatched commit to be on main.
+          # Candidate runs (no publish) may be dispatched from main or a
+          # fully trusted branch so release changes can be validated before
+          # they merge (the key server check holds the signing key, so an
+          # untrusted branch must not be dispatched); publishing requires
+          # the dispatched commit to be on main.
           if [[ "$PUBLISH" == "true" ]]; then
             git fetch origin main
             if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
