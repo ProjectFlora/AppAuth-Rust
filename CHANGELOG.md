@@ -6,6 +6,18 @@ interoperability testing and support policies are still evolving. Each release r
 
 ## [Unreleased]
 
+### Changed
+
+- Add a former-URL SPM consumer job to the release consumer validation
+  workflow: a clean macOS runner resolves `v0.6.0` from
+  `ProjectFlora/AppAuth-Rust`, downloads the binary artifact through
+  GitHub's repository redirect, runs the host-side FFI smoke, and builds
+  for the iOS simulator
+  ([#154](https://github.com/ProjectFlora/NativeOIDC/issues/154)). The
+  renamed repository's tags are immutable, so this job is the only check
+  of that redirect path: it runs on every dispatch, so the redirect keeps
+  being exercised as new releases are validated.
+
 ### Fixed
 
 - Ship license notices in every release package. The Apple and Windows
@@ -39,6 +51,10 @@ interoperability testing and support policies are still evolving. Each release r
   coverage matrix. Record the decision and rationale in
   [ROADMAP.md](ROADMAP.md)
   ([#144](https://github.com/ProjectFlora/NativeOIDC/issues/144)).
+- Record in the migration section that SPM consumers pinning a release up
+  to v0.6.0 on the former URL continue to work: the redirect covers both
+  the git dependency and the release asset that those manifests download
+  their XCFramework from ([#154](https://github.com/ProjectFlora/NativeOIDC/issues/154)).
 
 ## [0.7.0] - 2026-11-18
 
