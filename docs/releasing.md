@@ -221,6 +221,22 @@ SPM consumers resolve released
 versions by tag and are unaffected; depending on the `main` branch through
 SPM is not supported.
 
+### Updating main's Package.swift
+
+To keep `main` in sync with releases, update the `NativeOIDCBinary` target in
+`Package.swift` during release preparation pull requests:
+
+- Set the binary target to point at the **previous** published release (e.g., for
+  preparing v0.8.0, use v0.7.0's URL and checksum).
+- Update both `url` and `checksum` together; do not edit them manually after
+  that.
+- Merge the PR once CI passes (`scripts/check-spm-manifest.sh` will succeed if
+  the manifest does not lead the Cargo version).
+
+Once main catches up to a prior release (e.g., v0.7.x), legacy URL acceptances
+in `scripts/check-spm-manifest.sh` will no longer be needed but are retained
+for safety until then.
+
 ### Release notes range
 
 Because each release commit is reachable only from its tag, earlier release
