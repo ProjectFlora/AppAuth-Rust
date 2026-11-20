@@ -1,3 +1,4 @@
+import Foundation
 import NativeOIDC
 import XCTest
 
@@ -44,11 +45,109 @@ final class NativeOIDCTests: XCTestCase {
         }
     }
 
-    /// A transport that simulates a long-running request and responds to cancellation.
+    /// A transport that simulates a long-running request. It signals the
+    /// test when it enters `execute`, then waits for the cancellation
+    /// handle to fire before returning `.Cancelled`.
     final class BlockingTransport: NativeHttpTransport, @unchecked Sendable {
+        let started = Once()
+
         func execute(request: FfiHttpRequest, cancellation: FfiCancellationHandle) async throws -> FfiHttpResponse {
+            started.fire()
             await cancellation.cancelled()
             throw FfiError.Cancelled
+        }
+    }
+
+    /// A transport that never answers its request. It signals the test
+    /// when it enters `execute`, waits for the cancellation handle to
+    /// fire, and then suspends without ever returning a response or an
+    /// error. Used by C5: because the transport cannot produce the result,
+    /// a `.Cancelled` outcome can only come from the Rust core racing the
+    /// handle against the transport.
+    final class UnresponsiveTransport: NativeHttpTransport, @unchecked Sendable {
+        let started = Once()
+
+        func execute(request: FfiHttpRequest, cancellation: FfiCancellationHandle) async throws -> FfiHttpResponse {
+            started.fire()
+            await cancellation.cancelled()
+            // After the handle fires, never answer: keep suspending. The
+            // request stays pending, so a core implementation that waits
+            // on the transport would hang.
+            while true {
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    /// A one-shot, thread-safe event signal used to order the test against
+    /// a transport callback.
+    final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _fired = false
+
+        var fired: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return _fired
+        }
+
+        func fire() {
+            lock.lock()
+            _fired = true
+            lock.unlock()
+        }
+    }
+
+    /// The recorded completion of an operation the test runs in a
+    /// background task.
+    enum FfiOutcome: Equatable {
+        case success(String)
+        case failure(FfiError)
+    }
+
+    /// First-wins storage for the completion of a background operation.
+    ///
+    /// The generated async helpers suspend on a continuation that only
+    /// Rust resumes, so a cancelled Swift task cannot abandon a
+    /// `task.value` await; the tests observe completion through this box
+    /// with a bounded poll instead.
+    final class OutcomeBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: FfiOutcome?
+
+        func recordSuccess(_ description: String) {
+            lock.lock()
+            if stored == nil { stored = .success(description) }
+            lock.unlock()
+        }
+
+        func recordFailure(_ error: FfiError) {
+            lock.lock()
+            if stored == nil { stored = .failure(error) }
+            lock.unlock()
+        }
+
+        var current: FfiOutcome? {
+            lock.lock()
+            defer { lock.unlock() }
+            return stored
+        }
+
+        /// Polls every 5 ms until a completion is recorded or `duration`
+        /// elapses.
+        func wait(_ duration: Duration) async -> FfiOutcome? {
+            let clock = ContinuousClock()
+            let deadline = clock.now + duration
+            while true {
+                if let stored = current { return stored }
+                if clock.now >= deadline { return nil }
+                do {
+                    try await Task.sleep(for: .milliseconds(5))
+                } catch {
+                    // The test task was cancelled; stop polling.
+                    return nil
+                }
+            }
         }
     }
 
@@ -72,7 +171,6 @@ final class NativeOIDCTests: XCTestCase {
         
         XCTAssertEqual(transport.recordedRequests.count, 1)
         let request = transport.recordedRequests[0]
-        print("Request headers: \(request.headers.map { "\($0.name): \(String(data: $0.value, encoding: .utf8) ?? "")" })")
         XCTAssertEqual(request.method, "GET")
         XCTAssertEqual(request.url, "https://idp.example/.well-known/openid-configuration")
         XCTAssertTrue(request.headers.contains { $0.name.caseInsensitiveCompare("Accept") == .orderedSame && String(data: $0.value, encoding: .utf8) == "application/json" })
@@ -184,7 +282,6 @@ final class NativeOIDCTests: XCTestCase {
             XCTFail("Expected error")
         } catch let error as FfiError {
             if case .TransportFailure(let message) = error {
-                print("D7 Actual: \(message)")
                 XCTAssertEqual(message, "HTTP transport failed")
             } else {
                 XCTFail("Expected .TransportFailure, got \(error)")
@@ -509,7 +606,6 @@ final class NativeOIDCTests: XCTestCase {
 
         let session = try NativeOIDC.beginEndSession(configuration: config, options: options)
         let url = session.endSessionUrl()
-        print("E1 Generated URL: \(url)")
         XCTAssertTrue(url.contains("client_id=c1"))
         XCTAssertTrue(url.contains("id_token_hint=id_token"))
         XCTAssertTrue(url.contains("post_logout_redirect_uri=com.example.app%3A%2Flogout")) // encoded
@@ -651,153 +747,277 @@ final class NativeOIDCTests: XCTestCase {
     }
 
     // MARK: - Cancellation (C)
+    //
+    // The C tests must not order themselves against the operation with a
+    // fixed `Task.sleep`: under CI load the child task may not have
+    // started, and the test would pass on a pre-execution cancel without
+    // verifying in-flight cancellation. Instead each test:
+    //   1. waits, with a deadline, for the transport to report that it
+    //      entered `execute`,
+    //   2. cancels the shared handle, so the request is guaranteed in
+    //      flight,
+    //   3. waits, with a deadline, for the operation to complete through
+    //      an `OutcomeBox` the operation task writes to (a `task.value`
+    //      await cannot be bounded because the generated async helpers
+    //      suspend on a continuation that only Rust resumes),
+    //   4. asserts the completion is `.Cancelled`.
+    //
+    // `awaitFlag` polls `isReady` every 5 ms, returning `true` once it
+    // succeeds and `false` when `duration` elapses.
+
+    private func awaitFlag(_ duration: Duration, _ isReady: () -> Bool) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now + duration
+        while true {
+            if isReady() { return true }
+            if clock.now >= deadline { return false }
+            do {
+                try await Task.sleep(for: .milliseconds(5))
+            } catch {
+                // The test task was cancelled; stop polling.
+                return false
+            }
+        }
+    }
 
     func testC1() async throws {
+        // discover must observe a cancellation issued while its request is
+        // in flight.
         let transport = BlockingTransport()
         let cancellation = FfiCancellationHandle()
-        
+        let outcome = OutcomeBox()
+
         let task = Task {
-            try await FfiServiceConfiguration.discover(issuer: "https://idp.example/", transport: transport, cancellation: cancellation)
-        }
-        
-        // Give it a moment to start
-        try await Task.sleep(nanoseconds: 10_000_000)
-        cancellation.cancel()
-        
-        do {
-            _ = try await task.value
-            XCTFail("Expected error")
-        } catch let error as FfiError {
-            if case .Cancelled = error {
-                // Success
-            } else {
-                XCTFail("Expected .Cancelled, got \(error)")
+            do {
+                _ = try await FfiServiceConfiguration.discover(issuer: "https://idp.example/", transport: transport, cancellation: cancellation)
+                outcome.recordSuccess("discover")
+            } catch let error as FfiError {
+                outcome.recordFailure(error)
+            } catch {
+                outcome.recordFailure(FfiError.Internal("unexpected Swift error: \(error)"))
             }
-        } catch {
-            XCTFail("Expected FfiError, got \(error)")
+        }
+
+        guard await awaitFlag(.seconds(10), { transport.started.fired }) else {
+            task.cancel()
+            XCTFail("C1: transport.execute was not entered within 10 seconds")
+            return
+        }
+        cancellation.cancel()
+
+        guard let result = await outcome.wait(.seconds(10)) else {
+            task.cancel()
+            XCTFail("C1: discover did not complete within 10 seconds after cancellation")
+            return
+        }
+        guard case .failure(FfiError.Cancelled) = result else {
+            XCTFail("C1: expected .Cancelled, got \(result)")
+            return
         }
     }
 
     func testC2() async throws {
+        // revoke must observe a cancellation issued while its request is
+        // in flight.
         let transport = BlockingTransport()
         let cancellation = FfiCancellationHandle()
-        
+        let outcome = OutcomeBox()
+
         let config = try FfiServiceConfiguration(authorizationEndpoint: "https://idp.example/authorize", tokenEndpoint: "https://idp.example/token")
             .withRevocationEndpoint(endpoint: "https://idp.example/revoke")
 
         let task = Task {
-            try await NativeOIDC.revoke(configuration: config, clientId: "c1", token: "t1", tokenTypeHint: nil, transport: transport, cancellation: cancellation)
-        }
-        
-        try await Task.sleep(nanoseconds: 10_000_000)
-        cancellation.cancel()
-        
-        do {
-            try await task.value
-            XCTFail("Expected error")
-        } catch let error as FfiError {
-            if case .Cancelled = error {
-                // Success
-            } else {
-                XCTFail("Expected .Cancelled, got \(error)")
+            do {
+                try await NativeOIDC.revoke(configuration: config, clientId: "c1", token: "t1", tokenTypeHint: nil, transport: transport, cancellation: cancellation)
+                outcome.recordSuccess("revoke")
+            } catch let error as FfiError {
+                outcome.recordFailure(error)
+            } catch {
+                outcome.recordFailure(FfiError.Internal("unexpected Swift error: \(error)"))
             }
-        } catch {
-            XCTFail("Expected FfiError, got \(error)")
+        }
+
+        guard await awaitFlag(.seconds(10), { transport.started.fired }) else {
+            task.cancel()
+            XCTFail("C2: transport.execute was not entered within 10 seconds")
+            return
+        }
+        cancellation.cancel()
+
+        guard let result = await outcome.wait(.seconds(10)) else {
+            task.cancel()
+            XCTFail("C2: revoke did not complete within 10 seconds after cancellation")
+            return
+        }
+        guard case .failure(FfiError.Cancelled) = result else {
+            XCTFail("C2: expected .Cancelled, got \(result)")
+            return
         }
     }
 
     func testC3() async throws {
+        // register_public_client must observe a cancellation issued while
+        // its request is in flight.
         let transport = BlockingTransport()
         let cancellation = FfiCancellationHandle()
-        
+        let outcome = OutcomeBox()
+
         let config = try FfiServiceConfiguration(authorizationEndpoint: "https://idp.example/authorize", tokenEndpoint: "https://idp.example/token")
             .withRegistrationEndpoint(endpoint: "https://idp.example/register")
 
         let options = FfiRegistrationOptions(redirectUris: ["https://app.example/callback"], clientName: nil, initialAccessToken: nil)
 
         let task = Task {
-            try await NativeOIDC.registerPublicClient(configuration: config, options: options, transport: transport, cancellation: cancellation)
-        }
-        
-        try await Task.sleep(nanoseconds: 10_000_000)
-        cancellation.cancel()
-        
-        do {
-            _ = try await task.value
-            XCTFail("Expected error")
-        } catch let error as FfiError {
-            if case .Cancelled = error {
-                // Success
-            } else {
-                XCTFail("Expected .Cancelled, got \(error)")
+            do {
+                _ = try await NativeOIDC.registerPublicClient(configuration: config, options: options, transport: transport, cancellation: cancellation)
+                outcome.recordSuccess("register_public_client")
+            } catch let error as FfiError {
+                outcome.recordFailure(error)
+            } catch {
+                outcome.recordFailure(FfiError.Internal("unexpected Swift error: \(error)"))
             }
-        } catch {
-            XCTFail("Expected FfiError, got \(error)")
+        }
+
+        guard await awaitFlag(.seconds(10), { transport.started.fired }) else {
+            task.cancel()
+            XCTFail("C3: transport.execute was not entered within 10 seconds")
+            return
+        }
+        cancellation.cancel()
+
+        guard let result = await outcome.wait(.seconds(10)) else {
+            task.cancel()
+            XCTFail("C3: register_public_client did not complete within 10 seconds after cancellation")
+            return
+        }
+        guard case .failure(FfiError.Cancelled) = result else {
+            XCTFail("C3: expected .Cancelled, got \(result)")
+            return
         }
     }
 
     func testC4() async throws {
+        // refresh must observe a cancellation issued while its request is
+        // in flight, and must leave the token state unchanged.
         let transport = BlockingTransport()
         let cancellation = FfiCancellationHandle()
-        
+        let outcome = OutcomeBox()
+
         // Create a state manually using fromJson to avoid needing a real token response.
-        let state = try FfiAuthenticationState.fromJson(serialized: #"{"token_response":{"access_token":"old","token_type":"Bearer","refresh_token":"refresh"}}"#)
+        let state = try FfiAuthenticationState.fromJson(serialized: stateJson)
         let config = try FfiServiceConfiguration(authorizationEndpoint: "https://idp.example/authorize", tokenEndpoint: "https://idp.example/token")
-        
+
         let task = Task {
-            try await state.refresh(configuration: config, clientId: "c1", additionalParameters: [], transport: transport, cancellation: cancellation)
+            do {
+                try await state.refresh(configuration: config, clientId: "c1", additionalParameters: [], transport: transport, cancellation: cancellation)
+                outcome.recordSuccess("refresh")
+            } catch let error as FfiError {
+                outcome.recordFailure(error)
+            } catch {
+                outcome.recordFailure(FfiError.Internal("unexpected Swift error: \(error)"))
+            }
         }
-        
-        try await Task.sleep(nanoseconds: 10_000_000)
+
+        guard await awaitFlag(.seconds(10), { transport.started.fired }) else {
+            task.cancel()
+            XCTFail("C4: transport.execute was not entered within 10 seconds")
+            return
+        }
         cancellation.cancel()
 
-        do {
-            try await task.value
-            XCTFail("Expected error")
-        } catch let error as FfiError {
-            if case .Cancelled = error {
-                // Success
-            } else {
-                XCTFail("Expected .Cancelled, got \(error)")
-            }
-        } catch {
-            XCTFail("Expected FfiError, got \(error)")
+        guard let result = await outcome.wait(.seconds(10)) else {
+            task.cancel()
+            XCTFail("C4: refresh did not complete within 10 seconds after cancellation")
+            return
         }
+        guard case .failure(FfiError.Cancelled) = result else {
+            XCTFail("C4: expected .Cancelled, got \(result)")
+            return
+        }
+
+        // A cancelled refresh must not update the token state.
+        let response = await state.tokenResponse()
+        XCTAssertEqual(response.accessToken, "old")
+        XCTAssertEqual(response.tokenType, "Bearer")
+        XCTAssertEqual(response.refreshToken, "refresh")
     }
 
     func testC5() async throws {
-        class NonResponsiveTransport: NativeHttpTransport, @unchecked Sendable {
-            func execute(request: FfiHttpRequest, cancellation: FfiCancellationHandle) async throws -> FfiHttpResponse {
-                await cancellation.cancelled() // Typo here
-                throw FfiError.Cancelled
-            }
-        }
-        
-        let transport = NonResponsiveTransport()
-        let cancellation = FfiCancellationHandle()
-        
-        // C5 requires tests for revoke and refresh.
+        // The `UnresponsiveTransport` never answers after the handle
+        // fires, so a `.Cancelled` outcome can only be produced by the
+        // Rust core racing the handle against the transport. Both revoke
+        // and refresh must complete, within a deadline, with `.Cancelled`
+        // from the core.
         let config = try FfiServiceConfiguration(authorizationEndpoint: "https://idp.example/authorize", tokenEndpoint: "https://idp.example/token")
-            .withRevocationEndpoint(endpoint: "https://idp.example/revoke")
 
-        let task = Task {
-            try await NativeOIDC.revoke(configuration: config, clientId: "c1", token: "t1", tokenTypeHint: nil, transport: transport, cancellation: cancellation)
-        }
-        
-        try await Task.sleep(nanoseconds: 10_000_000)
-        cancellation.cancel()
-        
         do {
-            try await task.value
-            XCTFail("Expected error")
-        } catch let error as FfiError {
-            if case .Cancelled = error {
-                // Success
-            } else {
-                XCTFail("Expected .Cancelled, got \(error)")
+            let transport = UnresponsiveTransport()
+            let cancellation = FfiCancellationHandle()
+            let outcome = OutcomeBox()
+            let revocation = try config.withRevocationEndpoint(endpoint: "https://idp.example/revoke")
+
+            let task = Task {
+                do {
+                    try await NativeOIDC.revoke(configuration: revocation, clientId: "c1", token: "t1", tokenTypeHint: nil, transport: transport, cancellation: cancellation)
+                    outcome.recordSuccess("revoke")
+                } catch let error as FfiError {
+                    outcome.recordFailure(error)
+                } catch {
+                    outcome.recordFailure(FfiError.Internal("unexpected Swift error: \(error)"))
+                }
             }
-        } catch {
-            XCTFail("Expected FfiError, got \(error)")
+
+            guard await awaitFlag(.seconds(10), { transport.started.fired }) else {
+                task.cancel()
+                XCTFail("C5: revoke transport.execute was not entered within 10 seconds")
+                return
+            }
+            cancellation.cancel()
+
+            guard let result = await outcome.wait(.seconds(10)) else {
+                task.cancel()
+                XCTFail("C5: revoke did not complete within 10 seconds after cancellation; the core is waiting on the unresponsive transport")
+                return
+            }
+            guard case .failure(FfiError.Cancelled) = result else {
+                XCTFail("C5: expected .Cancelled from the core for revoke, got \(result)")
+                return
+            }
+        }
+
+        do {
+            let transport = UnresponsiveTransport()
+            let cancellation = FfiCancellationHandle()
+            let outcome = OutcomeBox()
+            let state = try FfiAuthenticationState.fromJson(serialized: stateJson)
+
+            let task = Task {
+                do {
+                    try await state.refresh(configuration: config, clientId: "c1", additionalParameters: [], transport: transport, cancellation: cancellation)
+                    outcome.recordSuccess("refresh")
+                } catch let error as FfiError {
+                    outcome.recordFailure(error)
+                } catch {
+                    outcome.recordFailure(FfiError.Internal("unexpected Swift error: \(error)"))
+                }
+            }
+
+            guard await awaitFlag(.seconds(10), { transport.started.fired }) else {
+                task.cancel()
+                XCTFail("C5: refresh transport.execute was not entered within 10 seconds")
+                return
+            }
+            cancellation.cancel()
+
+            guard let result = await outcome.wait(.seconds(10)) else {
+                task.cancel()
+                XCTFail("C5: refresh did not complete within 10 seconds after cancellation; the core is waiting on the unresponsive transport")
+                return
+            }
+            guard case .failure(FfiError.Cancelled) = result else {
+                XCTFail("C5: expected .Cancelled from the core for refresh, got \(result)")
+                return
+            }
         }
     }
 }
