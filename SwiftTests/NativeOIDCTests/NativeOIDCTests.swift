@@ -71,10 +71,15 @@ final class NativeOIDCTests: XCTestCase {
             started.fire()
             await cancellation.cancelled()
             // After the handle fires, never answer: keep suspending. The
-            // request stays pending, so a core implementation that waits
-            // on the transport would hang.
+            // request stays pending, so a core implementation that waits on
+            // the transport would hang. When Rust wins the race it drops this
+            // future and the UniFFI drop callback cancels the task, so the
+            // sleep error must propagate to exit the loop (a `try?` here
+            // would spin at full CPU on every iteration). The vtable then
+            // reports the error for an already-dropped future, which the
+            // scaffolding ignores.
             while true {
-                try? await Task.sleep(for: .seconds(1))
+                try await Task.sleep(for: .seconds(1))
             }
         }
     }
