@@ -575,14 +575,44 @@ final class NativeOIDCTests: XCTestCase {
     }
 
     func testG6() async throws {
+        // #164 G6: a malformed redirect URI must be rejected before any
+        // request is made.
         let transport = ScriptedTransport()
-        transport.responseToReturn = .failure(FfiError.TransportFailure("down"))
-        
+        transport.responseToReturn = .success(FfiHttpResponse(status: 201, headers: [], body: Data()))
+
         let config = try FfiServiceConfiguration(authorizationEndpoint: "https://idp.example/authorize", tokenEndpoint: "https://idp.example/token")
             .withRegistrationEndpoint(endpoint: "https://idp.example/register")
-        
+
+        let options = FfiRegistrationOptions(redirectUris: ["https://app.example/callback", "not a url"], clientName: nil, initialAccessToken: nil)
+
+        do {
+            _ = try await NativeOIDC.registerPublicClient(configuration: config, options: options, transport: transport, cancellation: FfiCancellationHandle())
+            XCTFail("Expected error")
+        } catch let error as FfiError {
+            if case .InvalidRequest = error {
+                // Success
+            } else {
+                XCTFail("Expected .InvalidRequest, got \(error)")
+            }
+        } catch {
+            XCTFail("Expected FfiError, got \(error)")
+        }
+        // The malformed redirect URI must be rejected before calling the
+        // transport.
+        XCTAssertEqual(transport.recordedRequests.count, 0)
+    }
+
+    func testG7() async throws {
+        // A transport failure while the registration request is in flight
+        // is surfaced as TransportFailure carrying the transport's message.
+        let transport = ScriptedTransport()
+        transport.responseToReturn = .failure(FfiError.TransportFailure("down"))
+
+        let config = try FfiServiceConfiguration(authorizationEndpoint: "https://idp.example/authorize", tokenEndpoint: "https://idp.example/token")
+            .withRegistrationEndpoint(endpoint: "https://idp.example/register")
+
         let options = FfiRegistrationOptions(redirectUris: ["https://app.example/callback"], clientName: nil, initialAccessToken: nil)
-        
+
         do {
             _ = try await NativeOIDC.registerPublicClient(configuration: config, options: options, transport: transport, cancellation: FfiCancellationHandle())
             XCTFail("Expected error")
@@ -595,6 +625,7 @@ final class NativeOIDCTests: XCTestCase {
         } catch {
             XCTFail("Expected FfiError, got \(error)")
         }
+        XCTAssertEqual(transport.recordedRequests.count, 1)
     }
 
     // MARK: - End Session (E)

@@ -86,7 +86,7 @@ The following test IDs in `SwiftTests/NativeOIDCTests/NativeOIDCTests.swift` ver
 | --- | --- | --- |
 | Discovery (D) | D1–D7 | `discover`; `.HttpStatus`, `.InvalidResponse`, `.InvalidRequest`, `.TransportFailure` |
 | Revocation (R) | R1–R7 | `revoke`; `.InvalidRequest`, `.AuthorizationServer`, `.HttpStatus`, `.TransportFailure` |
-| Registration (G) | G1–G6 | `register_public_client`; `.ClientRegistrationServer`, `.InvalidResponse`, `.HttpStatus`, `.InvalidRequest`, `.TransportFailure` |
+| Registration (G) | G1–G7 | `register_public_client`; `.ClientRegistrationServer`, `.InvalidResponse`, `.HttpStatus`, `.InvalidRequest`, `.TransportFailure` |
 | End Session (E) | E1–E5 | `begin_end_session`, `parse_redirect`; `.InvalidResponse`, `.InvalidRequest` |
 | State JSON (S) | S1–S2 | `from_json`, `to_json`; `.InvalidRequest` |
 | Cancellation (C) | C1–C5 | `discover`, `revoke`, `register_public_client`, `refresh`; `.Cancelled` |
