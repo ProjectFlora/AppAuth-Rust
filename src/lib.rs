@@ -24,12 +24,7 @@ pub mod ffi;
 /// Windows desktop C ABI for authorization, token refresh, end-session, and
 /// token revocation through the external browser and loopback redirects.
 #[cfg(any(windows, test))]
-pub mod windows {
-    pub mod abi;
-    pub mod data;
-    pub mod ops;
-    pub mod loopback;
-}
+pub mod windows;
 
 uniffi::setup_scaffolding!();
 
@@ -39,17 +34,6 @@ pub use authorization::{
     EndSessionResponse, EndSessionSession, RevocationTokenType, ServiceConfiguration,
     TokenResponse,
 };
-
-#[cfg(any(windows, test))]
-pub use windows::{
-    NativeOidcWindowsAuthorizationResult, NativeOidcWindowsCancellationHandle,
-    NativeOidcWindowsRefreshResult, NativeOidcWindowsEndSessionResult,
-    NativeOidcWindowsRevocationResult, copy_utf8_string,
-};
-
-#[cfg(test)]
-pub use windows::tests;
-
 pub use cancellation::CancellationHandle;
 pub use error::{AuthError, Result};
 pub use transport::{HttpRequest, HttpResponse, HttpTransport, ReqwestTransport};

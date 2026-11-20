@@ -1,39 +1,23 @@
-#[cfg(any(windows, test))]
-#[derive(Debug, Copy, Clone)]
-enum ConfigurationKind {
-    Oidc,
-    Revocation,
-    EndSession,
-}
+use std::io;
+use std::time::Duration;
 
-#[cfg(any(windows, test))]
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use url::Url;
+
+use crate::{AuthError, CancellationHandle};
+
+use super::data::WindowsAuthorizationError;
+
 const MAX_REQUEST_SIZE: usize = 16 * 1024;
-#[cfg(any(windows, test))]
 const MAX_CALLBACK_CONNECTIONS: usize = 32;
-#[cfg(any(windows, test))]
-const CALLBACK_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const CALLBACK_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[cfg(any(windows, test))]
-#[derive(Debug, Copy, Clone)]
-struct EndpointSelection<'a> {
-    issuer: Option<&'a str>,
-    authorization_endpoint: Option<&'a str>,
-    token_endpoint: Option<&'a str>,
-    jwks_uri: Option<&'a str>,
-    named_endpoint: Option<&'a str>,
-}
-
-#[cfg(any(windows, test))]
-#[derive(Debug, PartialEq)]
-enum CallbackRequest {
-    Unrelated,
-    Malformed { matches_path: bool },
-    Matching(Url),
-}
-
-fn parse_redirect_template(template: &str) -> std::result::Result<Url, crate::windows::WindowsAuthorizationError> {
+pub(super) fn parse_redirect_template(
+    template: &str,
+) -> std::result::Result<Url, WindowsAuthorizationError> {
     let mut redirect =
-        Url::parse(template).map_err(|_| crate::windows::WindowsAuthorizationError::InvalidRedirectUri)?;
+        Url::parse(template).map_err(|_| WindowsAuthorizationError::InvalidRedirectUri)?;
     if redirect.scheme() != "http"
         || redirect.host_str() != Some("127.0.0.1")
         || redirect.port().is_some()
@@ -41,7 +25,7 @@ fn parse_redirect_template(template: &str) -> std::result::Result<Url, crate::wi
         || redirect.password().is_some()
         || redirect.fragment().is_some()
     {
-        return Err(crate::windows::WindowsAuthorizationError::InvalidRedirectUri);
+        return Err(WindowsAuthorizationError::InvalidRedirectUri);
     }
     if redirect.path().is_empty() {
         redirect.set_path("/");
@@ -49,24 +33,24 @@ fn parse_redirect_template(template: &str) -> std::result::Result<Url, crate::wi
     Ok(redirect)
 }
 
-async fn wait_for_callback(
-    listener: tokio::net::TcpListener,
+pub(super) async fn wait_for_callback(
+    listener: TcpListener,
     callback_path: &str,
     port: u16,
-    cancellation: crate::CancellationHandle,
-) -> std::result::Result<Url, crate::windows::WindowsAuthorizationError> {
+    cancellation: CancellationHandle,
+) -> std::result::Result<Url, WindowsAuthorizationError> {
     let mut connections = tokio::task::JoinSet::new();
     let result = loop {
         tokio::select! {
             biased;
-            _ = cancellation.cancelled() => break Err(crate::AuthError::Cancelled.into()),
+            _ = cancellation.cancelled() => break Err(AuthError::Cancelled.into()),
             finished = connections.join_next(), if !connections.is_empty() => {
                 match finished {
                     Some(Ok(Ok(Some(callback)))) => break Ok(callback),
-                    Some(Ok(Err(crate::windows::WindowsAuthorizationError::Core(error)))) => break Err(error.into()),
+                    Some(Ok(Err(WindowsAuthorizationError::Core(error)))) => break Err(error.into()),
                     // A disconnected unrelated client must not terminate authorization.
-                    Some(Ok(Ok(None) | Err(crate::windows::WindowsAuthorizationError::Loopback(_)))) => {},
-                    Some(Err(error)) => break Err(std::io::Error::other(error).into()),
+                    Some(Ok(Ok(None) | Err(WindowsAuthorizationError::Loopback(_)))) => {},
+                    Some(Err(error)) => break Err(io::Error::other(error).into()),
                     _ => {},
                 }
             }
@@ -91,11 +75,11 @@ async fn wait_for_callback(
 }
 
 async fn handle_callback_connection(
-    mut stream: tokio::net::TcpStream,
+    mut stream: TcpStream,
     callback_path: &str,
     port: u16,
-    cancellation: crate::CancellationHandle,
-) -> std::result::Result<Option<Url>, crate::windows::WindowsAuthorizationError> {
+    cancellation: CancellationHandle,
+) -> std::result::Result<Option<Url>, WindowsAuthorizationError> {
     let request = read_request_headers(&mut stream, &cancellation).await?;
     let outcome = request
         .as_deref()
@@ -112,10 +96,10 @@ async fn handle_callback_connection(
             // Parsing, rather than the peer's willingness to read an error page,
             // determines whether a matching malformed callback is terminal.
             let _ = write_response(&mut stream, 400, "Invalid request").await;
-            return crate::AuthError::InvalidAuthorizationResponse(
+            return Err(AuthError::InvalidAuthorizationResponse(
                 "malformed loopback callback request",
             )
-            .into();
+            .into());
         }
         CallbackRequest::Matching(callback) => {
             let _ = write_response(
@@ -128,6 +112,12 @@ async fn handle_callback_connection(
         }
     }
     Ok(None)
+}
+
+enum CallbackRequest {
+    Unrelated,
+    Malformed { matches_path: bool },
+    Matching(Url),
 }
 
 fn parse_callback_request(bytes: &[u8], callback_path: &str, port: u16) -> CallbackRequest {
@@ -190,15 +180,15 @@ fn parse_callback_request(bytes: &[u8], callback_path: &str, port: u16) -> Callb
 }
 
 async fn read_request_headers(
-    stream: &mut tokio::net::TcpStream,
-    cancellation: &crate::CancellationHandle,
-) -> std::result::Result<Option<Vec<u8>>, crate::windows::WindowsAuthorizationError> {
+    stream: &mut TcpStream,
+    cancellation: &CancellationHandle,
+) -> std::result::Result<Option<Vec<u8>>, WindowsAuthorizationError> {
     let mut request = Vec::new();
     let mut chunk = [0; 1024];
     while request.len() < MAX_REQUEST_SIZE {
         let read = tokio::select! {
             biased;
-            _ = cancellation.cancelled() => return Err(crate::AuthError::Cancelled.into()),
+            _ = cancellation.cancelled() => return Err(AuthError::Cancelled.into()),
             read = stream.read(&mut chunk) => read?,
         };
         if read == 0 {
@@ -213,10 +203,10 @@ async fn read_request_headers(
 }
 
 async fn write_response(
-    stream: &mut tokio::net::TcpStream,
+    stream: &mut TcpStream,
     status: u16,
     body: &str,
-) -> std::result::Result<(), crate::windows::WindowsAuthorizationError> {
+) -> std::result::Result<(), WindowsAuthorizationError> {
     let reason = match status {
         200 => "OK",
         404 => "Not Found",
@@ -228,4 +218,317 @@ async fn write_response(
     );
     stream.write_all(response.as_bytes()).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{Ipv4Addr, SocketAddrV4};
+    use tokio::task::JoinHandle;
+
+    #[test]
+    fn redirect_template_accepts_ipv4_loopback_and_rejects_other_hosts_or_ports() {
+        assert_eq!(
+            parse_redirect_template("http://127.0.0.1/oauth/callback")
+                .unwrap()
+                .path(),
+            "/oauth/callback"
+        );
+        assert!(parse_redirect_template("http://localhost/oauth/callback").is_err());
+        assert!(parse_redirect_template("http://127.0.0.1:8080/oauth/callback").is_err());
+        assert!(parse_redirect_template("https://127.0.0.1/oauth/callback").is_err());
+    }
+
+    #[tokio::test]
+    async fn ignores_unrelated_paths_then_accepts_matching_callback() {
+        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let cancellation = CancellationHandle::new();
+        let callback_task: JoinHandle<_> = tokio::spawn(wait_for_callback(
+            listener,
+            "/oauth/callback",
+            port,
+            cancellation,
+        ));
+
+        let unrelated = send_request(port, "/favicon.ico").await;
+        assert!(unrelated.starts_with("HTTP/1.1 404"));
+
+        let callback = send_request(port, "/oauth/callback?code=sample&state=state").await;
+        assert!(callback.starts_with("HTTP/1.1 200"));
+        assert_eq!(
+            callback_task.await.unwrap().unwrap().as_str(),
+            format!("http://127.0.0.1:{port}/oauth/callback?code=sample&state=state")
+        );
+    }
+
+    #[tokio::test]
+    async fn stalled_connection_does_not_block_matching_callback() {
+        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let callback_task = tokio::spawn(wait_for_callback(
+            listener,
+            "/oauth/callback",
+            port,
+            CancellationHandle::new(),
+        ));
+
+        let mut stalled_streams = Vec::new();
+        for _ in 0..3 {
+            let mut stream = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+                .await
+                .unwrap();
+            stream
+                .write_all(b"GET /oauth/callback HTTP/1.1\r\n")
+                .await
+                .unwrap();
+            stalled_streams.push(stream);
+        }
+        let response = tokio::time::timeout(
+            Duration::from_secs(2),
+            send_request(port, "/oauth/callback?code=sample&state=state"),
+        )
+        .await
+        .expect("callback should proceed before stalled connections time out");
+
+        assert!(response.starts_with("HTTP/1.1 200"));
+        assert_eq!(
+            callback_task.await.unwrap().unwrap().as_str(),
+            format!("http://127.0.0.1:{port}/oauth/callback?code=sample&state=state")
+        );
+        for mut stream in stalled_streams {
+            let mut bytes = [0; 1];
+            let read = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut bytes))
+                .await
+                .unwrap();
+            assert!(
+                matches!(read, Ok(0) | Err(_)),
+                "stalled socket should close"
+            );
+        }
+        assert!(
+            TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn independent_loopback_operations_keep_callbacks_and_cancellation_separate() {
+        let first = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let first_port = first.local_addr().unwrap().port();
+        let second = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let second_port = second.local_addr().unwrap().port();
+        assert_ne!(first_port, second_port);
+        let cancellation = CancellationHandle::new();
+        let first_task = tokio::spawn(wait_for_callback(
+            first,
+            "/callback",
+            first_port,
+            cancellation.clone(),
+        ));
+        let second_task = tokio::spawn(wait_for_callback(
+            second,
+            "/callback",
+            second_port,
+            CancellationHandle::new(),
+        ));
+        let mut stalled = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, first_port))
+            .await
+            .unwrap();
+        stalled
+            .write_all(b"GET /callback HTTP/1.1\r\n")
+            .await
+            .unwrap();
+        cancellation.cancel();
+        assert!(matches!(
+            first_task.await.unwrap(),
+            Err(WindowsAuthorizationError::Core(AuthError::Cancelled))
+        ));
+        let mut byte = [0; 1];
+        let closed = tokio::time::timeout(Duration::from_secs(2), stalled.read(&mut byte))
+            .await
+            .unwrap();
+        assert!(matches!(closed, Ok(0) | Err(_)));
+        assert!(
+            TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, first_port))
+                .await
+                .is_err()
+        );
+        assert!(send_request(second_port, "/callback?code=second&state=two")
+            .await
+            .starts_with("HTTP/1.1 200"));
+        assert_eq!(
+            second_task.await.unwrap().unwrap().query(),
+            Some("code=second&state=two")
+        );
+        assert!(
+            TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, second_port))
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn duplicate_connections_return_one_callback_and_release_the_port() {
+        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let task = tokio::spawn(wait_for_callback(
+            listener,
+            "/callback",
+            port,
+            CancellationHandle::new(),
+        ));
+        let mut first = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        let mut second = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        for stream in [&mut first, &mut second] {
+            let _ = stream.write_all(format!("GET /callback?code=duplicate&state=state HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").as_bytes()).await;
+        }
+        let result = tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.query(), Some("code=duplicate&state=state"));
+        drop(first);
+        drop(second);
+        assert!(
+            TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn matching_callback_with_invalid_host_is_terminal() {
+        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let callback_task = tokio::spawn(wait_for_callback(
+            listener,
+            "/oauth/callback",
+            port,
+            CancellationHandle::new(),
+        ));
+        let mut stream = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        stream
+            .write_all(
+                format!(
+                    "GET /oauth/callback?code=sample HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await.unwrap();
+        assert!(String::from_utf8(response)
+            .unwrap()
+            .starts_with("HTTP/1.1 400"));
+        assert!(matches!(
+            callback_task.await.unwrap(),
+            Err(WindowsAuthorizationError::Core(
+                AuthError::InvalidAuthorizationResponse(_)
+            ))
+        ));
+    }
+
+    #[tokio::test]
+    async fn cancellation_stops_the_loopback_callback_wait() {
+        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let cancellation = CancellationHandle::new();
+        let callback_task = tokio::spawn(wait_for_callback(
+            listener,
+            "/oauth/callback",
+            port,
+            cancellation.clone(),
+        ));
+        cancellation.cancel();
+        assert!(matches!(
+            callback_task.await.unwrap(),
+            Err(WindowsAuthorizationError::Core(AuthError::Cancelled))
+        ));
+    }
+
+    async fn send_request(port: u16, target: &str) -> String {
+        let mut stream = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        stream
+            .write_all(
+                format!("GET {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").as_bytes(),
+            )
+            .await
+            .unwrap();
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await.unwrap();
+        String::from_utf8(response).unwrap()
+    }
+
+    async fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
+        let mut request = Vec::new();
+        let mut chunk = [0; 1024];
+        loop {
+            let read = stream.read(&mut chunk).await.unwrap();
+            if read == 0 {
+                break;
+            }
+            request.extend_from_slice(&chunk[..read]);
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let headers_end = request
+                    .windows(4)
+                    .position(|window| window == b"\r\n\r\n")
+                    .unwrap()
+                    + 4;
+                let headers = String::from_utf8_lossy(&request[..headers_end]);
+                let content_length = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.split_once(':').and_then(|(name, value)| {
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().ok())
+                                .flatten()
+                        })
+                    })
+                    .unwrap_or(0);
+                if request.len() >= headers_end + content_length {
+                    break;
+                }
+            }
+        }
+        request
+    }
+
+    async fn write_http_response(stream: &mut TcpStream, body: &str) {
+        stream
+            .write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+    }
 }

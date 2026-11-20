@@ -1,43 +1,41 @@
-#[cfg(windows)]
 use std::ffi::{c_char, CStr, CString};
-#[cfg(windows)]
 use std::ptr;
 
-#[cfg(any(windows, test))]
-use crate::windows::data::*;
+use crate::{AuthError, AuthenticationState, CancellationHandle};
 
-#[cfg(any(windows, test))]
-use crate::windows::loopback::*;
+use super::data::{
+    WindowsAuthorizationError, WindowsAuthorizationRequest, WindowsEndSessionRequest,
+    WindowsEndSessionResponse, WindowsRefreshRequest, WindowsRevocationRequest,
+};
+use super::ops::{
+    authorize_with_browser, end_session_with_browser, refresh_with_windows_request,
+    revoke_with_windows_request,
+};
 
-#[cfg(windows)]
-use crate::windows::ops::*;
+const STATUS_SUCCESS: i32 = 0;
+const STATUS_ERROR: i32 = 1;
+const STATUS_CANCELLED: i32 = 2;
 
 /// Opaque cancellation handle for a blocking Windows authorization call.
-#[cfg(windows)]
 pub struct NativeOidcWindowsCancellationHandle {
-    cancellation: crate::CancellationHandle,
+    cancellation: CancellationHandle,
 }
 
 /// Opaque result returned by [`native_oidc_windows_authorize`].
-#[cfg(windows)]
 pub struct NativeOidcWindowsAuthorizationResult {
     status: i32,
     value: CString,
 }
 
 /// Opaque result returned by [`native_oidc_windows_refresh`].
-#[cfg(windows)]
 pub type NativeOidcWindowsRefreshResult = NativeOidcWindowsAuthorizationResult;
 
 /// Opaque result returned by [`native_oidc_windows_end_session`].
-#[cfg(windows)]
 pub type NativeOidcWindowsEndSessionResult = NativeOidcWindowsAuthorizationResult;
 
-#[cfg(windows)]
 /// Opaque result returned by [`native_oidc_windows_revoke`].
 pub type NativeOidcWindowsRevocationResult = NativeOidcWindowsAuthorizationResult;
 
-#[cfg(windows)]
 impl NativeOidcWindowsAuthorizationResult {
     fn new(status: i32, value: impl Into<String>) -> *mut Self {
         let value = value.into().replace('\0', "\\u0000");
@@ -46,263 +44,7 @@ impl NativeOidcWindowsAuthorizationResult {
     }
 }
 
-#[cfg(windows)]
-fn parse_redirect_template(template: &str) -> std::result::Result<Url, crate::windows::WindowsAuthorizationError> {
-    let mut redirect =
-        Url::parse(template).map_err(|_| crate::windows::WindowsAuthorizationError::InvalidRedirectUri)?;
-    if redirect.scheme() != "http"
-        || redirect.host_str() != Some("127.0.0.1")
-        || redirect.port().is_some()
-        || !redirect.username().is_empty()
-        || redirect.password().is_some()
-        || redirect.fragment().is_some()
-    {
-        return Err(crate::windows::WindowsAuthorizationError::InvalidRedirectUri);
-    }
-    if redirect.path().is_empty() {
-        redirect.set_path("/");
-    }
-    Ok(redirect)
-}
-
-#[cfg(windows)]
-async fn wait_for_callback(
-    listener: tokio::net::TcpListener,
-    callback_path: &str,
-    port: u16,
-    cancellation: crate::CancellationHandle,
-) -> std::result::Result<Url, crate::windows::WindowsAuthorizationError> {
-    let mut connections = tokio::task::JoinSet::new();
-    const MAX_CALLBACK_CONNECTIONS: usize = 32;
-    const CALLBACK_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-
-    let result = loop {
-        tokio::select! {
-            biased;
-            _ = cancellation.cancelled() => break Err(crate::AuthError::Cancelled.into()),
-            finished = connections.join_next(), if !connections.is_empty() => {
-                match finished {
-                    Some(Ok(Ok(Some(callback)))) => break Ok(callback),
-                    Some(Ok(Err(crate::windows::WindowsAuthorizationError::Core(error)))) => break Err(error.into()),
-                    // A disconnected unrelated client must not terminate authorization.
-                    Some(Ok(Ok(None) | Err(crate::windows::WindowsAuthorizationError::Loopback(_)))) => {},
-                    Some(Err(error)) => break Err(std::io::Error::other(error).into()),
-                    _ => {},
-                }
-            }
-            accepted = listener.accept(), if connections.len() < MAX_CALLBACK_CONNECTIONS => {
-                let (stream, _) = match accepted { Ok(connection) => connection, Err(error) => break Err(error.into()) };
-                let path = callback_path.to_owned();
-                let cancellation = cancellation.clone();
-                connections.spawn(async move {
-                    match tokio::time::timeout(CALLBACK_REQUEST_TIMEOUT,
-                        handle_callback_connection(stream, &path, port, cancellation)).await {
-                        Ok(result) => result,
-                        Err(_) => Ok(None),
-                    }
-                });
-            }
-        }
-    };
-    // Drop sockets before returning success, error or cancellation.
-    connections.abort_all();
-    while connections.join_next().await.is_some() {}
-    result
-}
-
-#[cfg(windows)]
-async fn handle_callback_connection(
-    mut stream: tokio::net::TcpStream,
-    callback_path: &str,
-    port: u16,
-    cancellation: crate::CancellationHandle,
-) -> std::result::Result<Option<Url>, crate::windows::WindowsAuthorizationError> {
-    let request = read_request_headers(&mut stream, &cancellation).await?;
-    let outcome = request
-        .as_deref()
-        .map(|request| parse_callback_request(request, callback_path, port))
-        .unwrap_or(crate::windows::loopback::CallbackRequest::Malformed {
-            matches_path: false,
-        });
-    match outcome {
-        crate::windows::loopback::CallbackRequest::Unrelated => write_response(&mut stream, 404, "Not Found").await?,
-        crate::windows::loopback::CallbackRequest::Malformed {
-            matches_path: false,
-        } => write_response(&mut stream, 400, "Invalid request").await?,
-        crate::windows::loopback::CallbackRequest::Malformed { matches_path: true } => {
-            // Parsing, rather than the peer's willingness to read an error page,
-            // determines whether a matching malformed callback is terminal.
-            let _ = write_response(&mut stream, 400, "Invalid request").await;
-            return crate::AuthError::InvalidAuthorizationResponse(
-                "malformed loopback callback request",
-            )
-            .into();
-        }
-        crate::windows::loopback::CallbackRequest::Matching(callback) => {
-            let _ = write_response(
-                &mut stream,
-                200,
-                "Authorization complete. You may close this window.",
-            )
-            .await;
-            return Ok(Some(callback));
-        }
-    }
-    Ok(None)
-}
-
-#[cfg(windows)]
-fn parse_callback_request(bytes: &[u8], callback_path: &str, port: u16) -> crate::windows::loopback::CallbackRequest {
-    let Some(headers_end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
-        return crate::windows::loopback::CallbackRequest::Malformed {
-            matches_path: false,
-        };
-    };
-    let Ok(headers) = std::str::from_utf8(&bytes[..headers_end]) else {
-        return crate::windows::loopback::CallbackRequest::Malformed {
-            matches_path: false,
-        };
-    };
-    let mut lines = headers.split("\r\n");
-    let Some(request_line) = lines.next() else {
-        return crate::windows::loopback::CallbackRequest::Malformed {
-            matches_path: false,
-        };
-    };
-    let request_parts: Vec<_> = request_line.split_whitespace().collect();
-    if request_parts.len() != 3 {
-        return crate::windows::loopback::CallbackRequest::Malformed {
-            matches_path: false,
-        };
-    }
-    let target = request_parts[1];
-    if !target.starts_with('/') || target.contains('#') {
-        return crate::windows::loopback::CallbackRequest::Malformed {
-            matches_path: false,
-        };
-    }
-    let request_path = target.split('?').next().unwrap_or_default();
-    if request_path != callback_path {
-        return crate::windows::loopback::CallbackRequest::Unrelated;
-    }
-    if request_parts[0] != "GET"
-        || (request_parts[2] != "HTTP/1.0" && request_parts[2] != "HTTP/1.1")
-    {
-        return crate::windows::loopback::CallbackRequest::Malformed { matches_path: true };
-    }
-
-    let expected_host = format!("127.0.0.1:{port}");
-    let mut host_headers = Vec::new();
-    for line in lines {
-        let Some((name, value)) = line.split_once(':') else {
-            return crate::windows::loopback::CallbackRequest::Malformed { matches_path: true };
-        };
-        if name.eq_ignore_ascii_case("host") {
-            host_headers.push(value.trim());
-        }
-    }
-    if host_headers.as_slice() != [expected_host.as_str()] {
-        return crate::windows::loopback::CallbackRequest::Malformed { matches_path: true };
-    }
-
-    match Url::parse(&format!("http://127.0.0.1:{port}{target}")) {
-        Ok(callback) => crate::windows::loopback::CallbackRequest::Matching(callback),
-        Err(_) => crate::windows::loopback::CallbackRequest::Malformed { matches_path: true },
-    }
-}
-
-#[cfg(windows)]
-async fn read_request_headers(
-    stream: &mut tokio::net::TcpStream,
-    cancellation: &crate::CancellationHandle,
-) -> std::result::Result<Option<Vec<u8>>, crate::windows::WindowsAuthorizationError> {
-    let mut request = Vec::new();
-    const MAX_REQUEST_SIZE: usize = 16 * 1024;
-    let mut chunk = [0; 1024];
-    while request.len() < MAX_REQUEST_SIZE {
-        let read = tokio::select! {
-            biased;
-            _ = cancellation.cancelled() => return Err(crate::AuthError::Cancelled.into()),
-            read = stream.read(&mut chunk) => read?,
-        };
-        if read == 0 {
-            return Ok(None);
-        }
-        request.extend_from_slice(&chunk[..read]);
-        if request.windows(4).any(|window| window == b"\r\n\r\n") {
-            return Ok(Some(request));
-        }
-    }
-    Ok(Some(request))
-}
-
-#[cfg(windows)]
-async fn write_response(
-    stream: &mut tokio::net::TcpStream,
-    status: u16,
-    body: &str,
-) -> std::result::Result<(), crate::windows::WindowsAuthorizationError> {
-    let reason = match status {
-        200 => "OK",
-        404 => "Not Found",
-        _ => "Bad Request",
-    };
-    let response = format!(
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
-    stream.write_all(response.as_bytes()).await?;
-    Ok(())
-}
-
-/// Creates a cancellation handle for [`native_oidc_windows_authorize`].
-///
-/// The returned handle must be freed with
-/// [`native_oidc_windows_cancellation_free`].
-#[cfg(windows)]
-pub fn native_oidc_windows_cancellation_new() -> *mut NativeOidcWindowsCancellationHandle
-{
-    Box::into_raw(Box::new(NativeOidcWindowsCancellationHandle {
-        cancellation: crate::CancellationHandle::new(),
-    }))
-}
-
-/// Requests cancellation of an active Windows authorization.
-///
-/// A null handle is ignored. Do not free the handle until the authorization
-/// call has returned.
-///
-/// # Safety
-///
-/// `handle` must be null or a live handle returned by
-/// [`native_oidc_windows_cancellation_new`].
-#[cfg(windows)]
-pub unsafe fn native_oidc_windows_cancellation_cancel(
-    handle: *const NativeOidcWindowsCancellationHandle,
-) {
-    if let Some(handle) = handle.as_ref() {
-        handle.cancellation.cancel();
-    }
-}
-
-/// Frees a cancellation handle.
-///
-/// # Safety
-///
-/// `handle` must be null or a live handle returned by
-/// [`native_oidc_windows_cancellation_new`], and no authorization call may still
-/// be using it.
-#[cfg(windows)]
-pub unsafe fn native_oidc_windows_cancellation_free(
-    handle: *mut NativeOidcWindowsCancellationHandle,
-) {
-    if !handle.is_null() {
-        drop(Box::from_raw(handle));
-    }
-}
-
-#[cfg(windows)]
-fn open_system_browser(url: &Url) -> std::result::Result<(), crate::windows::WindowsAuthorizationError> {
+fn open_system_browser(url: &Url) -> std::result::Result<(), WindowsAuthorizationError> {
     use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
 
     let operation: Vec<u16> = "open".encode_utf16().chain([0]).collect();
@@ -318,78 +60,72 @@ fn open_system_browser(url: &Url) -> std::result::Result<(), crate::windows::Win
         )
     };
     if result as isize <= 32 {
-        return Err(crate::windows::WindowsAuthorizationError::BrowserCouldNotBeOpened);
+        return Err(WindowsAuthorizationError::BrowserCouldNotBeOpened);
     }
     Ok(())
 }
 
-#[cfg(windows)]
 fn authorize(
-    request: crate::windows::data::WindowsAuthorizationRequest,
-    cancellation: crate::CancellationHandle,
-) -> std::result::Result<crate::AuthenticationState, crate::windows::WindowsAuthorizationError> {
+    request: WindowsAuthorizationRequest,
+    cancellation: CancellationHandle,
+) -> std::result::Result<AuthenticationState, WindowsAuthorizationError> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|error| crate::windows::WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
-        .block_on(crate::windows::ops::authorize_with_browser(
+        .map_err(|error| WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
+        .block_on(authorize_with_browser(
             request,
             cancellation,
             open_system_browser,
         ))
 }
 
-#[cfg(windows)]
 fn refresh(
-    request: crate::windows::data::WindowsRefreshRequest,
-    cancellation: crate::CancellationHandle,
-) -> std::result::Result<crate::AuthenticationState, crate::windows::WindowsAuthorizationError> {
+    request: WindowsRefreshRequest,
+    cancellation: CancellationHandle,
+) -> std::result::Result<AuthenticationState, WindowsAuthorizationError> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|error| crate::windows::WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
-        .block_on(crate::windows::ops::refresh_with_windows_request(request, cancellation))
+        .map_err(|error| WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
+        .block_on(refresh_with_windows_request(request, cancellation))
 }
 
-#[cfg(windows)]
 fn end_session(
-    request: crate::windows::data::WindowsEndSessionRequest,
-    cancellation: crate::CancellationHandle,
-) -> std::result::Result<Option<crate::windows::data::WindowsEndSessionResponse>, crate::windows::WindowsAuthorizationError> {
+    request: WindowsEndSessionRequest,
+    cancellation: CancellationHandle,
+) -> std::result::Result<Option<WindowsEndSessionResponse>, WindowsAuthorizationError> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|error| crate::windows::WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
-        .block_on(crate::windows::ops::end_session_with_browser(
+        .map_err(|error| WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
+        .block_on(end_session_with_browser(
             request,
             cancellation,
             open_system_browser,
         ))
 }
 
-#[cfg(windows)]
 fn revoke(
-    request: crate::windows::data::WindowsRevocationRequest,
-    cancellation: crate::CancellationHandle,
-) -> std::result::Result<(), crate::windows::WindowsAuthorizationError> {
+    request: WindowsRevocationRequest,
+    cancellation: CancellationHandle,
+) -> std::result::Result<(), WindowsAuthorizationError> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|error| crate::windows::WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
-        .block_on(crate::windows::ops::revoke_with_windows_request(request, cancellation))
+        .map_err(|error| WindowsAuthorizationError::RuntimeInitialization(error.to_string()))?
+        .block_on(revoke_with_windows_request(request, cancellation))
 }
 
-#[cfg(windows)]
 fn result(status: i32, value: impl Into<String>) -> *mut NativeOidcWindowsAuthorizationResult {
     NativeOidcWindowsAuthorizationResult::new(status, value)
 }
 
-#[cfg(windows)]
 fn run_authorize(
     request_json: &str,
-    cancellation: crate::CancellationHandle,
+    cancellation: CancellationHandle,
 ) -> *mut NativeOidcWindowsAuthorizationResult {
-    let request = match serde_json::from_str::<crate::windows::data::WindowsAuthorizationRequest>(request_json) {
+    let request = match serde_json::from_str::<WindowsAuthorizationRequest>(request_json) {
         Ok(request) => request,
         Err(error) => return result(STATUS_ERROR, error.to_string()),
     };
@@ -398,19 +134,18 @@ fn run_authorize(
             Ok(state) => result(STATUS_SUCCESS, state),
             Err(error) => result(STATUS_ERROR, error.to_string()),
         },
-        crate::windows::WindowsAuthorizationError::Core(crate::AuthError::Cancelled) => {
-            result(STATUS_CANCELLED, crate::AuthError::Cancelled.to_string())
+        Err(WindowsAuthorizationError::Core(AuthError::Cancelled)) => {
+            result(STATUS_CANCELLED, AuthError::Cancelled.to_string())
         }
-        error => result(STATUS_ERROR, error.to_string()),
+        Err(error) => result(STATUS_ERROR, error.to_string()),
     }
 }
 
-#[cfg(windows)]
 fn run_refresh(
     request_json: &str,
-    cancellation: crate::CancellationHandle,
+    cancellation: CancellationHandle,
 ) -> *mut NativeOidcWindowsRefreshResult {
-    let request = match serde_json::from_str::<crate::windows::data::WindowsRefreshRequest>(request_json) {
+    let request = match serde_json::from_str::<WindowsRefreshRequest>(request_json) {
         Ok(request) => request,
         Err(error) => return result(STATUS_ERROR, error.to_string()),
     };
@@ -419,19 +154,18 @@ fn run_refresh(
             Ok(state) => result(STATUS_SUCCESS, state),
             Err(error) => result(STATUS_ERROR, error.to_string()),
         },
-        crate::windows::WindowsAuthorizationError::Core(crate::AuthError::Cancelled) => {
-            result(STATUS_CANCELLED, crate::AuthError::Cancelled.to_string())
+        Err(WindowsAuthorizationError::Core(AuthError::Cancelled)) => {
+            result(STATUS_CANCELLED, AuthError::Cancelled.to_string())
         }
-        error => result(STATUS_ERROR, error.to_string()),
+        Err(error) => result(STATUS_ERROR, error.to_string()),
     }
 }
 
-#[cfg(windows)]
 fn run_end_session(
     request_json: &str,
-    cancellation: crate::CancellationHandle,
+    cancellation: CancellationHandle,
 ) -> *mut NativeOidcWindowsEndSessionResult {
-    let request = match serde_json::from_str::<crate::windows::data::WindowsEndSessionRequest>(request_json) {
+    let request = match serde_json::from_str::<WindowsEndSessionRequest>(request_json) {
         Ok(request) => request,
         Err(error) => return result(STATUS_ERROR, error.to_string()),
     };
@@ -443,32 +177,30 @@ fn run_end_session(
             },
             None => result(STATUS_SUCCESS, ""),
         },
-        crate::windows::WindowsAuthorizationError::Core(crate::AuthError::Cancelled) => {
-            result(STATUS_CANCELLED, crate::AuthError::Cancelled.to_string())
+        Err(WindowsAuthorizationError::Core(AuthError::Cancelled)) => {
+            result(STATUS_CANCELLED, AuthError::Cancelled.to_string())
         }
-        error => result(STATUS_ERROR, error.to_string()),
+        Err(error) => result(STATUS_ERROR, error.to_string()),
     }
 }
 
-#[cfg(windows)]
 fn run_revoke(
     request_json: &str,
-    cancellation: crate::CancellationHandle,
+    cancellation: CancellationHandle,
 ) -> *mut NativeOidcWindowsRevocationResult {
-    let request = match serde_json::from_str::<crate::windows::data::WindowsRevocationRequest>(request_json) {
+    let request = match serde_json::from_str::<WindowsRevocationRequest>(request_json) {
         Ok(request) => request,
         Err(error) => return result(STATUS_ERROR, error.to_string()),
     };
     match revoke(request, cancellation) {
         Ok(()) => result(STATUS_SUCCESS, ""),
-        crate::windows::WindowsAuthorizationError::Core(crate::AuthError::Cancelled) => {
-            result(STATUS_CANCELLED, crate::AuthError::Cancelled.to_string())
+        Err(WindowsAuthorizationError::Core(AuthError::Cancelled)) => {
+            result(STATUS_CANCELLED, AuthError::Cancelled.to_string())
         }
-        error => result(STATUS_ERROR, error.to_string()),
+        Err(error) => result(STATUS_ERROR, error.to_string()),
     }
 }
 
-#[cfg(windows)]
 unsafe fn copy_utf8_string(value: *const c_char) -> std::result::Result<String, &'static str> {
     if value.is_null() {
         return Err("input string must not be null");
@@ -478,6 +210,52 @@ unsafe fn copy_utf8_string(value: *const c_char) -> std::result::Result<String, 
         .to_str()
         .map(str::to_owned)
         .map_err(|_| "input string must be valid UTF-8")
+}
+
+/// Creates a cancellation handle for [`native_oidc_windows_authorize`].
+///
+/// The returned handle must be freed with
+/// [`native_oidc_windows_cancellation_free`].
+#[no_mangle]
+pub extern "C" fn native_oidc_windows_cancellation_new() -> *mut NativeOidcWindowsCancellationHandle
+{
+    Box::into_raw(Box::new(NativeOidcWindowsCancellationHandle {
+        cancellation: CancellationHandle::new(),
+    }))
+}
+
+/// Requests cancellation of an active Windows authorization.
+///
+/// A null handle is ignored. Do not free the handle until the authorization
+/// call has returned.
+///
+/// # Safety
+///
+/// `handle` must be null or a live handle returned by
+/// [`native_oidc_windows_cancellation_new`].
+#[no_mangle]
+pub unsafe extern "C" fn native_oidc_windows_cancellation_cancel(
+    handle: *const NativeOidcWindowsCancellationHandle,
+) {
+    if let Some(handle) = handle.as_ref() {
+        handle.cancellation.cancel();
+    }
+}
+
+/// Frees a cancellation handle.
+///
+/// # Safety
+///
+/// `handle` must be null or a live handle returned by
+/// [`native_oidc_windows_cancellation_new`], and no authorization call may still
+/// be using it.
+#[no_mangle]
+pub unsafe extern "C" fn native_oidc_windows_cancellation_free(
+    handle: *mut NativeOidcWindowsCancellationHandle,
+) {
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
 }
 
 /// Runs Windows authorization synchronously and returns a result handle.
@@ -502,7 +280,6 @@ unsafe fn copy_utf8_string(value: *const c_char) -> std::result::Result<String, 
 /// `cancellation` must be null or a live handle returned by
 /// [`native_oidc_windows_cancellation_new`] that remains alive until this function
 /// returns.
-#[cfg(windows)]
 #[no_mangle]
 pub unsafe extern "C" fn native_oidc_windows_authorize(
     request_json_utf8: *const c_char,
@@ -541,7 +318,6 @@ pub unsafe extern "C" fn native_oidc_windows_authorize(
 /// `cancellation` must be null or a live handle returned by
 /// [`native_oidc_windows_cancellation_new`] that remains alive until this function
 /// returns.
-#[cfg(windows)]
 #[no_mangle]
 pub unsafe extern "C" fn native_oidc_windows_refresh(
     request_json_utf8: *const c_char,
@@ -583,7 +359,6 @@ pub unsafe extern "C" fn native_oidc_windows_refresh(
 /// `cancellation` must be null or a live handle returned by
 /// [`native_oidc_windows_cancellation_new`] that remains alive until this function
 /// returns.
-#[cfg(windows)]
 #[no_mangle]
 pub unsafe extern "C" fn native_oidc_windows_end_session(
     request_json_utf8: *const c_char,
@@ -620,7 +395,6 @@ pub unsafe extern "C" fn native_oidc_windows_end_session(
 /// `cancellation` must be null or a live handle returned by
 /// [`native_oidc_windows_cancellation_new`] that remains alive until this function
 /// returns.
-#[cfg(windows)]
 #[no_mangle]
 pub unsafe extern "C" fn native_oidc_windows_revoke(
     request_json_utf8: *const c_char,
@@ -649,18 +423,10 @@ pub unsafe extern "C" fn native_oidc_windows_revoke(
 ///
 /// `authorization_result` must be null or a live result handle returned by
 /// [`native_oidc_windows_authorize`].
-#[cfg(windows)]
 #[no_mangle]
 pub unsafe extern "C" fn native_oidc_windows_authorization_result_status(
     authorization_result: *const NativeOidcWindowsAuthorizationResult,
 ) -> i32 {
-    #[cfg(windows)]
-    const STATUS_SUCCESS: i32 = 0;
-    #[cfg(windows)]
-    const STATUS_ERROR: i32 = 1;
-    #[cfg(windows)]
-    const STATUS_CANCELLED: i32 = 2;
-
     authorization_result
         .as_ref()
         .map_or(STATUS_ERROR, |result| result.status)
@@ -675,14 +441,10 @@ pub unsafe extern "C" fn native_oidc_windows_authorization_result_status(
 ///
 /// `authorization_result` must be null or a live result handle returned by
 /// [`native_oidc_windows_authorize`].
-#[cfg(windows)]
 #[no_mangle]
 pub unsafe extern "C" fn native_oidc_windows_authorization_result_value(
     authorization_result: *const NativeOidcWindowsAuthorizationResult,
 ) -> *const c_char {
-    #[cfg(windows)]
-    use std::ptr;
-
     authorization_result
         .as_ref()
         .map_or(ptr::null(), |result| result.value.as_ptr())
@@ -694,12 +456,111 @@ pub unsafe extern "C" fn native_oidc_windows_authorization_result_value(
 ///
 /// `authorization_result` must be null or a live result handle returned by
 /// [`native_oidc_windows_authorize`].
-#[cfg(windows)]
 #[no_mangle]
 pub unsafe extern "C" fn native_oidc_windows_authorization_result_free(
     authorization_result: *mut NativeOidcWindowsAuthorizationResult,
 ) {
     if !authorization_result.is_null() {
         drop(Box::from_raw(authorization_result));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn c_abi_returns_and_frees_an_error_result() {
+        let cancellation = native_oidc_windows_cancellation_new();
+        let request = CString::new(
+            r#"{
+                "issuer":"not a URL",
+                "client_id":"client",
+                "redirect_uri":"http://127.0.0.1/callback",
+                "scopes":["profile"]
+            }"#,
+        )
+        .unwrap();
+        let result = unsafe { native_oidc_windows_authorize(request.as_ptr(), cancellation) };
+        assert_eq!(
+            unsafe { native_oidc_windows_authorization_result_status(result) },
+            STATUS_ERROR
+        );
+        assert_eq!(
+            unsafe {
+                CStr::from_ptr(native_oidc_windows_authorization_result_value(result))
+                    .to_str()
+                    .unwrap()
+            },
+            "issuer URL is invalid"
+        );
+        unsafe {
+            native_oidc_windows_authorization_result_free(result);
+            native_oidc_windows_cancellation_free(cancellation);
+        }
+    }
+
+    #[test]
+    fn c_abi_refresh_returns_and_frees_an_error_result() {
+        let cancellation = native_oidc_windows_cancellation_new();
+        let request = CString::new(
+            r#"{
+                "issuer":"not a URL",
+                "client_id":"client",
+                "state":{
+                    "token_response":{"access_token":"access","token_type":"Bearer"},
+                    "expires_at":null
+                }
+            }"#,
+        )
+        .unwrap();
+        let result = unsafe { native_oidc_windows_refresh(request.as_ptr(), cancellation) };
+        assert_eq!(
+            unsafe { native_oidc_windows_authorization_result_status(result) },
+            STATUS_ERROR
+        );
+        assert_eq!(
+            unsafe {
+                CStr::from_ptr(native_oidc_windows_authorization_result_value(result))
+                    .to_str()
+                    .unwrap()
+            },
+            "issuer URL is invalid"
+        );
+        unsafe {
+            native_oidc_windows_authorization_result_free(result);
+            native_oidc_windows_cancellation_free(cancellation);
+        }
+    }
+
+    #[test]
+    fn c_abi_end_session_returns_and_frees_an_error_result() {
+        let cancellation = native_oidc_windows_cancellation_new();
+        let request = CString::new(
+            r#"{
+                "authorization_endpoint":"https://issuer.example/authorize",
+                "token_endpoint":"https://issuer.example/token",
+                "end_session_endpoint":"http://insecure.example/logout",
+                "client_id":"client"
+            }"#,
+        )
+        .unwrap();
+        let result = unsafe { native_oidc_windows_end_session(request.as_ptr(), cancellation) };
+        assert_eq!(
+            unsafe { native_oidc_windows_authorization_result_status(result) },
+            STATUS_ERROR
+        );
+        assert_eq!(
+            unsafe {
+                CStr::from_ptr(native_oidc_windows_authorization_result_value(result))
+                    .to_str()
+                    .unwrap()
+            },
+            "invalid configuration: end-session endpoint must use HTTPS without user info or fragments"
+        );
+        unsafe {
+            native_oidc_windows_authorization_result_free(result);
+            native_oidc_windows_cancellation_free(cancellation);
+        }
     }
 }

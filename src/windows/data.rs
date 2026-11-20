@@ -1,94 +1,94 @@
-#[cfg(any(windows, test))]
+use std::collections::BTreeSet;
+use std::io;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{AuthError, AuthenticationState};
+
 #[derive(Debug, Deserialize)]
-struct WindowsAuthorizationRequest {
+pub(super) struct WindowsAuthorizationRequest {
     #[serde(default)]
-    issuer: Option<String>,
+    pub(super) issuer: Option<String>,
     #[serde(default)]
-    authorization_endpoint: Option<String>,
+    pub(super) authorization_endpoint: Option<String>,
     #[serde(default)]
-    token_endpoint: Option<String>,
+    pub(super) token_endpoint: Option<String>,
     #[serde(default)]
-    jwks_uri: Option<String>,
-    client_id: String,
-    redirect_uri: String,
-    scopes: Vec<String>,
+    pub(super) jwks_uri: Option<String>,
+    pub(super) client_id: String,
+    pub(super) redirect_uri: String,
+    pub(super) scopes: Vec<String>,
     #[serde(default)]
-    additional_parameters: Vec<WindowsParameter>,
+    pub(super) additional_parameters: Vec<WindowsParameter>,
     #[serde(default)]
-    additional_token_parameters: Vec<WindowsParameter>,
+    pub(super) additional_token_parameters: Vec<WindowsParameter>,
 }
 
-#[cfg(any(windows, test))]
 #[derive(Debug, Deserialize)]
-struct WindowsRevocationRequest {
+pub(super) struct WindowsRevocationRequest {
     #[serde(default)]
-    issuer: Option<String>,
+    pub(super) issuer: Option<String>,
     #[serde(default)]
-    authorization_endpoint: Option<String>,
+    pub(super) authorization_endpoint: Option<String>,
     #[serde(default)]
-    token_endpoint: Option<String>,
+    pub(super) token_endpoint: Option<String>,
     #[serde(default)]
-    revocation_endpoint: Option<String>,
-    client_id: String,
-    token: String,
+    pub(super) revocation_endpoint: Option<String>,
+    pub(super) client_id: String,
+    pub(super) token: String,
     #[serde(default)]
-    token_type_hint: Option<String>,
+    pub(super) token_type_hint: Option<String>,
 }
 
-#[cfg(any(windows, test))]
 #[derive(Deserialize)]
-struct WindowsRefreshRequest {
+pub(super) struct WindowsRefreshRequest {
     #[serde(default)]
-    issuer: Option<String>,
+    pub(super) issuer: Option<String>,
     #[serde(default)]
-    authorization_endpoint: Option<String>,
+    pub(super) authorization_endpoint: Option<String>,
     #[serde(default)]
-    token_endpoint: Option<String>,
+    pub(super) token_endpoint: Option<String>,
     #[serde(default)]
-    jwks_uri: Option<String>,
-    client_id: String,
-    state: crate::AuthenticationState,
+    pub(super) jwks_uri: Option<String>,
+    pub(super) client_id: String,
+    pub(super) state: AuthenticationState,
     #[serde(default)]
-    additional_parameters: Vec<WindowsParameter>,
+    pub(super) additional_parameters: Vec<WindowsParameter>,
 }
 
-#[cfg(any(windows, test))]
 #[derive(Debug, Deserialize)]
-struct WindowsEndSessionRequest {
+pub(super) struct WindowsEndSessionRequest {
     #[serde(default)]
-    issuer: Option<String>,
+    pub(super) issuer: Option<String>,
     #[serde(default)]
-    authorization_endpoint: Option<String>,
+    pub(super) authorization_endpoint: Option<String>,
     #[serde(default)]
-    token_endpoint: Option<String>,
+    pub(super) token_endpoint: Option<String>,
     #[serde(default)]
-    end_session_endpoint: Option<String>,
-    client_id: String,
+    pub(super) end_session_endpoint: Option<String>,
+    pub(super) client_id: String,
     #[serde(default)]
-    id_token_hint: Option<String>,
+    pub(super) id_token_hint: Option<String>,
     #[serde(default)]
-    post_logout_redirect_uri: Option<String>,
+    pub(super) post_logout_redirect_uri: Option<String>,
 }
 
-#[cfg(any(windows, test))]
 #[derive(Debug, Serialize)]
-struct WindowsEndSessionResponse {
-    state: String,
-    additional_parameters: Vec<WindowsParameter>,
+pub(super) struct WindowsEndSessionResponse {
+    pub(super) state: String,
+    pub(super) additional_parameters: Vec<WindowsParameter>,
 }
 
-#[cfg(any(windows, test))]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct WindowsParameter {
-    name: String,
-    value: String,
+pub(super) struct WindowsParameter {
+    pub(super) name: String,
+    pub(super) value: String,
 }
 
-#[cfg(any(windows, test))]
 #[derive(Debug, thiserror::Error)]
-enum WindowsAuthorizationError {
+pub(super) enum WindowsAuthorizationError {
     #[error(transparent)]
-    Core(#[from] crate::AuthError),
+    Core(#[from] AuthError),
     #[error("issuer URL is invalid")]
     InvalidIssuer,
     #[error("authorization or token endpoint URL is invalid")]
@@ -104,13 +104,12 @@ enum WindowsAuthorizationError {
     #[error("could not initialize the async runtime: {0}")]
     RuntimeInitialization(String),
     #[error("loopback server failed: {0}")]
-    Loopback(#[from] std::io::Error),
+    Loopback(#[from] io::Error),
 }
 
 /// The endpoint attachment performed while building a service configuration.
-#[cfg(any(windows, test))]
 #[derive(Debug, Copy, Clone)]
-enum ConfigurationKind {
+pub(super) enum ConfigurationKind {
     /// Authorization and token refresh: attach OIDC validation endpoints.
     Oidc,
     /// Token revocation: attach the revocation endpoint.
@@ -119,19 +118,106 @@ enum ConfigurationKind {
     EndSession,
 }
 
-/// Endpoint strings selected by a request, shared by all blocking operations.
-#[cfg(any(windows, test))]
-#[derive(Debug, Clone, Copy)]
-struct EndpointSelection<'a> {
-    /// Issuer for discovery; used with discovery or with explicit endpoints for OIDC validation.
-    issuer: Option<&'a str>,
-    /// Authorization endpoint; required with explicit endpoints.
-    authorization_endpoint: Option<&'a str>,
-    /// Token endpoint; required with explicit endpoints.
-    token_endpoint: Option<&'a str>,
-    /// JWKS URI for ID Token validation; only used by `Oidc` operations.
-    jwks_uri: Option<&'a str>,
-    /// Revocation or end-session endpoint; required with explicit endpoints for those operations.
-    named_endpoint: Option<&'a str>,
+/// How a service configuration was resolved from the request's endpoints.
+#[derive(Debug, Copy, Clone)]
+pub(super) enum ConfigurationSource {
+    /// Both the authorization and token endpoints were supplied explicitly.
+    Explicit,
+    /// The endpoints were fetched from the issuer's discovery document.
+    Discovered,
 }
 
+/// Endpoint strings selected by a request, shared by all blocking operations.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct EndpointSelection<'a> {
+    pub(super) issuer: Option<&'a str>,
+    pub(super) authorization_endpoint: Option<&'a str>,
+    pub(super) token_endpoint: Option<&'a str>,
+    /// JWKS URI for ID Token validation; only used by `Oidc` operations.
+    pub(super) jwks_uri: Option<&'a str>,
+    /// Revocation or end-session endpoint; only used by those operations.
+    pub(super) named_endpoint: Option<&'a str>,
+}
+
+pub(super) fn ensure_unique_parameter_names(
+    parameters: &[WindowsParameter],
+) -> std::result::Result<(), WindowsAuthorizationError> {
+    let mut names = BTreeSet::new();
+    if parameters
+        .iter()
+        .any(|parameter| !names.insert(parameter.name.as_str()))
+    {
+        return Err(WindowsAuthorizationError::DuplicateParameter);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TokenResponse;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn request_json_accepts_discovery_or_explicit_endpoints() {
+        let discovery: WindowsAuthorizationRequest = serde_json::from_str(
+            r#"{
+                "issuer":"https://issuer.example",
+                "client_id":"client",
+                "redirect_uri":"http://127.0.0.1/callback",
+                "scopes":["profile"]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(discovery.issuer.as_deref(), Some("https://issuer.example"));
+
+        let explicit: WindowsAuthorizationRequest = serde_json::from_str(
+            r#"{
+                "authorization_endpoint":"https://issuer.example/authorize",
+                "token_endpoint":"https://issuer.example/token",
+                "client_id":"client",
+                "redirect_uri":"http://127.0.0.1/callback",
+                "scopes":["profile"]
+            }"#,
+        )
+        .unwrap();
+        assert!(explicit.issuer.is_none());
+    }
+
+    #[test]
+    fn refresh_request_json_round_trips_serialized_state() {
+        let state = AuthenticationState::new(TokenResponse {
+            access_token: "access".to_owned(),
+            token_type: "Bearer".to_owned(),
+            expires_in: Some(3600),
+            refresh_token: Some("refresh-token".to_owned()),
+            scope: Some("profile".to_owned()),
+            id_token: None,
+            additional_parameters: BTreeMap::new(),
+        })
+        .unwrap();
+        let serialized_state = serde_json::to_string(&state).unwrap();
+        let state_value: serde_json::Value = serde_json::from_str(&serialized_state).unwrap();
+
+        let request: WindowsRefreshRequest = serde_json::from_value(serde_json::json!({
+            "authorization_endpoint": "https://issuer.example/authorize",
+            "token_endpoint": "https://issuer.example/token",
+            "client_id": "client",
+            "state": state_value,
+        }))
+        .unwrap();
+        assert_eq!(request.state.token_response().access_token, "access");
+        assert_eq!(
+            request.state.token_response().refresh_token.as_deref(),
+            Some("refresh-token")
+        );
+        assert!(request.state.expires_at().is_some());
+
+        let missing_token_response: std::result::Result<WindowsRefreshRequest, _> =
+            serde_json::from_value(serde_json::json!({
+                "client_id": "client",
+                "state": {}
+            }));
+        assert!(missing_token_response.is_err());
+    }
+}
