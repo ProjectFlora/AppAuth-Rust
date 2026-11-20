@@ -202,3 +202,8 @@ provider does not require a hint. The returned status and value use
 value. Revocation does not delete local authentication state: delete local
 state even when the network request fails or is cancelled. The .NET wrapper
 exposes the same operation as `NativeOidcWindows.RevokeAsync`.
+
+## Revocation endpoint URLs
+
+Revocation endpoints accept HTTPS, or HTTP on loopback addresses (127.x.x.x,
+::1, localhost) without user info or fragments. Discovery returns HTTPS URLs.

@@ -6,6 +6,11 @@ interoperability testing and support policies are still evolving. Each release r
 
 ## [Unreleased]
 
+### Fixed
+
+- Token revocation endpoint validation now accepts HTTP on loopback addresses (127.x.x.x, ::1, localhost) in addition to HTTPS. Discovery returns HTTPS URLs. This aligns with the validation rules used for authorization, token, end-session, and registration endpoints ([#165](https://github.com/ProjectFlora/NativeOIDC/issues/165)).
+
+
 ## [0.7.1] - 2026-11-20
 
 ### Changed
@@ -90,6 +95,16 @@ interoperability testing and support policies are still evolving. Each release r
   token revocation.
 - macOS and Windows tests do not automate the real system-browser flow.
 - Release consumer fixtures exercise refresh and end-session error paths in
+  the Windows C++ and .NET hosts; the new refresh/revoke success path with a
+  mock provider is validated via `scripts/check-windows-release-consumer.ps1`
+  ([#165](https://github.com/ProjectFlora/NativeOIDC/issues/165)). The Android
+  and Apple XCFramework fixtures only construct the configuration object, and
+  the SPM consumer runs a host-side smoke of the generated API without an
+  authorization flow.
+- The Windows C ABI exposes authorization, refresh, end-session, and token
+  revocation; the .NET wrapper also exposes all four operations.
+
+### Distribution
   the Windows C++ and .NET hosts and token revocation in the Windows .NET
   host only; the Android and Apple XCFramework fixtures only construct the
   configuration object, and the SPM consumer runs a host-side smoke of the
@@ -352,10 +367,12 @@ interoperability testing and support policies are still evolving. Each release r
   token revocation.
 - macOS and Windows tests do not automate the real system-browser flow.
 - Release consumer fixtures exercise refresh and end-session error paths in
-  the Windows C++ and .NET hosts and token revocation in the Windows .NET
-  host only; the Android and Apple XCFramework fixtures only construct the
-  configuration object, and the SPM consumer runs a host-side smoke of the
-  generated API without an authorization flow.
+  the Windows C++ and .NET hosts; the new refresh/revoke success path with a
+  mock provider is validated via `scripts/check-windows-release-consumer.ps1`
+  ([#165](https://github.com/ProjectFlora/NativeOIDC/issues/165)). The Android
+  and Apple XCFramework fixtures only construct the configuration object, and
+  the SPM consumer runs a host-side smoke of the generated API without an
+  authorization flow.
 - SPM is supported only through release tags; depending on the `main`
   branch is not supported.
 - Platform minimums and provider interoperability policies remain subject to
@@ -487,12 +504,11 @@ interoperability testing and support policies are still evolving. Each release r
 - Live identity-provider interoperability has not been validated, including
   token revocation.
 - macOS and Windows tests do not automate the real system-browser flow.
-- The Windows C ABI exposes authorization, refresh, end-session, and token
-  revocation, matching the UniFFI operation surface.
 - Release consumer fixtures exercise refresh and end-session error paths in
-  the Windows C++ and .NET hosts and token revocation in the Windows .NET
-  host only; the Apple and Android fixtures only construct the configuration
-  object.
+  the Windows C++ and .NET hosts; the new refresh/revoke success path with a
+  mock provider is validated via `scripts/check-windows-release-consumer.ps1`
+  ([#165](https://github.com/ProjectFlora/NativeOIDC/issues/165)). The Apple and
+  Android fixtures only construct the configuration object.
 - Platform minimums and provider interoperability policies remain subject to
   the 1.0.0 readiness criteria in `ROADMAP.md`.
 
@@ -551,6 +567,11 @@ interoperability testing and support policies are still evolving. Each release r
 
 - Live identity-provider interoperability has not been validated.
 - macOS and Windows tests do not automate the real system-browser flow.
+- Release consumer fixtures exercise refresh and end-session error paths in
+  the Windows C++ and .NET hosts; the new refresh/revoke success path with a
+  mock provider is validated via `scripts/check-windows-release-consumer.ps1`
+  ([#165](https://github.com/ProjectFlora/NativeOIDC/issues/165)). The Apple and
+  Android fixtures only construct the configuration object.
 - Platform minimums and provider interoperability policies remain subject to
   the 1.0.0 readiness criteria in `ROADMAP.md`.
 
@@ -571,3 +592,13 @@ interoperability testing and support policies are still evolving. Each release r
   external browsers rather than embedded WebViews.
 - ID Tokens accept RS256 and ES256 only and are checked against issuer JWKS,
   required claims, and the request nonce.
+
+### Known limitations
+
+- Live identity-provider interoperability has not been validated.
+- macOS and Windows tests do not automate the real system-browser flow.
+- Release consumer fixtures exercise refresh and end-session error paths in
+  the Windows C++ and .NET hosts; the new refresh/revoke success path with a
+  mock provider is validated via `scripts/check-windows-release-consumer.ps1`
+  ([#165](https://github.com/ProjectFlora/NativeOIDC/issues/165)). The Apple and
+  Android fixtures only construct the configuration object.

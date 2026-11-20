@@ -403,7 +403,7 @@ jobs:
           script: scripts/verify-android-maven-consumer.sh "$RELEASE_VERSION"
 
   windows:
-    name: Validate published Windows consumers
+    name: Validate published Windows consumers (refresh/revoke success paths)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -424,7 +424,7 @@ jobs:
           if ($actual -ne $expected) {
             throw "SHA-256 mismatch for $asset"
           }
-      - name: Validate the published Windows consumer package
+      - name: Validate the published Windows consumer package (refresh/revoke success paths)
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ inputs.version }}

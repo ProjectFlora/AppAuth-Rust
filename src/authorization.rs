@@ -1503,7 +1503,7 @@ fn validate_registration_endpoint(endpoint: &Url) -> Result<()> {
 fn validate_revocation_endpoint(endpoint: &Url) -> Result<()> {
     if endpoint.scheme() != "https" || validate_endpoint(endpoint).is_err() {
         return Err(AuthError::InvalidConfiguration(
-            "token revocation endpoint must use HTTPS without user info or fragments",
+            "token revocation endpoint must use HTTPS or loopback HTTP without user info or fragments",
         ));
     }
     Ok(())
