@@ -19,12 +19,17 @@ namespace NativeOidcMockProvider
 
         public static async Task Main(string[] args)
         {
-            Console.WriteLine("Mock OIDC provider starting...");
+            Console.WriteLine($"Mock OIDC provider starting...");
 
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
 
-            // Output the port number on the first line for scripts to capture
+            // Write the port number to a temp file for PowerShell to read
+            var tempPortPath = @"C:\temp\mock_provider_port.txt";
+            System.IO.File.WriteAllText(tempPortPath, ((IPEndPoint)listener.LocalEndpoint).Port);
+            Console.WriteLine($"Port written to: {tempPortPath}");
+
+            // Output the port number as well for debugging
             var localEndpoint = ((IPEndPoint)listener.LocalEndpoint).Address + ":" + listener.Port;
             Console.WriteLine(localEndpoint);
 
