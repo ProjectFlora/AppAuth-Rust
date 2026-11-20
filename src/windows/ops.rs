@@ -12,8 +12,7 @@ use crate::{
 use super::data::{
     ensure_unique_parameter_names, ConfigurationKind, ConfigurationSource, EndpointSelection,
     WindowsAuthorizationError, WindowsAuthorizationRequest, WindowsEndSessionRequest,
-    WindowsEndSessionResponse, WindowsParameter, WindowsRefreshRequest,
-    WindowsRevocationRequest,
+    WindowsEndSessionResponse, WindowsParameter, WindowsRefreshRequest, WindowsRevocationRequest,
 };
 use super::loopback::{parse_redirect_template, wait_for_callback};
 
@@ -44,7 +43,10 @@ async fn build_service_configuration(
         (Some(authorization_endpoint), Some(token_endpoint)) => {
             let authorization_endpoint = parse_endpoint(authorization_endpoint)?;
             let token_endpoint = parse_endpoint(token_endpoint)?;
-            if matches!(kind, ConfigurationKind::Revocation | ConfigurationKind::EndSession) {
+            if matches!(
+                kind,
+                ConfigurationKind::Revocation | ConfigurationKind::EndSession
+            ) {
                 named_endpoint.ok_or(WindowsAuthorizationError::InvalidEndpoint)?;
             }
             let configuration = ServiceConfiguration::new(authorization_endpoint, token_endpoint)?;
@@ -346,6 +348,7 @@ mod tests {
     use super::*;
     use crate::TokenResponse;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
 
     #[tokio::test]
     async fn revocation_honors_cancellation_before_network_setup() {

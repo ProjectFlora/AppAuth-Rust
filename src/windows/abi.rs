@@ -1,6 +1,8 @@
 use std::ffi::{c_char, CStr, CString};
 use std::ptr;
 
+use url::Url;
+
 use crate::{AuthError, AuthenticationState, CancellationHandle};
 
 use super::data::{
