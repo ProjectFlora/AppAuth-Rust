@@ -7,7 +7,6 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $fixture = Join-Path $repoRoot "native/consumer-smoke/windows"
 $workDir = Join-Path ([System.IO.Path]::GetTempPath()) ("native-oidc-release-consumer-" + [guid]::NewGuid())
-$mockProviderBuild = Join-Path $workDir "mock-provider-build"
 $mockProviderBin = Join-Path $workDir "mock-provider-bin"
 
 function Cleanup {
@@ -109,7 +108,7 @@ try {
     cmake --build $cppBuild --config Release
     if ($LASTEXITCODE -ne 0) { throw "C++ consumer build failed: $LASTEXITCODE" }
 
-    # Write C++ refresh success test with embedded port
+    # Write C++ refresh success test with embedded port (direct interpolation into R-string)
     $refreshTestContent = @"
 #include <iostream>
 #include <string>
@@ -133,7 +132,7 @@ int main() {
     const char* refreshRequest = R"({
       "authorization_endpoint":"https://issuer.example/authorize",
       "token_endpoint":"https://issuer.example/token",
-      "revocation_endpoint":"http://127.0.0.:" PORT "/revoke",
+      "revocation_endpoint":"http://127.0.0." + "$mockPort" + "/revoke",
       "client_id":"consumer",
       "token":"new-refresh",
       "token_type_hint":"refresh_token"
@@ -176,7 +175,7 @@ int main() {
     std::cout << "C++ consumer refresh test passed" << std::endl;
     return 0;
 }
-"@ -replace ' PORT ', ":$mockPort"
+"@
 
     $cppRefreshTestPath = Join-Path $workDir "test_refresh_success.cpp"
     $cppRefreshTestPath | Out-File -FilePath $refreshTestContent -Encoding utf8
@@ -214,7 +213,7 @@ int main() {
     const char* revokeRequest = R"({
       "authorization_endpoint":"https://issuer.example/authorize",
       "token_endpoint":"https://issuer.example/token",
-      "revocation_endpoint":"http://127.0.0.:" PORT "/revoke",
+      "revocation_endpoint":"http://127.0.0." + "$mockPort" + "/revoke",
       "client_id":"consumer",
       "token":"new-refresh",
       "token_type_hint":"refresh_token"
@@ -256,7 +255,7 @@ int main() {
     std::cout << "C++ consumer revoke test passed" << std::endl;
     return 0;
 }
-"@ -replace ' PORT ', ":$mockPort"
+"@
 
     $cppRevokeTestPath = Join-Path $workDir "test_revoke_success.cpp"
     $cppRevokeTestPath | Out-File -FilePath $revokeTestContent -Encoding utf8
@@ -285,7 +284,7 @@ int main() {
         "--output=$dotnetBuild"
     if ($LASTEXITCODE -ne 0) { throw ".NET consumer build failed: $LASTEXITCODE" }
 
-    # Write .NET refresh success test with embedded port (using here-string for JSON)
+    # Write .NET refresh success test with embedded port (direct interpolation into here-string)
     $refreshTestContent = @"
 using System;
 using ProjectFlora.NativeOidc;
@@ -298,7 +297,7 @@ public class RefreshSuccessTest
         var refreshRequest = @"{
   ""authorization_endpoint"":""https://issuer.example/authorize"",
   ""token_endpoint"":""https://issuer.example/token"",
-  ""revocation_endpoint"":""http://127.0.0.:" PORT "/revoke"",
+  ""revocation_endpoint"":""http://127.0.0." + "$mockPort" + "/revoke"",
   ""client_id"":""consumer"",
   ""state"":{""token_response"":{""access_token"":""old"",""token_type"":""Bearer"",""refresh_token"":""refresh""}},
   ""additional_parameters"":[{""name"":""audience"",""value"":""https://api.example""}]
@@ -354,7 +353,7 @@ public class RefreshSuccessTest
         }
     }
 }
-"@ -replace ' PORT ', ":$mockPort"
+"@
 
     # Build and run .NET refresh success test
     dotnet build (Join-Path $fixture "dotnet") `
@@ -377,7 +376,7 @@ public class RevokeSuccessTest
         var revokeRequest = @"{
   ""authorization_endpoint"":""https://issuer.example/authorize"",
   ""token_endpoint"":""https://issuer.example/token"",
-  ""revocation_endpoint"":""http://127.0.0.:" PORT "/revoke"",
+  ""revocation_endpoint"":""http://127.0.0." + "$mockPort" + "/revoke"",
   ""client_id"":""consumer"",
   ""token"":""new-refresh"",
   ""token_type_hint"":""refresh_token""
@@ -403,7 +402,7 @@ public class RevokeSuccessTest
         }
     }
 }
-"@ -replace ' PORT ', ":$mockPort"
+"@
 
     # Build and run .NET revoke success test  
     dotnet build (Join-Path $fixture "dotnet") `
