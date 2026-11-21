@@ -3787,18 +3787,18 @@ mod tests {
             assert_eq!(result.unwrap().revocation_endpoint(), Some(&endpoint));
         }
 
-        for endpoint in [
+        for url in [
             "http://issuer.example/revoke",
             "http://user@127.0.0.1/revoke",
             "http://user:pass@localhost/revoke",
             "http://127.0.0.1/revoke#fragment",
             "ftp://127.0.0.1/revoke",
         ] {
-            let endpoint = Url::parse(endpoint).unwrap();
+            let endpoint = Url::parse(url).unwrap();
             let result = service_configuration().with_revocation_endpoint(endpoint);
             assert!(
                 matches!(result, Err(AuthError::InvalidConfiguration(_))),
-                "{endpoint} must be rejected"
+                "{url} must be rejected"
             );
         }
     }
