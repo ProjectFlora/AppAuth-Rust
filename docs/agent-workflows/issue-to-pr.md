@@ -13,6 +13,7 @@ If the request does not explicitly say "scheduled mode", treat it as manual mode
 - Base branch: `{main}`
 - Issue tracker: GitHub Issues
 - Reviewers: Copilot and Orca Bot (account: `{orca-bot-account}`)
+- Before using the workflow, create all five labels listed under Labels in the target repository.
 - **I do the final merge. The agent brings the PR to a mergeable state and reports.**
 - Language:
   - Messages in this session (manual mode questions and reports): use the same language as the person who made the request
