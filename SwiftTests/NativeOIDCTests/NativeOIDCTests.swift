@@ -163,17 +163,31 @@ final class NativeOIDCTests: XCTestCase {
         transport.responseToReturn = .success(FfiHttpResponse(
             status: 200,
             headers: [],
-            body: #"{"issuer":"https://idp.example/","authorization_endpoint":"https://idp.example/authorize","token_endpoint":"https://idp.example/token","revocation_endpoint":"https://idp.example/revoke","registration_endpoint":"https://id.example/register","end_session_endpoint":"https://idp.example/logout"}"#.data(using: .utf8)!
+            body: #"{"issuer":"https://idp.example/","authorization_endpoint":"https://idp.example/authorize","token_endpoint":"https://idp.example/token","revocation_endpoint":"https://idp.example/revoke","registration_endpoint":"https://idp.example/register","end_session_endpoint":"https://idp.example/logout","jwks_uri":"https://idp.example/.well-known/jwks.json"}"#.data(using: .utf8)!
         ))
 
         let config = try await FfiServiceConfiguration.discover(issuer: "https://idp.example/", transport: transport, cancellation: FfiCancellationHandle())
-        
+
         XCTAssertEqual(config.issuer(), "https://idp.example/")
         XCTAssertEqual(config.authorizationEndpoint(), "https://idp.example/authorize")
         XCTAssertEqual(config.tokenEndpoint(), "https://idp.example/token")
         XCTAssertEqual(config.revocationEndpoint(), "https://idp.example/revoke")
-        // registrationEndpoint and endSessionEndpoint are not exposed via getters in FfiServiceConfiguration.
-        
+        XCTAssertEqual(config.jwksUri(), "https://idp.example/.well-known/jwks.json")
+        // registrationEndpoint and endSessionEndpoint have no getters on the
+        // Swift API, so verify discovery retained them by running each
+        // operation against the discovered configuration and asserting the
+        // advertised URL.
+
+        let registrationTransport = ScriptedTransport()
+        registrationTransport.responseToReturn = .success(FfiHttpResponse(status: 201, headers: [], body: #"{"client_id":"c1","application_type":"native","token_endpoint_auth_method":"none"}"#.data(using: .utf8)!))
+        let registrationOptions = FfiRegistrationOptions(redirectUris: ["https://app.example/callback"], clientName: nil, initialAccessToken: nil)
+        _ = try await NativeOIDC.registerPublicClient(configuration: config, options: registrationOptions, transport: registrationTransport, cancellation: FfiCancellationHandle())
+        XCTAssertEqual(registrationTransport.recordedRequests.count, 1)
+        XCTAssertEqual(registrationTransport.recordedRequests[0].url, "https://idp.example/register")
+
+        let endSession = try NativeOIDC.beginEndSession(configuration: config, options: FfiEndSessionOptions(clientId: "c1", idTokenHint: nil, postLogoutRedirectUri: nil))
+        XCTAssertTrue(endSession.endSessionUrl().hasPrefix("https://idp.example/logout"))
+
         XCTAssertEqual(transport.recordedRequests.count, 1)
         let request = transport.recordedRequests[0]
         XCTAssertEqual(request.method, "GET")
@@ -459,9 +473,9 @@ final class NativeOIDCTests: XCTestCase {
         let request = transport.recordedRequests[0]
         XCTAssertEqual(request.method, "POST")
         XCTAssertEqual(request.url, "https://idp.example/register")
-        let body = String(data: request.body, encoding: .utf8) ?? ""
-        XCTAssertTrue(body.contains("redirect_uris"))
-        XCTAssertTrue(body.contains("My App"))
+        let bodyObject = try XCTUnwrap(JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+        XCTAssertEqual(bodyObject["redirect_uris"] as? [String], ["https://app.example/callback"])
+        XCTAssertEqual(bodyObject["client_name"] as? String, "My App")
         XCTAssertTrue(request.headers.contains { $0.name.caseInsensitiveCompare("Authorization") == .orderedSame && String(data: $0.value, encoding: .utf8) == "Bearer iat" })
     }
 
