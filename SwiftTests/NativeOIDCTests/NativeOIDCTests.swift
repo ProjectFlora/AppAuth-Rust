@@ -157,10 +157,10 @@ final class NativeOIDCTests: XCTestCase {
     }
 
     /// Decodes a form-urlencoded request body into all fields as
-    /// [name, value] pairs, preserving order, duplicates, and empty
-    /// values. Comparing the complete list rejects a renamed, duplicated,
-    /// or emptied field that substring or dictionary matching would still
-    /// accept.
+    /// [name, value] pairs, preserving duplicates and empty values.
+    /// Pairs are sorted by name, then value, so the comparison is
+    /// independent of the serializer's field order while still rejecting
+    /// a renamed, duplicated, or emptied field.
     private func formFields(_ body: Data) -> [[String]] {
         guard let text = String(data: body, encoding: .utf8) else {
             return []
@@ -172,7 +172,7 @@ final class NativeOIDCTests: XCTestCase {
             let value = parts.count > 1 ? (String(parts[1]).removingPercentEncoding ?? String(parts[1])) : ""
             fields.append([name, value])
         }
-        return fields
+        return fields.sorted { $0[0] < $1[0] || ($0[0] == $1[0] && $0[1] < $1[1]) }
     }
 
     // MARK: - Discovery (D)
@@ -342,11 +342,12 @@ final class NativeOIDCTests: XCTestCase {
         let request = transport.recordedRequests[0]
         XCTAssertEqual(request.method, "POST")
         XCTAssertEqual(request.url, "https://idp.example/revoke")
-        // The complete field list: a renamed, duplicated, or emptied
-        // field fails the comparison.
+        // The complete sorted field set: a renamed, duplicated, or
+        // emptied field fails the comparison, while a harmless reordering
+        // of the same fields does not.
         XCTAssertEqual(formFields(request.body), [
-            ["token", "t1"],
             ["client_id", "c1"],
+            ["token", "t1"],
             ["token_type_hint", "access_token"],
         ])
     }
@@ -362,11 +363,12 @@ final class NativeOIDCTests: XCTestCase {
         
         XCTAssertEqual(transport.recordedRequests.count, 1)
         let request = transport.recordedRequests[0]
-        // The complete field list: without a hint the request must carry
-        // only token and client_id, not even an empty token_type_hint.
+        // The complete sorted field set: without a hint the request must
+        // carry only token and client_id, not even an empty
+        // token_type_hint.
         XCTAssertEqual(formFields(request.body), [
-            ["token", "t1"],
             ["client_id", "c1"],
+            ["token", "t1"],
         ])
     }
 
@@ -696,6 +698,8 @@ final class NativeOIDCTests: XCTestCase {
         let redirectUri = "com.example.app:/logout?state=\(state)&extra=1"
         let response = try session.parseRedirect(redirectUri: redirectUri)
         XCTAssertEqual(response.state, state)
+        // #164 expects exactly one additional parameter.
+        XCTAssertEqual(response.additionalParameters.count, 1)
         XCTAssertTrue(response.additionalParameters.contains { $0.name == "extra" && $0.value == "1" })
     }
 
