@@ -118,6 +118,52 @@ Success paths: D1, R1, R2, G1, E1, and S1 assert the returned values (discovery 
 - **`.Randomness`** — produced only when the platform secure random generator fails (the `random_token` used for the E1 end-session state and the authorization path in [src/pkce.rs](../src/pkce.rs)). The fixtures cannot make the OS CSPRNG fail, so the variant is unreachable through the generated bindings without fault injection. Rust unit tests cover the mapping.
 - **`.Internal`** — produced only if `FfiAuthenticationState.toJson` fails to serialize the state (serde, in [src/ffi.rs](../src/ffi.rs)). The state shape contains only strings, integers, and options, which serde always serializes, so the S1 round trip cannot fail this way and no fixture can force it.
 
+## Kotlin UniFFI Operation and Error Coverage
+
+The test IDs below live in
+`native/android/src/androidTest/kotlin/net/projectflora/nativeoidc/UniFfiOperationCoverageTest.kt`
+and exercise the generated UniFFI bindings through the scripted transports of
+[issue #164](https://github.com/ProjectFlora/NativeOIDC/issues/164). No test
+performs network I/O. The class runs in instrumented (`androidTest`)
+execution on an emulator: the Rust library ships as a native `jniLibs` entry,
+so the JVM unit tests cannot load it.
+
+### Operations
+
+| Group | Test IDs | Operation |
+| --- | --- | --- |
+| Discovery (D) | D1–D7 | `FfiServiceConfiguration.discover` |
+| Revocation (R) | R1–R7 | `revoke` |
+| Registration (G) | G1–G7 | `registerPublicClient` |
+| End session (E) | E1–E5 | `beginEndSession`, `FfiEndSessionSession.parseRedirect` |
+| State JSON (S) | S1–S2 | `FfiAuthenticationState.fromJson`, `FfiAuthenticationState.toJson` |
+| Cancellation (C) | C1–C5 | in-flight `FfiCancellationHandle` cancellation of `discover`, `revoke`, `registerPublicClient`, and `refresh` |
+
+Success paths: D1, R1, R2, G1, E1, and S1 assert the returned values (discovery endpoints, request method/URL/body, `client_id`, end-session state and additional parameters, and the `toJson`/`fromJson` round trip).
+
+### `FfiException` variants
+
+| Variant | Test IDs | How the fixtures produce it |
+| --- | --- | --- |
+| `FfiException.InvalidRequest` | D5, R3, R4, G5, G6, E4, E5, S2 | invalid input or a missing endpoint. D5, R3, R4, G5, and G6 also assert the transport recorded no request, so validation must happen before any request; E4, E5, and S2 are synchronous and take no transport |
+| `FfiException.InvalidResponse` | D3, D4, G3, E2, E3 | malformed or semantically invalid data: non-JSON discovery body, discovery `issuer` mismatch, `client_secret` in a public registration, a mismatched end-session state (same callback URI as E1, varied state), and `parseRedirect` without a configured redirect |
+| `FfiException.HttpStatus` | D2, R6, G4 | non-OAuth HTTP statuses (404, 503, 500) that must not be parsed as OAuth error bodies |
+| `FfiException.AuthorizationServer` | R5 | OAuth error body on a 400 from the revocation endpoint |
+| `FfiException.ClientRegistrationServer` | G2 | registration error body on a 400, asserted distinct from `FfiException.AuthorizationServer` |
+| `FfiException.TransportFailure` | D6, D7, R7, G7 | a transport that throws: D6 converts a `FfiException` thrown by the transport, D7 converts an unexpected Kotlin error (`IllegalStateException`) to the `Transport` display text, and R7 and G7 carry the transport's own message |
+| `FfiException.Cancelled` | C1, C2, C3, C4, C5 | C1–C4 cancel a request in flight (each waits for transport entry before cancelling; C4 also asserts the token state is unchanged). C5 uses a transport that never answers after the handle fires, so the result can only come from the Rust core racing the handle rather than waiting on the transport |
+| `FfiException.Transport` | — | not observable from these fixtures; see below |
+| `FfiException.Clock` | — | not triggerable from these fixtures; see below |
+| `FfiException.Randomness` | — | not triggerable from these fixtures; see below |
+| `FfiException.Internal` | — | not triggerable from these fixtures; see below |
+
+### Variants these fixtures cannot produce
+
+- **`FfiException.Transport`** — the UniFFI callback boundary is lossy by design: a Kotlin transport error that is not a `FfiException` becomes `FfiError::Transport` in the generated vtable (`CALL_UNEXPECTED_ERROR`), but the `NativeTransport` wrapper in [src/ffi.rs](../src/ffi.rs) rewraps every non-`Cancelled` transport error into `TransportFailure` carrying the display text. D7 pins that observable form (`"HTTP transport failed"`), so the bare variant can never be distinguished on the Kotlin side; the wrapper mapping itself is covered by the Rust unit tests in [src/ffi.rs](../src/ffi.rs).
+- **`FfiException.Clock`** — produced only when `SystemTime::now()` predates the Unix epoch, during state construction in [src/authorization.rs](../src/authorization.rs) and ID Token validation in [src/id_token.rs](../src/id_token.rs). No scripted fixture can make the host clock misbehave, and the C4–C5 refreshes are cancelled before they reach state construction. Rust unit tests cover the mapping.
+- **`FfiException.Randomness`** — produced only when the platform secure random generator fails (the `random_token` used for the E1 end-session state and the authorization path in [src/pkce.rs](../src/pkce.rs)). The fixtures cannot make the OS CSPRNG fail, so the variant is unreachable through the generated bindings without fault injection. Rust unit tests cover the mapping.
+- **`FfiException.Internal`** — produced only if `FfiAuthenticationState.toJson` fails to serialize the state (serde, in [src/ffi.rs](../src/ffi.rs)). The state shape contains only strings, integers, and options, which serde always serializes, so the S1 round trip cannot fail this way and no fixture can force it.
+
 ## Documentation, examples and verification
 
 
