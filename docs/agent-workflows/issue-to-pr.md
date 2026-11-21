@@ -133,7 +133,7 @@ There are two reviewers, and they arrive at different times.
 Check the following in order and handle the first match.
 
 1. **PR in progress**: an open PR labeled `agent-pr` whose linked issue is neither awaiting input nor labeled `agent-done`, and that meets any of the following
-   - Has unhandled reviews or comments since the last push
+   - Has applicable unhandled reviews or comments, including feedback posted before the last push. Use the review or comment IDs from step 6.
    - Has failing CI
    - Has conflicts with the base branch
    - Meets the final-report criteria and its linked issue is not yet labeled `agent-done`
