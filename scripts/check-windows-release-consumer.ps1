@@ -108,7 +108,7 @@ try {
     cmake --build $cppBuild --config Release
     if ($LASTEXITCODE -ne 0) { throw "C++ consumer build failed: $LASTEXITCODE" }
 
-    # Write C++ refresh success test using file-based approach to avoid PowerShell here-string issues
+    # Write C++ refresh success test using simple C++ code without PowerShell here-string issues
     $refreshCppContent = @"
 #include <iostream>
 #include <string>
@@ -178,7 +178,7 @@ int main() {
 "@
 
     $cppRefreshTestPath = Join-Path $workDir "test_refresh_success.cpp"
-    $cppRefreshTestContent | Out-File -FilePath $cppRefreshTestPath -Encoding utf8
+    $refreshCppContent | Out-File -FilePath $cppRefreshTestPath -Encoding utf8
     
     # Build and run the refresh success test
     cmake -S (Join-Path $fixture "cpp") -B (Join-Path $workDir "refresh-test-build") `
@@ -189,10 +189,11 @@ int main() {
     & (Join-Path (Join-Path $workDir "refresh-test-build") "Release/test_refresh_success.exe")
     if ($LASTEXITCODE -ne 0) { throw "C++ refresh test execution failed: $LASTEXITCODE" }
 
-    # Write C++ revoke success test using file-based approach
+    # Write C++ revoke success test
     $revokeCppContent = @"
 #include <iostream>
 #include <string>
+
 extern "C" {
     void* native_oidc_windows_cancellation_new();
     void native_oidc_windows_cancellation_cancel(void*);
@@ -207,7 +208,8 @@ int main() {
     std::cout << "Starting C++ revoke success test" << std::endl;
     
     // Use the same port as refresh test - safe because we're in C++ code
-    const char* revokeRequest = "{\"authorization_endpoint\":\"https://issuer.example/authorize\",\"token_endpoint\":\"https://issuer.example/token\",\"revocation_endpoint\":\"http://127.0.0.\" + \"$(\"" + ""$mockPort"" + "\"" ) + \"/revoke\",\"client_id\":\"consumer\",\"token\":\"new-refresh\",\"token_type_hint\":\"refresh_token\"}";
+    const char* mockPortStr = "$( """$mockPort"" )";
+    const char* revokeRequest = "{\"authorization_endpoint\":\"https://issuer.example/authorize\",\"token_endpoint\":\"https://issuer.example/token\",\"revocation_endpoint\":\"http://127.0.0.\" + mockPortStr + "/revoke\",\"client_id\":\"consumer\",\"token\":\"new-refresh\",\"token_type_hint\":\"refresh_token\"}";
     
     void* cancellation = native_oidc_windows_cancellation_new();
     if (!cancellation) {
@@ -256,7 +258,7 @@ int main() {
 "@
 
     $cppRevokeTestPath = Join-Path $workDir "test_revoke_success.cpp"
-    $cppRevokeContent | Out-File -FilePath $cppRevokeTestPath -Encoding utf8
+    $revokeCppContent | Out-File -FilePath $cppRevokeTestPath -Encoding utf8
     
     # Build and run the revoke success test
     cmake -S (Join-Path $fixture "cpp") -B (Join-Path $workDir "revoke-test-build") `
@@ -282,7 +284,7 @@ int main() {
         "--output=$dotnetBuild"
     if ($LASTEXITCODE -ne 0) { throw ".NET consumer build failed: $LASTEXITCODE" }
 
-    # Write .NET refresh success test using escaped string to avoid PowerShell here-string issues
+    # Write .NET refresh success test using simple string to avoid PowerShell here-string issues
     $refreshNetContent = @"
 using System;
 using ProjectFlora.NativeOidc;
@@ -291,11 +293,11 @@ public class RefreshSuccessTest
 {
     public static int Main()
     {
-        // Read port from file (written by mock provider) for the revocation endpoint
-        string portFile = "mock_provider_port.txt";
-        string workDir = Environment.GetCommandLineArgs()[1];
-        
         try {
+            // Read port from file for the revocation endpoint
+            string portFile = "mock_provider_port.txt";
+            string workDir = Environment.GetCommandLineArgs()[1];
+            
             if (System.IO.File.Exists(System.IO.Path.Combine(workDir, portFile))) {
                 string portText = System.IO.File.ReadAllText(System.IO.Path.Combine(workDir, portFile)).Trim();
                 string revocationEndpoint = "http://127.0.0." + portText + "/revoke";
