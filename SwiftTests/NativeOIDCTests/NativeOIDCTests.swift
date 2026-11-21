@@ -666,7 +666,10 @@ final class NativeOIDCTests: XCTestCase {
         )
 
         let session = try NativeOIDC.beginEndSession(configuration: config, options: options)
-        let redirectUri = "https://idp.example/logout?state=wrong_state"
+        // Keep the configured callback URI and vary only the state, so the
+        // failure exercises the state comparison rather than the URI match
+        // check that runs first.
+        let redirectUri = "com.example.app:/logout?state=wrong_state"
         
         do {
             _ = try session.parseRedirect(redirectUri: redirectUri)
