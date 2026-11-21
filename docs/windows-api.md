@@ -48,7 +48,10 @@ Each operation discovers configuration from `issuer`, or uses both
 is invalid. With explicit endpoints, authorize/refresh need both `issuer`
 and `jwks_uri` when validating ID Tokens. Revocation/end-session require
 their operation endpoint with explicit configuration; a supplied operation
-endpoint overrides the discovered one. Endpoint URLs use HTTPS.
+endpoint overrides the discovered one. Endpoint URLs use HTTPS. Explicit
+authorization, token and revocation endpoints may also use loopback HTTP
+(`127.0.0.0/8`, `::1`, `localhost`); the issuer, discovered endpoints,
+end-session and JWKS endpoints require HTTPS.
 
 | Operation | Required operation fields | Optional fields |
 | --- | --- | --- |

@@ -106,8 +106,10 @@ construction and callback validation, but their existing authorization
 adapters do not provide a logout method. Rust similarly leaves browser work
 to the host. Windows handles the browser and optional loopback callback.
 
-Revocation requires an HTTPS revocation endpoint. HTTP 200 completes the
-operation even for an already-invalid token; it does not delete local state.
+Revocation requires an HTTPS revocation endpoint; an explicitly configured
+one may also use loopback HTTP, as the token endpoint can. HTTP 200
+completes the operation even for an already-invalid token; it does not
+delete local state.
 Failure does not confirm remote invalidation. The library does not retry
 automatically or expose Retry-After. If logout policy attempts network cleanup,
 retain only the values needed for that attempt, and ensure local deletion
