@@ -74,7 +74,7 @@ Check the following. If anything fails, go back to step 3 (or to steps 1–2 if 
 ### 7. Final report (do not merge)
 When all of the following are true, report without merging and end the work.
 - All CI checks pass
-- Every review comment has been addressed or replied to
+- At least one designated reviewer has submitted a review covering the current PR head, and every applicable review comment has been addressed or replied to
 - No conflicts with the base branch (resolve them if there are any)
 
 Report contents:
