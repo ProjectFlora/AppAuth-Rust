@@ -22,15 +22,29 @@ If the request does not explicitly say "scheduled mode", treat it as manual mode
   - When referring to Japanese domain terms, UI labels, or error messages, keep the original text (e.g. `「保存」button`) so it can be matched against the issue and the code
   - Do not translate user-facing text in the code (UI strings, messages, etc.) unless the issue asks for it
 
-## Agent Markers
+## Post Markers
 
-The agent, Orca Bot, and I may all post from the same GitHub account, so account names cannot tell us apart. Use markers instead. Scheduled runs keep no memory between runs, so these markers are also the only record of what has been done.
+The agent, Orca Bot, and I all post from the same GitHub account (`saitomarch`), so account names cannot tell us apart. Use markers instead. Scheduled runs keep no memory between runs, so these markers are also the only record of what has been done.
+
+### Telling posters apart
+
+| Poster | How to identify | How to treat it |
+|---|---|---|
+| Agent (you) | Starts with `<!-- agent-workflow` | Your own post (record of handled work) |
+| Orca Bot | Starts with `<!-- orca-bot -->` | AI feedback: judge whether it is valid |
+| Copilot | Posted by Copilot's bot account | AI feedback: judge whether it is valid |
+| Me | None of the above | Instructions: follow them (ask if the intent is unclear) |
+
+### Markers you write
 
 - Start every GitHub post you write (Issue comments, PR descriptions, PR comments, review replies) with this line:
   `<!-- agent-workflow -->`
 - When you set `agent-needs-input` on an issue, start the comment with this line instead:
   `<!-- agent-workflow:needs-input step={step number to resume from} pr={PR number, or none} -->`
-- **Feedback** means any review, review comment, or PR comment that does not contain an agent marker, whoever posted it (Copilot, Orca Bot, or me).
+
+### Feedback
+
+- **Feedback** means any review, review comment, or PR comment that does not start with an agent marker: posts from Copilot, Orca Bot, or me.
 - Feedback is **handled** when one of the following is true:
   - Review comment (inline thread): the thread has a reply with an agent marker, or the thread is resolved
   - Review body or top-level PR comment: a later PR comment with an agent marker lists its ID on a line `Handled: {id}, {id}, ...`
@@ -73,13 +87,16 @@ Check the following. If anything fails, go back to step 3 (or to steps 1–2 if 
 
 ### 6. Handle CI and reviews
 - If CI fails: identify the cause and fix it
-- For each piece of unhandled feedback (see "Agent Markers"), regardless of when it was posted:
+- For each piece of unhandled feedback from me (see "Post Markers"), regardless of when it was posted:
+  - Treat it as an instruction and follow it. If the intent is unclear, ask me (in scheduled mode, follow "Pausing for input")
+  - Reply with what you changed, and mark it as handled as described in "Post Markers"
+- For each piece of unhandled feedback from Copilot or Orca Bot, regardless of when it was posted:
   - Do not accept it blindly; judge whether it is valid (reviewers are AI and may be wrong or excessive)
   - Valid: fix it and reply with what you changed
   - Not valid: do not change the code; reply with your reasoning
   - Unsure: do not change the code; consult me
   - Copilot and Orca Bot contradict each other: do not change the code; consult me
-  - In every case, mark it as handled as described in "Agent Markers"
+  - In every case, mark it as handled as described in "Post Markers"
 - After pushing fixes, wait for re-review according to "Review Waiting Rules"
 - If fixing the same cause fails 3 times, stop and report the situation
   - Scheduled mode: follow "Pausing for input" under "Scheduled Mode Rules"
@@ -87,7 +104,7 @@ Check the following. If anything fails, go back to step 3 (or to steps 1–2 if 
 ### 7. Final report (do not merge)
 When all of the following are true, report without merging and end the work.
 - All CI checks pass on the current PR head
-- At least one review without an agent marker was submitted on the current head commit (the review's commit ID equals the PR's head SHA)
+- At least one review from Copilot or Orca Bot was submitted on the current head commit (the review's commit ID equals the PR's head SHA)
 - All feedback is handled
 - No conflicts with the base branch (resolve them if there are any)
 
@@ -108,7 +125,7 @@ Where to report:
 There are two reviewers, and they arrive at different times.
 - **Copilot**: reviews automatically when the PR is created (usually within a few minutes)
 - **Orca Bot**: starts reviewing at minute 0 of every hour
-  - It posts from a regular user account, which may be the same account the agent and I use. Tell posts apart with agent markers, not account names
+  - It posts from the same account as the agent and me (`saitomarch`). Identify its posts by the `<!-- orca-bot -->` marker (see "Post Markers")
 
 ### Waiting in manual mode
 1. After creating the PR, wait up to 15 minutes for Copilot's review
@@ -184,7 +201,7 @@ Whenever you start working on the chosen issue, change its label from `agent-rea
 ### Pausing for input
 Use this both when you need a question or decision answered and when you stop early (for example, 3 failed fixes or a review that never arrives).
 
-- Post an issue comment starting with the `needs-input` marker (see "Agent Markers")
+- Post an issue comment starting with the `needs-input` marker (see "Post Markers")
   - For a question: include the options with pros, cons, and a recommendation
   - For an early stop: describe the situation and what you need from me
 - Change the label from `agent-in-progress` to `agent-needs-input` and end the run
