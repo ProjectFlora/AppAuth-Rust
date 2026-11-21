@@ -284,7 +284,7 @@ int main() {
         "--output=$dotnetBuild"
     if ($LASTEXITCODE -ne 0) { throw ".NET consumer build failed: $LASTEXITCODE" }
 
-    # Write .NET refresh success test with embedded port (direct interpolation into here-string)
+    # Write .NET refresh success test with embedded port (C# string literal, not nested here-string)
     $refreshTestContent = @"
 using System;
 using ProjectFlora.NativeOidc;
@@ -294,14 +294,14 @@ public class RefreshSuccessTest
     public static int Main()
     {
         // Test refresh with mock provider (HTTP revocation endpoint for testing)
-        var refreshRequest = @"{
-  ""authorization_endpoint"":""https://issuer.example/authorize"",
-  ""token_endpoint"":""https://issuer.example/token"",
-  ""revocation_endpoint"":""http://127.0.0." + "$mockPort" + "/revoke"",
-  ""client_id"":""consumer"",
-  ""state"":{""token_response"":{""access_token"":""old"",""token_type"":""Bearer"",""refresh_token"":""refresh""}},
-  ""additional_parameters"":[{""name"":""audience"",""value"":""https://api.example""}]
-}";
+        var refreshRequest = \"{
+  \\\"authorization_endpoint\\\":\\\"https://issuer.example/authorize\\\",
+  \\\"token_endpoint\\\":\\\"https://issuer.example/token\\\",
+  \\\"revocation_endpoint\\\":\\\"http://127.0.0.\" + \"$mockPort" + "/revoke\\",
+  \\\"client_id\\\":\\\"consumer\\\",
+  \\\"state\\\":{\\\"token_response\\\":{\\\"access_token\\\":\\\"old\\\",\\\"token_type\\\":\\\"Bearer\\\",\\\"refresh_token\\\":\\\"refresh\\\"}},
+  \\\"additional_parameters\\\":[{\\\"name\\\":\\\"audience\\\",\\\"value\\\":\\\"https://api.example\\\"}]
+}\";
         
         try
         {
@@ -363,7 +363,7 @@ public class RefreshSuccessTest
         --verbosity quiet
     if ($LASTEXITCODE -ne 0) { throw ".NET refresh test build failed: $LASTEXITCODE" }
 
-    # Write .NET revoke success test with embedded port
+    # Write .NET revoke success test with embedded port (C# string literal, not nested here-string)
     $revokeTestContent = @"
 using System;
 using ProjectFlora.NativeOidc;
@@ -373,14 +373,14 @@ public class RevokeSuccessTest
     public static int Main()
     {
         // Test revoke with mock provider (HTTP revocation endpoint for testing)
-        var revokeRequest = @"{
-  ""authorization_endpoint"":""https://issuer.example/authorize"",
-  ""token_endpoint"":""https://issuer.example/token"",
-  ""revocation_endpoint"":""http://127.0.0." + "$mockPort" + "/revoke"",
-  ""client_id"":""consumer"",
-  ""token"":""new-refresh"",
-  ""token_type_hint"":""refresh_token""
-}";
+        var revokeRequest = \"{
+  \\\"authorization_endpoint\\\":\\\"https://issuer.example/authorize\\\",
+  \\\"token_endpoint\\\":\\\"https://issuer.example/token\\\",
+  \\\"revocation_endpoint\\\":\\\"http://127.0.0.\" + \"$mockPort" + "/revoke\\",
+  \\\"client_id\\\":\\\"consumer\\\",
+  \\\"token\\\":\\\"new-refresh\\\",
+  \\\"token_type_hint\\\":\\\"refresh_token\\\"
+}\";
         
         try
         {
