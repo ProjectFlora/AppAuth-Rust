@@ -87,7 +87,8 @@ impl ServiceConfiguration {
         })
     }
 
-    /// Adds an HTTPS OAuth 2.0 token revocation endpoint.
+    /// Adds an OAuth 2.0 token revocation endpoint. It must use HTTPS, or HTTP
+    /// on a loopback host (`127.0.0.0/8`, `::1`, or `localhost`).
     pub fn with_revocation_endpoint(mut self, endpoint: Url) -> Result<Self> {
         validate_revocation_endpoint(&endpoint)?;
         self.revocation_endpoint = Some(endpoint);
@@ -1501,9 +1502,9 @@ fn validate_registration_endpoint(endpoint: &Url) -> Result<()> {
 }
 
 fn validate_revocation_endpoint(endpoint: &Url) -> Result<()> {
-    if endpoint.scheme() != "https" || validate_endpoint(endpoint).is_err() {
+    if validate_endpoint(endpoint).is_err() {
         return Err(AuthError::InvalidConfiguration(
-            "token revocation endpoint must use HTTPS without user info or fragments",
+            "revocation endpoint must use HTTPS or loopback HTTP without user info or fragments",
         ));
     }
     Ok(())
@@ -2442,6 +2443,26 @@ mod tests {
             ServiceConfiguration::discover(
                 Url::parse("https://issuer.example").unwrap(),
                 &insecure_logout_endpoint,
+                CancellationHandle::new(),
+            )
+            .await,
+            Err(AuthError::InvalidDiscoveryMetadata(
+                "endpoints must use HTTPS without user info or fragments"
+            ))
+        ));
+
+        let loopback_revocation_endpoint = discovery_transport(
+            br#"{
+                "issuer":"https://issuer.example/",
+                "authorization_endpoint":"https://issuer.example/authorize",
+                "token_endpoint":"https://issuer.example/token",
+                "revocation_endpoint":"http://127.0.0.1/revoke"
+            }"#,
+        );
+        assert!(matches!(
+            ServiceConfiguration::discover(
+                Url::parse("https://issuer.example").unwrap(),
+                &loopback_revocation_endpoint,
                 CancellationHandle::new(),
             )
             .await,
@@ -3750,6 +3771,74 @@ mod tests {
             Some("refresh_token")
         );
         assert!(!form.contains_key("client_secret"));
+    }
+
+    #[test]
+    fn revocation_endpoint_accepts_loopback_http_and_rejects_other_http() {
+        for endpoint in [
+            "https://issuer.example/revoke",
+            "http://127.0.0.1:8080/revoke",
+            "http://127.1.2.3/revoke",
+            "http://[::1]/revoke",
+            "http://localhost/revoke",
+        ] {
+            let endpoint = Url::parse(endpoint).unwrap();
+            let result = service_configuration().with_revocation_endpoint(endpoint.clone());
+            assert_eq!(result.unwrap().revocation_endpoint(), Some(&endpoint));
+        }
+
+        for url in [
+            "http://issuer.example/revoke",
+            "http://user@127.0.0.1/revoke",
+            "http://user:pass@localhost/revoke",
+            "http://127.0.0.1/revoke#fragment",
+            "ftp://127.0.0.1/revoke",
+        ] {
+            let endpoint = Url::parse(url).unwrap();
+            let result = service_configuration().with_revocation_endpoint(endpoint);
+            assert!(
+                matches!(result, Err(AuthError::InvalidConfiguration(_))),
+                "{url} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn loopback_http_stays_rejected_for_end_session_and_registration_endpoints() {
+        let endpoint = Url::parse("http://127.0.0.1/logout").unwrap();
+        assert!(matches!(
+            service_configuration().with_end_session_endpoint(endpoint),
+            Err(AuthError::InvalidConfiguration(_))
+        ));
+
+        let endpoint = Url::parse("http://127.0.0.1/register").unwrap();
+        assert!(matches!(
+            service_configuration().with_registration_endpoint(endpoint),
+            Err(AuthError::InvalidConfiguration(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn revocation_sends_to_a_loopback_http_endpoint() {
+        let configuration = service_configuration()
+            .with_revocation_endpoint(Url::parse("http://127.0.0.1:8080/revoke").unwrap())
+            .unwrap();
+        let transport = test_transport(StatusCode::OK, b"");
+
+        revoke_token(
+            &configuration,
+            "native-client",
+            "refresh-token",
+            Some(RevocationTokenType::RefreshToken),
+            &transport,
+            CancellationHandle::new(),
+        )
+        .await
+        .unwrap();
+
+        let request = transport.request.lock().unwrap().take().unwrap();
+        assert_eq!(request.method, Method::POST);
+        assert_eq!(request.url.as_str(), "http://127.0.0.1:8080/revoke");
     }
 
     #[tokio::test]

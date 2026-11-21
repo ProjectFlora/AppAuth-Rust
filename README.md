@@ -111,8 +111,9 @@ before the 1.0.0 tag; the pre-1.0 release policy in
 ## Token revocation
 
 - Use the discovered `revocation_endpoint` or configure one explicitly; it
-  must use HTTPS. Providers without this optional endpoint cannot use
-  revocation.
+  must use HTTPS. An explicitly configured endpoint may also use loopback
+  HTTP (`127.0.0.0/8`, `::1`, `localhost`), as the token endpoint can.
+  Providers without this optional endpoint cannot use revocation.
 - Call `revoke_token` explicitly with an access or refresh token and the
   public client ID. The request never includes a client secret; callers may
   provide the optional `access_token` or `refresh_token` type hint.

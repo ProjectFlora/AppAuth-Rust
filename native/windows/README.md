@@ -183,7 +183,8 @@ Call `native_oidc_windows_revoke` on a worker thread with the same cancellation
 handle lifecycle as authorization. Its JSON request uses either `issuer` to
 discover the optional `revocation_endpoint`, or explicit authorization,
 token, and revocation endpoints. The latter is useful when discovery is not
-available:
+available. An explicit revocation endpoint uses HTTPS, or HTTP on a loopback
+host such as a local test provider; a discovered one must use HTTPS:
 
 ```json
 {

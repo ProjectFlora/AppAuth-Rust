@@ -6,6 +6,15 @@ interoperability testing and support policies are still evolving. Each release r
 
 ## [Unreleased]
 
+### Changed
+
+- Explicitly configured token revocation endpoints now accept loopback HTTP
+  (`127.0.0.0/8`, `::1`, `localhost`), matching the authorization and token
+  endpoints, so a local test provider can serve revocation. The issuer,
+  discovered endpoints, and the end-session, registration and JWKS endpoints
+  still require HTTPS
+  ([#165](https://github.com/ProjectFlora/NativeOIDC/issues/165)).
+
 ## [0.7.1] - 2026-11-20
 
 ### Changed
