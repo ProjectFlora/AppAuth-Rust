@@ -205,7 +205,12 @@ final class NativeOIDCTests: XCTestCase {
         XCTAssertEqual(registrationTransport.recordedRequests[0].url, "https://idp.example/register")
 
         let endSession = try NativeOIDC.beginEndSession(configuration: config, options: FfiEndSessionOptions(clientId: "c1", idTokenHint: nil, postLogoutRedirectUri: nil))
-        XCTAssertTrue(endSession.endSessionUrl().hasPrefix("https://idp.example/logout"))
+        // Remove the generated query and compare the endpoint exactly:
+        // a prefix match would accept a different route with the same
+        // prefix (such as /logout-other).
+        var endSessionEndpoint = try XCTUnwrap(URLComponents(string: endSession.endSessionUrl()))
+        endSessionEndpoint.query = nil
+        XCTAssertEqual(endSessionEndpoint.string, "https://idp.example/logout")
 
         XCTAssertEqual(transport.recordedRequests.count, 1)
         let request = transport.recordedRequests[0]
