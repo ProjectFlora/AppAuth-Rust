@@ -156,6 +156,25 @@ final class NativeOIDCTests: XCTestCase {
         }
     }
 
+    /// Parses a form-urlencoded request body into a parameter dictionary.
+    /// Parsing (instead of substring matching) lets the tests reject a
+    /// renamed field: `token=t1` would otherwise match inside
+    /// `access_token=t1`.
+    private func formParameters(_ body: Data) -> [String: String] {
+        guard let text = String(data: body, encoding: .utf8) else {
+            return [:]
+        }
+        var parameters = [String: String]()
+        for pair in text.split(separator: "&") {
+            let keyAndValue = pair.split(separator: "=", maxSplits: 1)
+            guard keyAndValue.count == 2 else { continue }
+            let key = String(keyAndValue[0])
+            let value = String(keyAndValue[1]).removingPercentEncoding ?? String(keyAndValue[1])
+            parameters[key] = value
+        }
+        return parameters
+    }
+
     // MARK: - Discovery (D)
 
     func testD1() async throws {
@@ -269,12 +288,10 @@ final class NativeOIDCTests: XCTestCase {
     }
 
     func testD6() async {
+        // #164 D6: the transport throws FfiError.InvalidResponse("boom").
+        // The variant is not preserved across the transport boundary and
+        // becomes TransportFailure carrying the original message.
         let transport = ScriptedTransport()
-        // Using a custom error to simulate FfiError.InvalidResponse("boom") from the transport
-        struct MockError: Error {} 
-        // Note: The issue says "transport が FfiError.InvalidResponse("boom") を投げる". 
-        // Since the transport is a Swift object, we can throw any error.
-        // But FfiError is an enum defined in native_oidc.swift, so we can throw that directly if it's available.
         transport.responseToReturn = .failure(FfiError.InvalidResponse("boom"))
 
         do {
@@ -292,8 +309,10 @@ final class NativeOIDCTests: XCTestCase {
     }
 
     func testD7() async {
+        // #164 D7: a transport that throws an ordinary Swift error (not a
+        // FfiError) must surface as TransportFailure carrying the Transport
+        // variant's display text, "HTTP transport failed".
         let transport = ScriptedTransport()
-        // Swift: URLError simulation
         transport.responseToReturn = .failure(URLError(.badServerResponse))
 
         do {
@@ -323,10 +342,10 @@ final class NativeOIDCTests: XCTestCase {
         let request = transport.recordedRequests[0]
         XCTAssertEqual(request.method, "POST")
         XCTAssertEqual(request.url, "https://idp.example/revoke")
-        let body = String(data: request.body, encoding: .utf8) ?? ""
-        XCTAssertTrue(body.contains("token=t1"))
-        XCTAssertTrue(body.contains("client_id=c1"))
-        XCTAssertTrue(body.contains("token_type_hint=access_token"))
+        let form = formParameters(request.body)
+        XCTAssertEqual(form["token"], "t1")
+        XCTAssertEqual(form["client_id"], "c1")
+        XCTAssertEqual(form["token_type_hint"], "access_token")
     }
 
     func testR2() async throws {
@@ -340,8 +359,10 @@ final class NativeOIDCTests: XCTestCase {
         
         XCTAssertEqual(transport.recordedRequests.count, 1)
         let request = transport.recordedRequests[0]
-        let body = String(data: request.body, encoding: .utf8) ?? ""
-        XCTAssertFalse(body.contains("token_type_hint"))
+        let form = formParameters(request.body)
+        XCTAssertEqual(form["token"], "t1")
+        XCTAssertEqual(form["client_id"], "c1")
+        XCTAssertNil(form["token_type_hint"])
     }
 
     func testR3() async throws {
