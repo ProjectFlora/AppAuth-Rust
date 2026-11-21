@@ -55,10 +55,11 @@ Replying to feedback and resolving it are different. A reply records that you re
 
 - **Feedback** means any review, review comment, or PR comment from Copilot, Orca Bot, or me.
 - Track feedback **per comment ID**, not per thread. If a new comment arrives in a thread you already replied to, that new comment is unhandled.
-- A comment is **handled** when one of the following is true:
-  - A later post with an agent marker lists its ID on a `Handled:` line
-  - It is an inline review comment and its thread is resolved
-- A reply does not cover comments it does not list. If two comments arrive in a thread and you answer only one, the other stays unhandled
+- A comment is **handled** only when a later post with an agent marker lists its ID on a `Handled:` line
+  - Resolving a thread does not mark any comment as handled. A comment in a resolved thread whose ID was never listed is still unhandled
+  - A reply does not cover comments it does not list. If two comments arrive in a thread and you answer only one, the other stays unhandled
+- **Before resolving a thread**, re-read the whole thread. Resolve it only if every comment in it, other than your own, is listed on a `Handled:` line. If a new comment has arrived, handle it first
+- The scheduled selector ("PR in progress") and the final report (step 7) use this same definition of handled
 - Review bodies and top-level PR comments have no thread to resolve, so the `Handled:` line is the only way to mark them handled
 - Who resolves an inline thread:
 
@@ -69,6 +70,7 @@ Replying to feedback and resolving it are different. A reply records that you re
 
   - Resolve threads with `gh api graphql` (`resolveReviewThread` mutation)
   - Resolved threads may be reopened by a later re-review. Treat any new comment as unhandled feedback
+  - If a thread was resolved by someone else before you listed all of its comments, still reply with the missing IDs on a `Handled:` line
 
 ---
 
@@ -110,10 +112,10 @@ Check the following. If anything fails, go back to step 3 (or to steps 1–2 if 
 - If CI fails: identify the cause and fix it
 - For each unhandled comment from me (see "Post Markers"), regardless of when it was posted:
   - Treat it as an instruction and follow it. If the intent is unclear, ask me (in scheduled mode, follow "Pausing for input")
-  - Reply with what you changed, including the `Handled:` line. Resolve inline threads after replying. For a review body or top-level PR comment, post the reply as a PR comment
+  - Reply with what you changed, including the `Handled:` line. Resolve inline threads after replying, following "Before resolving a thread" in "Post Markers". For a review body or top-level PR comment, post the reply as a PR comment
 - For each unhandled comment from Copilot or Orca Bot, regardless of when it was posted:
   - Do not accept it blindly; judge whether it is valid (reviewers are AI and may be wrong or excessive)
-  - Valid: fix it and reply with what you changed. Resolve inline threads after replying
+  - Valid: fix it and reply with what you changed. Resolve inline threads after replying, following "Before resolving a thread" in "Post Markers"
   - Not valid: do not change the code; reply with your reasoning. Leave inline threads unresolved (see the table in "Post Markers")
   - In every reply, include the `Handled:` line. For a review body or top-level PR comment, post the reply as a PR comment
   - Unsure: do not change the code; consult me
@@ -127,7 +129,7 @@ Check the following. If anything fails, go back to step 3 (or to steps 1–2 if 
 When all of the following are true, report without merging and end the work.
 - All CI checks pass on the current PR head
 - At least one review from Copilot or Orca Bot was submitted on the current head commit (the review's commit ID equals the PR's head SHA)
-- Every comment is handled
+- Every comment is handled (its ID is listed on a `Handled:` line), including comments in resolved threads
 - No unresolved inline threads remain, except Copilot threads whose latest comment is your "not fixed" reasoning
   - An unresolved Orca Bot thread always blocks the final report, even if you replied. Wait for Orca Bot to resolve it or reply
 - No conflicts with the base branch (resolve them if there are any)
