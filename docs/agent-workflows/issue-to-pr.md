@@ -151,7 +151,7 @@ If nothing matches, end without doing anything.
 ### When a question or decision is needed
 - Post the question as an Issue comment (with pros, cons, and a recommendation if there are options)
 - Change the label to `agent-needs-input` and end the run
-- After I answer and re-add `agent-ready`, the next run resumes the work
+- After I answer, I replace `agent-needs-input` with `agent-ready`. If the issue has an outstanding question, process it through the answered-issue path before selecting its linked PR as in progress.
 
 ### When stopping early
 - In cases such as 3 failed fixes or a review that never arrives, post the situation as an Issue comment, change the label to `agent-needs-input`, and end the run
