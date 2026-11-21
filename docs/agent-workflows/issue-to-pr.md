@@ -61,7 +61,7 @@ Replying to feedback and resolving it are different. A reply records that you re
 | Outcome | Copilot thread | Orca Bot thread | My thread |
 |---|---|---|---|
 | Fixed | You resolve it after replying | You resolve it after replying | You resolve it after replying |
-| Not fixed (reasoning replied) | Leave it unresolved. I decide before merging. Orca Bot may also resolve it during its re-review | Leave it unresolved. Orca Bot resolves it if it accepts your reasoning | — (my instructions are not declined; ask me instead) |
+| Not fixed (reasoning replied) | Leave it unresolved. I decide and resolve it before merging (Orca Bot only resolves threads it opened) | Leave it unresolved. Orca Bot resolves it if it accepts your reasoning | — (my instructions are not declined; ask me instead) |
 
   - Resolve threads with `gh api graphql` (`resolveReviewThread` mutation)
   - Resolved threads may be reopened by a later re-review. Treat any new comment as unhandled feedback
