@@ -131,7 +131,7 @@ There are two reviewers, and they arrive at different times.
 ### Choosing a target (handle only one per run)
 Check the following in order and handle the first match.
 
-1. **PR in progress**: an open PR labeled `agent-pr` that meets any of the following
+1. **PR in progress**: an open PR labeled `agent-pr` whose linked issue is neither awaiting input nor labeled `agent-done`, and that meets any of the following
    - Has unhandled reviews or comments since the last push
    - Has failing CI
    - Has conflicts with the base branch
