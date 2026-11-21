@@ -156,23 +156,23 @@ final class NativeOIDCTests: XCTestCase {
         }
     }
 
-    /// Parses a form-urlencoded request body into a parameter dictionary.
-    /// Parsing (instead of substring matching) lets the tests reject a
-    /// renamed field: `token=t1` would otherwise match inside
-    /// `access_token=t1`.
-    private func formParameters(_ body: Data) -> [String: String] {
+    /// Decodes a form-urlencoded request body into all fields as
+    /// [name, value] pairs, preserving order, duplicates, and empty
+    /// values. Comparing the complete list rejects a renamed, duplicated,
+    /// or emptied field that substring or dictionary matching would still
+    /// accept.
+    private func formFields(_ body: Data) -> [[String]] {
         guard let text = String(data: body, encoding: .utf8) else {
-            return [:]
+            return []
         }
-        var parameters = [String: String]()
-        for pair in text.split(separator: "&") {
-            let keyAndValue = pair.split(separator: "=", maxSplits: 1)
-            guard keyAndValue.count == 2 else { continue }
-            let key = String(keyAndValue[0])
-            let value = String(keyAndValue[1]).removingPercentEncoding ?? String(keyAndValue[1])
-            parameters[key] = value
+        var fields = [[String]]()
+        for pair in text.split(separator: "&", omittingEmptySubsequences: false) {
+            let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            let name = String(parts[0])
+            let value = parts.count > 1 ? (String(parts[1]).removingPercentEncoding ?? String(parts[1])) : ""
+            fields.append([name, value])
         }
-        return parameters
+        return fields
     }
 
     // MARK: - Discovery (D)
@@ -342,10 +342,13 @@ final class NativeOIDCTests: XCTestCase {
         let request = transport.recordedRequests[0]
         XCTAssertEqual(request.method, "POST")
         XCTAssertEqual(request.url, "https://idp.example/revoke")
-        let form = formParameters(request.body)
-        XCTAssertEqual(form["token"], "t1")
-        XCTAssertEqual(form["client_id"], "c1")
-        XCTAssertEqual(form["token_type_hint"], "access_token")
+        // The complete field list: a renamed, duplicated, or emptied
+        // field fails the comparison.
+        XCTAssertEqual(formFields(request.body), [
+            ["token", "t1"],
+            ["client_id", "c1"],
+            ["token_type_hint", "access_token"],
+        ])
     }
 
     func testR2() async throws {
@@ -359,10 +362,12 @@ final class NativeOIDCTests: XCTestCase {
         
         XCTAssertEqual(transport.recordedRequests.count, 1)
         let request = transport.recordedRequests[0]
-        let form = formParameters(request.body)
-        XCTAssertEqual(form["token"], "t1")
-        XCTAssertEqual(form["client_id"], "c1")
-        XCTAssertNil(form["token_type_hint"])
+        // The complete field list: without a hint the request must carry
+        // only token and client_id, not even an empty token_type_hint.
+        XCTAssertEqual(formFields(request.body), [
+            ["token", "t1"],
+            ["client_id", "c1"],
+        ])
     }
 
     func testR3() async throws {
@@ -677,13 +682,17 @@ final class NativeOIDCTests: XCTestCase {
 
         let session = try NativeOIDC.beginEndSession(configuration: config, options: options)
         let url = session.endSessionUrl()
-        XCTAssertTrue(url.contains("client_id=c1"))
-        XCTAssertTrue(url.contains("id_token_hint=id_token"))
-        XCTAssertTrue(url.contains("post_logout_redirect_uri=com.example.app%3A%2Flogout")) // encoded
+        // Compare the exact query fields: substring matching would accept
+        // client_id=c10 or id_token_hint=id_token_extra.
+        let urlComponents = try XCTUnwrap(URLComponents(string: url))
+        let query = try XCTUnwrap(urlComponents.queryItems)
+        XCTAssertEqual(query.count, 4)
+        XCTAssertEqual(query.filter { $0.name == "client_id" }.map(\.value), ["c1"])
+        XCTAssertEqual(query.filter { $0.name == "id_token_hint" }.map(\.value), ["id_token"])
+        XCTAssertEqual(query.filter { $0.name == "post_logout_redirect_uri" }.map(\.value), ["com.example.app:/logout"])
+        // The session must carry the generated state.
+        let state = try XCTUnwrap(query.first { $0.name == "state" }?.value)
 
-        // Extract state from the generated URL to simulate a valid redirect response
-        let urlComponents = URLComponents(string: url)!
-        let state = urlComponents.queryItems?.first { $0.name == "state" }?.value ?? "s1"
         let redirectUri = "com.example.app:/logout?state=\(state)&extra=1"
         let response = try session.parseRedirect(redirectUri: redirectUri)
         XCTAssertEqual(response.state, state)
@@ -737,8 +746,10 @@ final class NativeOIDCTests: XCTestCase {
             _ = try session.parseRedirect(redirectUri: redirectUri)
             XCTFail("Expected error")
         } catch let error as FfiError {
-            if case .InvalidResponse = error {
-                // Success
+            // Assert the exact diagnostic so a state mismatch cannot
+            // stand in for the missing-redirect branch.
+            if case .InvalidResponse(let message) = error {
+                XCTAssertEqual(message, "no post-logout redirect URI was requested")
             } else {
                 XCTFail("Expected .InvalidResponse, got \(error)")
             }
