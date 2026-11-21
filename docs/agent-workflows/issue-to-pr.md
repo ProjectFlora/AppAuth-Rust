@@ -44,6 +44,8 @@ Only posts identified as "Me" count as my instructions or answers. This also app
 
 - Start every GitHub post you write (Issue comments, PR descriptions, PR comments, review replies) with this line:
   `<!-- agent-workflow -->`
+- When a post responds to feedback, add a line listing the IDs of every comment it addresses, whether it is an inline reply, a PR comment, or a review reply:
+  `Handled: {id}, {id}, ...`
 - When you set `agent-needs-input` on an issue, start the comment with this line instead:
   `<!-- agent-workflow:needs-input step={step number to resume from} pr={PR number, or none} -->`
 
@@ -54,8 +56,10 @@ Replying to feedback and resolving it are different. A reply records that you re
 - **Feedback** means any review, review comment, or PR comment from Copilot, Orca Bot, or me.
 - Track feedback **per comment ID**, not per thread. If a new comment arrives in a thread you already replied to, that new comment is unhandled.
 - A comment is **handled** when one of the following is true:
-  - Review comment (inline thread): a later reply with an agent marker exists in the same thread, or the thread is resolved
-  - Review body or top-level PR comment: a later PR comment with an agent marker lists its ID on a line `Handled: {id}, {id}, ...`
+  - A later post with an agent marker lists its ID on a `Handled:` line
+  - It is an inline review comment and its thread is resolved
+- A reply does not cover comments it does not list. If two comments arrive in a thread and you answer only one, the other stays unhandled
+- Review bodies and top-level PR comments have no thread to resolve, so the `Handled:` line is the only way to mark them handled
 - Who resolves an inline thread:
 
 | Outcome | Copilot thread | Orca Bot thread | My thread |
@@ -106,11 +110,12 @@ Check the following. If anything fails, go back to step 3 (or to steps 1–2 if 
 - If CI fails: identify the cause and fix it
 - For each unhandled comment from me (see "Post Markers"), regardless of when it was posted:
   - Treat it as an instruction and follow it. If the intent is unclear, ask me (in scheduled mode, follow "Pausing for input")
-  - Reply with what you changed, then resolve the thread
+  - Reply with what you changed, including the `Handled:` line. Resolve inline threads after replying. For a review body or top-level PR comment, post the reply as a PR comment
 - For each unhandled comment from Copilot or Orca Bot, regardless of when it was posted:
   - Do not accept it blindly; judge whether it is valid (reviewers are AI and may be wrong or excessive)
-  - Valid: fix it, reply with what you changed, then resolve the thread
-  - Not valid: do not change the code; reply with your reasoning and leave the thread unresolved (see the table in "Post Markers")
+  - Valid: fix it and reply with what you changed. Resolve inline threads after replying
+  - Not valid: do not change the code; reply with your reasoning. Leave inline threads unresolved (see the table in "Post Markers")
+  - In every reply, include the `Handled:` line. For a review body or top-level PR comment, post the reply as a PR comment
   - Unsure: do not change the code; consult me
   - Copilot and Orca Bot contradict each other: do not change the code; consult me
   - If Orca Bot rejects your reasoning in the same thread twice, stop arguing and consult me
