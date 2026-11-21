@@ -58,7 +58,8 @@ Replying to feedback and resolving it are different. A reply records that you re
 - A comment is **handled** only when a later post with an agent marker lists its ID on a `Handled:` line
   - Resolving a thread does not mark any comment as handled. A comment in a resolved thread whose ID was never listed is still unhandled
   - A reply does not cover comments it does not list. If two comments arrive in a thread and you answer only one, the other stays unhandled
-- **Before resolving a thread**, re-read the whole thread. Resolve it only if every comment in it, other than your own, is listed on a `Handled:` line. If a new comment has arrived, handle it first
+- **Before resolving a thread**, re-read the whole thread. Resolve it only if every feedback comment in it (from Copilot, Orca Bot, or me) is listed on a `Handled:` line. If new feedback has arrived, handle it first
+  - Comments from anyone else are not feedback, so they do not need to be listed and do not block resolution
 - The scheduled selector ("PR in progress") and the final report (step 7) use this same definition of handled
 - Review bodies and top-level PR comments have no thread to resolve, so the `Handled:` line is the only way to mark them handled
 - Who resolves an inline thread:
@@ -129,7 +130,7 @@ Check the following. If anything fails, go back to step 3 (or to steps 1–2 if 
 When all of the following are true, report without merging and end the work.
 - All CI checks pass on the current PR head
 - At least one review from Copilot or Orca Bot was submitted on the current head commit (the review's commit ID equals the PR's head SHA)
-- Every comment is handled (its ID is listed on a `Handled:` line), including comments in resolved threads
+- Every feedback comment is handled (its ID is listed on a `Handled:` line), including comments in resolved threads
 - No unresolved inline threads remain, except Copilot threads whose latest comment is your "not fixed" reasoning
   - An unresolved Orca Bot thread always blocks the final report, even if you replied. Wait for Orca Bot to resolve it or reply
 - No conflicts with the base branch (resolve them if there are any)
