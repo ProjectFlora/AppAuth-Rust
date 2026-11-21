@@ -112,6 +112,7 @@ try {
     $refreshCppContent = @"
 #include <iostream>
 #include <string>
+
 extern "C" {
     void* native_oidc_windows_cancellation_new();
     void native_oidc_windows_cancellation_cancel(void*);
@@ -126,7 +127,8 @@ int main() {
     std::cout << "Starting C++ refresh success test" << std::endl;
     
     // Use the port read from file - this is safe because we're in C++ code, not PowerShell here-string
-    const char* refreshRequest = "{\"authorization_endpoint\":\"https://issuer.example/authorize\",\"token_endpoint\":\"https://issuer.example/token\",\"revocation_endpoint\":\"http://127.0.0.\" + \"$(\"" + ""$mockPort"" + "\"" ) + \"/revoke\",\"client_id\":\"consumer\",\"token\":\"new-refresh\",\"token_type_hint\":\"refresh_token\"}";
+    const char* mockPortStr = "$( """$mockPort"" )";
+    const char* refreshRequest = "{\"authorization_endpoint\":\"https://issuer.example/authorize\",\"token_endpoint\":\"https://issuer.example/token\",\"revocation_endpoint\":\"http://127.0.0.\" + mockPortStr + "/revoke\",\"client_id\":\"consumer\",\"token\":\"new-refresh\",\"token_type_hint\":\"refresh_token\"}";
     
     void* cancellation = native_oidc_windows_cancellation_new();
     if (!cancellation) {
