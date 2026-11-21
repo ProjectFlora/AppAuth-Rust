@@ -135,6 +135,7 @@ Check the following in order and handle the first match.
    - Has unhandled reviews or comments since the last push
    - Has failing CI
    - Has conflicts with the base branch
+   - Meets the final-report criteria and its linked issue is not yet labeled `agent-done`
    → Resume from step 6
 2. **Answered issue**: an issue labeled `agent-ready` that has a question you previously posted
    → Read the comments for the answer and resume from where you stopped
