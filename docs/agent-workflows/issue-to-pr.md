@@ -139,7 +139,7 @@ Check the following in order and handle the first match.
    - Meets the final-report criteria and its linked issue is not yet labeled `agent-done`
    → Resume from step 6
 2. **Answered issue**: an issue labeled `agent-ready` that has a question you previously posted
-   → Read the comments for the answer and resume from where you stopped
+   → Read the comments for the answer. If the issue has a linked open `agent-pr`, resume that PR from step 6. Otherwise, resume the issue from the step that asked the question.
 3. **New issue**: the oldest open issue labeled `agent-ready`
    → Start from step 1
 
