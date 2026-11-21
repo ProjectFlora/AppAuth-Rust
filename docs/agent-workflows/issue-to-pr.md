@@ -67,7 +67,7 @@ Check the following. If anything fails, go back to step 3 (or to steps 1–2 if 
   - Copilot and Orca Bot contradict each other: do not change the code; consult me
 - After pushing fixes, wait for re-review according to "Review Waiting Rules"
 - Do not handle the same review twice
-  - Only treat reviews and comments posted after your last push as new
+  - Track handled feedback by review or comment ID. Inspect unhandled feedback across pushes, including older comments that still apply.
 - If fixing the same cause fails 3 times, stop and report the situation
 
 ### 7. Final report (do not merge)
