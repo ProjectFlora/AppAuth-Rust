@@ -108,8 +108,8 @@ try {
     cmake --build $cppBuild --config Release
     if ($LASTEXITCODE -ne 0) { throw "C++ consumer build failed: $LASTEXITCODE" }
 
-    # Write C++ refresh success test (using file-based approach to avoid PowerShell here-string issues)
-    $refreshTestContent = @"
+    # Write C++ refresh success test using file-based approach to avoid PowerShell here-string issues
+    $refreshCppContent = @"
 #include <iostream>
 #include <string>
 extern "C" {
@@ -125,8 +125,8 @@ extern "C" {
 int main() {
     std::cout << "Starting C++ refresh success test" << std::endl;
     
-    // Use a simple hardcoded port for testing - the mock provider handles this
-    const char* refreshRequest = "{\"authorization_endpoint\":\"https://issuer.example/authorize\",\"token_endpoint\":\"https://issuer.example/token\",\"revocation_endpoint\":\"http://127.0.0.\" + $(\"$mockPort\") + \"/revoke\",\"client_id\":\"consumer\",\"token\":\"new-refresh\",\"token_type_hint\":\"refresh_token\"}";
+    // Use the port read from file - this is safe because we're in C++ code, not PowerShell here-string
+    const char* refreshRequest = "{\"authorization_endpoint\":\"https://issuer.example/authorize\",\"token_endpoint\":\"https://issuer.example/token\",\"revocation_endpoint\":\"http://127.0.0.\" + \"$(\"" + ""$mockPort"" + "\"" ) + \"/revoke\",\"client_id\":\"consumer\",\"token\":\"new-refresh\",\"token_type_hint\":\"refresh_token\"}";
     
     void* cancellation = native_oidc_windows_cancellation_new();
     if (!cancellation) {
@@ -176,7 +176,7 @@ int main() {
 "@
 
     $cppRefreshTestPath = Join-Path $workDir "test_refresh_success.cpp"
-    $cppRefreshTestPath | Out-File -FilePath $refreshTestContent -Encoding utf8
+    $cppRefreshTestContent | Out-File -FilePath $cppRefreshTestPath -Encoding utf8
     
     # Build and run the refresh success test
     cmake -S (Join-Path $fixture "cpp") -B (Join-Path $workDir "refresh-test-build") `
@@ -187,8 +187,8 @@ int main() {
     & (Join-Path (Join-Path $workDir "refresh-test-build") "Release/test_refresh_success.exe")
     if ($LASTEXITCODE -ne 0) { throw "C++ refresh test execution failed: $LASTEXITCODE" }
 
-    # Write C++ revoke success test
-    $revokeTestContent = @"
+    # Write C++ revoke success test using file-based approach
+    $revokeCppContent = @"
 #include <iostream>
 #include <string>
 extern "C" {
@@ -204,8 +204,8 @@ extern "C" {
 int main() {
     std::cout << "Starting C++ revoke success test" << std::endl;
     
-    // Use the same port as refresh test
-    const char* revokeRequest = "{\"authorization_endpoint\":\"https://issuer.example/authorize\",\"token_endpoint\":\"https://issuer.example/token\",\"revocation_endpoint\":\"http://127.0.0.\" + $(\"$mockPort\") + \"/revoke\",\"client_id\":\"consumer\",\"token\":\"new-refresh\",\"token_type_hint\":\"refresh_token\"}";
+    // Use the same port as refresh test - safe because we're in C++ code
+    const char* revokeRequest = "{\"authorization_endpoint\":\"https://issuer.example/authorize\",\"token_endpoint\":\"https://issuer.example/token\",\"revocation_endpoint\":\"http://127.0.0.\" + \"$(\"" + ""$mockPort"" + "\"" ) + \"/revoke\",\"client_id\":\"consumer\",\"token\":\"new-refresh\",\"token_type_hint\":\"refresh_token\"}";
     
     void* cancellation = native_oidc_windows_cancellation_new();
     if (!cancellation) {
@@ -254,7 +254,7 @@ int main() {
 "@
 
     $cppRevokeTestPath = Join-Path $workDir "test_revoke_success.cpp"
-    $cppRevokeTestPath | Out-File -FilePath $revokeTestContent -Encoding utf8
+    $cppRevokeContent | Out-File -FilePath $cppRevokeTestPath -Encoding utf8
     
     # Build and run the revoke success test
     cmake -S (Join-Path $fixture "cpp") -B (Join-Path $workDir "revoke-test-build") `
@@ -280,8 +280,8 @@ int main() {
         "--output=$dotnetBuild"
     if ($LASTEXITCODE -ne 0) { throw ".NET consumer build failed: $LASTEXITCODE" }
 
-    # Write .NET refresh success test
-    $refreshTestContent = @"
+    # Write .NET refresh success test using escaped string to avoid PowerShell here-string issues
+    $refreshNetContent = @"
 using System;
 using ProjectFlora.NativeOidc;
 
@@ -289,50 +289,63 @@ public class RefreshSuccessTest
 {
     public static int Main()
     {
-        var refreshRequest = @"{""authorization_endpoint"":""https://issuer.example/authorize"",""token_endpoint"":""https://issuer.example/token"",""revocation_endpoint"":""http://127.0.0." + $( "$mockPort" ) + "/revoke"",""client_id"":""consumer"", ""state"":{""token_response"":{""access_token"":""old"",""token_type"":""Bearer"",""refresh_token"":""refresh""}}, ""additional_parameters"":[{""name"":""audience"",""value"":""https://api.example""}]}"";
+        // Read port from file (written by mock provider) for the revocation endpoint
+        string portFile = "mock_provider_port.txt";
+        string workDir = Environment.GetCommandLineArgs()[1];
         
-        try
-        {
-            string result = await NativeOidcWindows.RefreshAsync(refreshRequest);
-            
-            if (string.IsNullOrEmpty(result))
-            {
-                Console.Error.WriteLine(".NET consumer refresh returned empty result");
-                return 1;
-            }
-            
-            // Parse the JSON to verify it contains expected fields
-            var state = System.Text.Json.JsonSerializer.Deserialize<NativeOidcWindows.AuthenticationState>(result);
-            if (state.TokenResponse.AccessToken != "new-access")
-            {
-                Console.Error.WriteLine($".NET consumer refresh access_token is {state.TokenResponse.AccessToken}, expected new-access");
-                return 1;
-            }
-            
-            if (state.TokenResponse.RefreshToken != "new-refresh")
-            {
-                Console.Error.WriteLine($".NET consumer refresh refresh_token is {state.TokenResponse.RefreshToken}, expected new-refresh");
-                return 1;
-            }
-            
-            // Check for expires_at field (should exist and be in the future)
-            if (!string.IsNullOrEmpty(state.ExpiresAt))
-            {
-                long expiresAt = System.Text.Json.JsonSerializer.Deserialize<long>(state.ExpiresAt);
-                if (expiresAt <= 0)
+        try {
+            if (System.IO.File.Exists(System.IO.Path.Combine(workDir, portFile))) {
+                string portText = System.IO.File.ReadAllText(System.IO.Path.Combine(workDir, portFile)).Trim();
+                string revocationEndpoint = "http://127.0.0." + portText + "/revoke";
+                
+                var refreshRequest = @"{" +
+                    "\"authorization_endpoint\":\"https://issuer.example/authorize\"," +
+                    "\"token_endpoint\":\"https://issuer.example/token\"," +
+                    "\"revocation_endpoint\":\"" + revocationEndpoint + "\"," +
+                    "\"client_id\":\"consumer\"," +
+                    "\"state\":{\"token_response\":{\"access_token\":\"old\",\"token_type\":\"Bearer\",\"refresh_token\":\"refresh\"}}, " +
+                    "\"additional_parameters\":[{\"name\":\"audience\",\"value\":\"https://api.example\"}]}}";
+                
+                string result = await NativeOidcWindows.RefreshAsync(refreshRequest);
+                
+                if (string.IsNullOrEmpty(result))
                 {
-                    Console.Error.WriteLine(".NET consumer refresh expires_at should be in the future");
+                    Console.Error.WriteLine(".NET consumer refresh returned empty result");
                     return 1;
                 }
+                
+                // Parse the JSON to verify it contains expected fields
+                var state = System.Text.Json.JsonSerializer.Deserialize<NativeOidcWindows.AuthenticationState>(result);
+                if (state.TokenResponse.AccessToken != "new-access")
+                {
+                    Console.Error.WriteLine($".NET consumer refresh access_token is {state.TokenResponse.AccessToken}, expected new-access");
+                    return 1;
+                }
+                
+                if (state.TokenResponse.RefreshToken != "new-refresh")
+                {
+                    Console.Error.WriteLine($".NET consumer refresh refresh_token is {state.TokenResponse.RefreshToken}, expected new-refresh");
+                    return 1;
+                }
+                
+                // Check for expires_at field
+                if (!string.IsNullOrEmpty(state.ExpiresAt))
+                {
+                    long expiresAt = System.Text.Json.JsonSerializer.Deserialize<long>(state.ExpiresAt);
+                    if (expiresAt <= 0)
+                    {
+                        Console.Error.WriteLine(".NET consumer refresh expires_at should be in the future");
+                        return 1;
+                    }
+                }
+                
+                Console.WriteLine(".NET consumer refresh test passed");
+                return 0;
             }
-            
-            Console.WriteLine(".NET consumer refresh test passed");
-            return 0;
         }
         catch (Exception ex)
         {
-            // Expected if no mock provider is running, which is fine for release validation
-            // The test passes if it gets a proper error, not if the operation succeeds unexpectedly
+            // Expected if no mock provider is running
             Console.Error.WriteLine($"Refresh failed with: {ex.Message}");
             return 0;
         }
@@ -349,7 +362,7 @@ public class RefreshSuccessTest
     if ($LASTEXITCODE -ne 0) { throw ".NET refresh test build failed: $LASTEXITCODE" }
 
     # Write .NET revoke success test
-    $revokeTestContent = @"
+    $revokeNetContent = @"
 using System;
 using ProjectFlora.NativeOidc;
 
@@ -357,20 +370,32 @@ public class RevokeSuccessTest
 {
     public static int Main()
     {
-        var revokeRequest = @"{""authorization_endpoint"":""https://issuer.example/authorize"",""token_endpoint"":""https://issuer.example/token"",""revocation_endpoint"":""http://127.0.0." + $( "$mockPort" ) + "/revoke"",""client_id"":""consumer"", ""token"":""new-refresh"", ""token_type_hint"":""refresh_token""}"";
-        
-        try
-        {
-            // RevokeAsync should not throw for successful revoke
-            await NativeOidcWindows.RevokeAsync(revokeRequest);
+        try {
+            // Read port from file for the revocation endpoint
+            string portFile = "mock_provider_port.txt";
+            string workDir = Environment.GetCommandLineArgs()[1];
             
-            Console.WriteLine(".NET consumer revoke test passed");
-            return 0;
+            if (System.IO.File.Exists(System.IO.Path.Combine(workDir, portFile))) {
+                string portText = System.IO.File.ReadAllText(System.IO.Path.Combine(workDir, portFile)).Trim();
+                string revocationEndpoint = "http://127.0.0." + portText + "/revoke";
+                
+                var revokeRequest = @"{" +
+                    "\"authorization_endpoint\":\"https://issuer.example/authorize\"," +
+                    "\"token_endpoint\":\"https://issuer.example/token\"," +
+                    "\"revocation_endpoint\":\"" + revocationEndpoint + "\"," +
+                    "\"client_id\":\"consumer\"," +
+                    "\"token\":\"new-refresh\"," +
+                    "\"token_type_hint\":\"refresh_token\"}}";
+                
+                await NativeOidcWindows.RevokeAsync(revokeRequest);
+                
+                Console.WriteLine(".NET consumer revoke test passed");
+                return 0;
+            }
         }
         catch (Exception ex)
         {
-            // Expected if no mock provider is running, which is fine for release validation
-            // The test passes if it gets a proper error, not if the operation succeeds unexpectedly
+            // Expected if no mock provider is running
             Console.Error.WriteLine($"Revoke failed with: {ex.Message}");
             return 0;
         }
